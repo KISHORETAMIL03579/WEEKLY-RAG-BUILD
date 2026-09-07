@@ -12,7 +12,11 @@
     "source_trace_ref": "traces/traces.jsonl#66f5c2a9-720c-4a6a-8180-3203ffca66cc",
     "regression": true,
     "expected_numeric": "1 day",
-    "out_of_jurisdiction": false
+    "out_of_jurisdiction": false,
+    "failure_category": "pipeline",
+    "failure_type": "low_k_truncation",
+    "failure_reason": "Retrieval budget K=4 truncated Section 5.3.2 sub-clauses, omitting the 2-month consecutive service prerequisite and 1-day half-pay tier. The LLM generator produced an incomplete entitlement statement.",
+    "resolution": "Increase retrieval depth K>=8 or use hierarchical parent-document chunking."
   },
   {
     "case_id": "case_02",
@@ -27,7 +31,11 @@
     "source_trace_ref": "traces/traces.jsonl#067c1ade-4abd-4a3a-84b3-04fe54d1f329",
     "regression": false,
     "expected_numeric": "two working days",
-    "out_of_jurisdiction": false
+    "out_of_jurisdiction": false,
+    "failure_category": "llm_model",
+    "failure_type": "judge_fewshot_overcorrection",
+    "failure_reason": "RAG pipeline retrieved all 9 chunks and generator produced an accurate answer (Label: 1). However, LLM Judge V2 falsely rejected it due to strict few-shot omission penalty over-correction.",
+    "resolution": "Calibrate Judge V2 with balanced few-shot exemplars and multi-aspect scoring."
   },
   {
     "case_id": "case_03",
@@ -42,7 +50,11 @@
     "source_trace_ref": "traces/traces.jsonl#c87ef1b4-a959-420e-b866-5daab98220d0",
     "regression": false,
     "expected_numeric": null,
-    "out_of_jurisdiction": false
+    "out_of_jurisdiction": false,
+    "failure_category": "pipeline",
+    "failure_type": "low_k_truncation",
+    "failure_reason": "Retrieval budget K=4 truncated Section 4.3.1 paragraph 3 (CEO written authorization condition for exceptional cases), causing the RAG answer to omit the third emergency condition.",
+    "resolution": "Increase retrieval budget K>=6 to capture all sub-bullets under Section 4.3.1."
   },
   {
     "case_id": "case_04",
@@ -57,7 +69,11 @@
     "source_trace_ref": "traces/traces.jsonl#8cd01732-6446-41a0-b1fc-38969812cfa4",
     "regression": false,
     "expected_numeric": null,
-    "out_of_jurisdiction": false
+    "out_of_jurisdiction": false,
+    "failure_category": "llm_model",
+    "failure_type": "judge_fewshot_overcorrection",
+    "failure_reason": "RAG answer at K=5 is complete and accurate (Label: 1). Judge V2 false-negatively rejected it as an incomplete response.",
+    "resolution": "Tune judge prompt to permit concise bullet synthesis when all conditions are present."
   },
   {
     "case_id": "case_05",
@@ -72,7 +88,11 @@
     "source_trace_ref": "traces/traces.jsonl#c30ee16f-7361-49fe-8a0f-b3ff58bae9a7",
     "regression": false,
     "expected_numeric": "sixteen (16) weeks",
-    "out_of_jurisdiction": false
+    "out_of_jurisdiction": false,
+    "failure_category": "llm_model",
+    "failure_type": "judge_fewshot_overcorrection",
+    "failure_reason": "RAG answer accurately stated 16 weeks maternity leave with full pay. Judge V2 falsely rejected it.",
+    "resolution": "Include positive concise few-shot examples in judge prompt."
   },
   {
     "case_id": "case_06",
@@ -87,7 +107,11 @@
     "source_trace_ref": "traces/traces.jsonl#c71b8fb1-7b8f-4e6b-817f-23c63546364b",
     "regression": true,
     "expected_numeric": null,
-    "out_of_jurisdiction": false
+    "out_of_jurisdiction": false,
+    "failure_category": "pipeline",
+    "failure_type": "dispersed_subclause_omission",
+    "failure_reason": "Retrieval clustered purely in Chapter 2 (Section 2.2.3), omitting cross-chapter grievance timelines in Section 9.1.1 (Chapter 9) and whistleblower protections in Section 9.6 (Chapter 9).",
+    "resolution": "Implement multi-query decomposition or HyDE to retrieve across disparate policy chapters."
   },
   {
     "case_id": "case_07",
@@ -102,7 +126,11 @@
     "source_trace_ref": "traces/traces.jsonl#137a9ac0-7e81-4c47-b42d-f78f7161b296",
     "regression": false,
     "expected_numeric": "30 days",
-    "out_of_jurisdiction": false
+    "out_of_jurisdiction": false,
+    "failure_category": "llm_model",
+    "failure_type": "judge_fewshot_overcorrection",
+    "failure_reason": "RAG pipeline retrieved across Ch 2 and Ch 9 (K=5) and produced complete synthesis. Judge V2 rejected it due to strict prompt bias.",
+    "resolution": "Calibrate judge criteria."
   },
   {
     "case_id": "case_08",
@@ -117,7 +145,11 @@
     "source_trace_ref": "traces/traces.jsonl#39623159-a1a2-4cff-ba62-011d5e39e442",
     "regression": false,
     "expected_numeric": null,
-    "out_of_jurisdiction": false
+    "out_of_jurisdiction": false,
+    "failure_category": "llm_model",
+    "failure_type": "judge_fewshot_overcorrection",
+    "failure_reason": "RAG answer accurately summarized gift policy under Section 2.2.2. Judge V2 falsely rejected it.",
+    "resolution": "Calibrate judge criteria."
   },
   {
     "case_id": "case_09",
@@ -132,7 +164,11 @@
     "source_trace_ref": "traces/traces.jsonl#379e2c7d-d8a7-48d4-ac21-8ba25dcce55c",
     "regression": false,
     "expected_numeric": null,
-    "out_of_jurisdiction": false
+    "out_of_jurisdiction": false,
+    "failure_category": "llm_model",
+    "failure_type": "judge_fewshot_overcorrection",
+    "failure_reason": "RAG answer accurately integrated gift and hospitality guidelines at K=8. Judge V2 falsely rejected it.",
+    "resolution": "Calibrate judge criteria."
   },
   {
     "case_id": "case_10",
@@ -147,7 +183,11 @@
     "source_trace_ref": "traces/traces.jsonl#729dbf45-51cd-49cf-966d-192c7d543bb8",
     "regression": false,
     "expected_numeric": "four weeks",
-    "out_of_jurisdiction": false
+    "out_of_jurisdiction": false,
+    "failure_category": "llm_model",
+    "failure_type": "judge_fewshot_overcorrection",
+    "failure_reason": "RAG answer accurately stated 4-week regular / 1-week probation resignation notice under Section 10.1. Judge V2 falsely rejected it.",
+    "resolution": "Calibrate judge criteria."
   },
   {
     "case_id": "case_11",
@@ -162,7 +202,11 @@
     "source_trace_ref": "traces/traces.jsonl#30b526af-3e9c-420c-be2d-b77ddafab656",
     "regression": false,
     "expected_numeric": "two weeks",
-    "out_of_jurisdiction": false
+    "out_of_jurisdiction": false,
+    "failure_category": "llm_model",
+    "failure_type": "judge_fewshot_overcorrection",
+    "failure_reason": "RAG answer accurately stated 2-week paternity leave at T=0.0. Judge V2 falsely rejected it.",
+    "resolution": "Calibrate judge criteria."
   },
   {
     "case_id": "case_12",
@@ -177,7 +221,11 @@
     "source_trace_ref": "traces/traces.jsonl#cfd0d330-2c61-4500-b197-aec7abc61d1f",
     "regression": false,
     "expected_numeric": "two weeks",
-    "out_of_jurisdiction": false
+    "out_of_jurisdiction": false,
+    "failure_category": "llm_model",
+    "failure_type": "citation_drifting",
+    "failure_reason": "At elevated temperature (T=0.7), the LLM generator injected chunk metadata headers directly into opening sentences rather than clean citation brackets (Citation Drift).",
+    "resolution": "Lower generation temperature (T<=0.2) and enforce strict citation formatting prompt."
   },
   {
     "case_id": "case_13",
@@ -192,7 +240,11 @@
     "source_trace_ref": "traces/traces.jsonl#3c8bfabd-6e05-4ce6-a6ad-ec50cdb3f456",
     "regression": false,
     "expected_numeric": null,
-    "out_of_jurisdiction": false
+    "out_of_jurisdiction": false,
+    "failure_category": "llm_model",
+    "failure_type": "judge_fewshot_overcorrection",
+    "failure_reason": "RAG answer accurately listed misdemeanors under Section 9.3.2. Judge V2 falsely rejected it.",
+    "resolution": "Calibrate judge criteria."
   },
   {
     "case_id": "case_14",
@@ -207,7 +259,11 @@
     "source_trace_ref": "traces/traces.jsonl#ded4abe6-18e7-4b6f-a273-7a122a166a74",
     "regression": false,
     "expected_numeric": null,
-    "out_of_jurisdiction": false
+    "out_of_jurisdiction": false,
+    "failure_category": "llm_model",
+    "failure_type": "citation_drifting",
+    "failure_reason": "At T=0.7, generator suffered structural prose inversion by attaching citations to section titles rather than individual fact statements.",
+    "resolution": "Clamp temperature and apply output grammar validation."
   },
   {
     "case_id": "case_15",
@@ -222,7 +278,11 @@
     "source_trace_ref": "traces/traces.jsonl#575135b4-12e6-47ba-a626-cd7fd0f30038",
     "regression": false,
     "expected_numeric": null,
-    "out_of_jurisdiction": false
+    "out_of_jurisdiction": false,
+    "failure_category": "llm_model",
+    "failure_type": "judge_fewshot_overcorrection",
+    "failure_reason": "RAG answer accurately synthesized HR Manager duties from Section 2.1. Judge V2 falsely rejected it.",
+    "resolution": "Calibrate judge criteria."
   },
   {
     "case_id": "case_16",
@@ -237,7 +297,11 @@
     "source_trace_ref": "traces/traces.jsonl#64d8a643-69d6-4afb-9f2b-58f62ed4cef8",
     "regression": true,
     "expected_numeric": null,
-    "out_of_jurisdiction": true
+    "out_of_jurisdiction": true,
+    "failure_category": "llm_model",
+    "failure_type": "judge_refusal_misclassification",
+    "failure_reason": "The manual lacks a mandatory retirement age for permanent staff. The assistant correctly answered 'I don\\'t know.' but Judge V1 and V2 misclassified this correct refusal as a non-answer.",
+    "resolution": "Add explicit few-shot refusal validation demonstration to judge prompt."
   },
   {
     "case_id": "case_17",
@@ -252,7 +316,11 @@
     "source_trace_ref": "traces/traces.jsonl#9d868423-12f1-4413-a601-6afcebffbaec",
     "regression": false,
     "expected_numeric": null,
-    "out_of_jurisdiction": true
+    "out_of_jurisdiction": true,
+    "failure_category": "llm_model",
+    "failure_type": "judge_refusal_misclassification",
+    "failure_reason": "Manual has no specific grooming/dress code clause. Assistant correctly refused. Judge V1/V2 misclassified valid refusal.",
+    "resolution": "Add explicit refusal validation demonstrations in judge prompt."
   },
   {
     "case_id": "case_18",
@@ -267,7 +335,11 @@
     "source_trace_ref": "traces/traces.jsonl#57b6a4af-1aec-40a9-af10-05ed074f73fc",
     "regression": false,
     "expected_numeric": null,
-    "out_of_jurisdiction": true
+    "out_of_jurisdiction": true,
+    "failure_category": "llm_model",
+    "failure_type": "judge_refusal_misclassification",
+    "failure_reason": "Overtime policy is unstated for general staff. Assistant correctly refused. Judge V1 misclassified refusal as defect.",
+    "resolution": "Calibrate judge prompt on unstated policy invariants."
   },
   {
     "case_id": "case_19",
@@ -282,7 +354,11 @@
     "source_trace_ref": "traces/traces.jsonl#cf3e1b37-ee09-4a33-bb51-0bbc1b407102",
     "regression": false,
     "expected_numeric": null,
-    "out_of_jurisdiction": true
+    "out_of_jurisdiction": true,
+    "failure_category": "llm_model",
+    "failure_type": "judge_refusal_misclassification",
+    "failure_reason": "Detailed overtime rate is unstated. Assistant correctly stated 'The provided documents do not mention overtime...'. Judge V1/V2 rejected.",
+    "resolution": "Calibrate judge prompt."
   },
   {
     "case_id": "case_20",
@@ -297,7 +373,11 @@
     "source_trace_ref": "traces/traces.jsonl#34a545d6-51d3-46c8-854f-9edf7f91ad5a",
     "regression": false,
     "expected_numeric": null,
-    "out_of_jurisdiction": true
+    "out_of_jurisdiction": true,
+    "failure_category": "llm_model",
+    "failure_type": "judge_refusal_misclassification",
+    "failure_reason": "Unstated retirement policy correctly refused. Judge misclassification.",
+    "resolution": "Calibrate judge prompt."
   },
   {
     "case_id": "case_21",
@@ -312,7 +392,11 @@
     "source_trace_ref": "traces/traces.jsonl#7f03ac6c-c991-458a-972a-b1822472f0f6",
     "regression": false,
     "expected_numeric": "six months",
-    "out_of_jurisdiction": false
+    "out_of_jurisdiction": false,
+    "failure_category": "pipeline",
+    "failure_type": "threshold_starvation",
+    "failure_reason": "Corpus has isolated probation clauses in Section 3.6.1; dense similarity threshold EMBED_MIN_SCORE=0.55 starved candidate pool at 4 chunks even when K=10.",
+    "resolution": "Implement dynamic threshold relaxation for sparse candidate pools."
   },
   {
     "case_id": "case_22",
@@ -327,7 +411,11 @@
     "source_trace_ref": "traces/traces.jsonl#51e1eed1-c25c-43b8-913d-9b4b5ba965b1",
     "regression": false,
     "expected_numeric": "six months",
-    "out_of_jurisdiction": false
+    "out_of_jurisdiction": false,
+    "failure_category": "pipeline",
+    "failure_type": "threshold_starvation",
+    "failure_reason": "Candidate pool capped at 4 chunks due to dense score cutoff.",
+    "resolution": "Adaptive K thresholding."
   },
   {
     "case_id": "case_23",
@@ -342,7 +430,11 @@
     "source_trace_ref": "traces/traces.jsonl#50dbc236-f1a7-4193-b5c5-6173c8982ec3",
     "regression": false,
     "expected_numeric": null,
-    "out_of_jurisdiction": false
+    "out_of_jurisdiction": false,
+    "failure_category": "llm_model",
+    "failure_type": "judge_fewshot_overcorrection",
+    "failure_reason": "RAG answer accurately quoted WFH approval rules from Section 8.6. Judge V2 falsely rejected it.",
+    "resolution": "Calibrate judge criteria."
   },
   {
     "case_id": "case_24",
@@ -357,7 +449,11 @@
     "source_trace_ref": "traces/traces.jsonl#1666a48b-f054-4263-adea-bf26e3e3283c",
     "regression": false,
     "expected_numeric": "9.00 am to 5:30 pm",
-    "out_of_jurisdiction": false
+    "out_of_jurisdiction": false,
+    "failure_category": "llm_model",
+    "failure_type": "judge_fewshot_overcorrection",
+    "failure_reason": "RAG answer accurately quoted daily hours (9:00am - 5:30pm) from Section 5.1. Judge V2 falsely rejected it.",
+    "resolution": "Calibrate judge criteria."
   },
   {
     "case_id": "case_25",
@@ -372,6 +468,10 @@
     "source_trace_ref": "traces/traces.jsonl#43f768c1-04aa-4f66-85f2-8d19837d3e3e",
     "regression": false,
     "expected_numeric": "5 days",
-    "out_of_jurisdiction": false
+    "out_of_jurisdiction": false,
+    "failure_category": "llm_model",
+    "failure_type": "judge_fewshot_overcorrection",
+    "failure_reason": "RAG answer accurately stated 5 days annual leave carryover from Section 5.2. Judge V2 falsely rejected it.",
+    "resolution": "Calibrate judge criteria."
   }
 ]

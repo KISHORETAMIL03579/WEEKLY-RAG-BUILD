@@ -93,11 +93,35 @@ class TestWeek6Evaluation(unittest.TestCase):
         self.assertFalse(policy_section_reference_present("Employees receive 28 days of leave [1]."))
 
     def test_deterministic_assertion_section_resolves(self):
-        """Verify policy_section_reference_resolves validates against real handbook sections."""
+        """Verify policy_section_reference_resolves validates against real handbook sections and subsections."""
         self.assertTrue(policy_section_reference_resolves("According to section 5.3.2"))
         self.assertTrue(policy_section_reference_resolves("As per section 2.2.3 and section 9.1"))
+        self.assertTrue(policy_section_reference_resolves("Referencing Section 4.3.1 Salary Advances"))
+        self.assertTrue(policy_section_reference_resolves("Section 10.5.3 applies to ill health"))
+        self.assertTrue(policy_section_reference_resolves("Section 5.3.2.1 sub-tier entitlement"))
         self.assertFalse(policy_section_reference_resolves("According to section 99.88.77"))
+        self.assertFalse(policy_section_reference_resolves("Section 42.1 is completely fabricated"))
         self.assertTrue(policy_section_reference_resolves("Employees receive leave without section citations."))
+
+    def test_eval_cases_failure_categorization_schema(self):
+        """Verify that eval_cases_25.json contains failure_category, failure_type, and failure_reason."""
+        cases = load_eval_cases(self.cases_path)
+        valid_categories = {"pipeline", "llm_model", "code_issue", None}
+        for case in cases:
+            self.assertIn("failure_category", case, f"Case {case.get('case_id')} missing 'failure_category'")
+            self.assertIn("failure_type", case, f"Case {case.get('case_id')} missing 'failure_type'")
+            self.assertIn("failure_reason", case, f"Case {case.get('case_id')} missing 'failure_reason'")
+            self.assertIn("resolution", case, f"Case {case.get('case_id')} missing 'resolution'")
+            self.assertIn(case["failure_category"], valid_categories)
+
+    def test_failure_category_statistics_math(self):
+        """Verify compute_failure_category_statistics groups pipeline vs model vs code vs pass."""
+        from week6.eval_week6 import compute_failure_category_statistics
+        cases = load_eval_cases(self.cases_path)
+        stats = compute_failure_category_statistics(cases)
+        self.assertEqual(sum(stats.values()), len(cases))
+        self.assertGreater(stats["pipeline"], 0)
+        self.assertGreater(stats["llm_model"], 0)
 
     def test_deterministic_assertion_version_present(self):
         """Verify handbook_version_present checks for edition / manual markers."""

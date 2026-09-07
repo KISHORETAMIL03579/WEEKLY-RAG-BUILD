@@ -81,6 +81,23 @@ def compute_mode_statistics(cases: List[Dict[str, Any]], labels: Dict[str, int],
     return mode_stats
 
 
+def compute_failure_category_statistics(cases: List[Dict[str, Any]]) -> Dict[str, int]:
+    """Computes distribution of failure root causes (Pipeline vs LLM Model vs Code Issue vs Clean Pass)."""
+    counts = {
+        "pipeline": 0,
+        "llm_model": 0,
+        "code_issue": 0,
+        "pass": 0
+    }
+    for c in cases:
+        cat = c.get("failure_category")
+        if cat in counts:
+            counts[cat] += 1
+        else:
+            counts["pass"] += 1
+    return counts
+
+
 def run_week6_evaluation():
     print("=" * 78)
     print("      WEEK 6 PRACTICAL EVALUATION: VALIDATE THE POLICY-ANSWER JUDGE      ")
@@ -120,8 +137,9 @@ def run_week6_evaluation():
     print("\n[5/5] Running Judge V2 (Few-Shot Exemplars from V1 Disagreements)...")
     v2_output = run_judge_suite(cases, "week6/judge_v2.txt", labels)
 
-    # 5. Compute Mode Table
+    # 5. Compute Mode Table & Failure Statistics
     mode_stats = compute_mode_statistics(cases, labels, v1_output["results"], v2_output["results"])
+    failure_stats = compute_failure_category_statistics(cases)
 
     # Render Table
     print("\n" + "=" * 78)
@@ -133,6 +151,23 @@ def run_week6_evaluation():
         v1_pct = (stats["v1_pass"] / tot * 100) if tot else 0.0
         v2_pct = (stats["v2_pass"] / tot * 100) if tot else 0.0
         print(f"{mode:<48} {tot:<6} {h_pct:>5.1f}%       {v1_pct:>5.1f}%     {v2_pct:>5.1f}%")
+    print("=" * 78)
+
+    # Failure Root Cause Breakdown Table
+    print("\n" + "=" * 78)
+    print("          FAILURE ROOT CAUSE BREAKDOWN (PIPELINE vs MODEL vs CODE)       ")
+    print("=" * 78)
+    print(f"{'Failure Category':<35} {'Cases Count':<15} {'Percentage':<15}")
+    print("-" * 78)
+    for cat_name, label_title in [
+        ("pipeline", "Pipeline Failure (Retrieval/K/Threshold)"),
+        ("llm_model", "LLM Model Failure (Gen Drift/Judge Bias)"),
+        ("code_issue", "Code Issue (Assertion/Resolver Defect)"),
+        ("pass", "Clean Pass (Zero Pipeline/Model Defect)")
+    ]:
+        cnt = failure_stats.get(cat_name, 0)
+        pct = (cnt / len(cases) * 100.0) if cases else 0.0
+        print(f"{label_title:<45} {cnt:>5}            {pct:>5.1f}%")
     print("=" * 78)
 
     # Summary Metrics
@@ -167,6 +202,36 @@ def run_week6_evaluation():
     else:
         print("Finding: The prompt iteration improved judge alignment with human ground truth.")
     print("=" * 78)
+
+    # Export complete trace-level evaluation artifact
+    v1_map = {r["case_id"]: r for r in v1_output["results"]}
+    v2_map = {r["case_id"]: r for r in v2_output["results"]}
+    export_data = []
+    for idx, c in enumerate(cases):
+        cid = c["case_id"]
+        v1_res = v1_map.get(cid, {})
+        v2_res = v2_map.get(cid, {})
+        export_data.append({
+            "case_id": cid,
+            "trace_id": c.get("trace_id"),
+            "question": c.get("question"),
+            "taxonomy_mode": c.get("taxonomy_mode"),
+            "human_label": labels.get(cid),
+            "assertions": assertion_results[idx],
+            "judge_v1_verdict": v1_res.get("judge_label"),
+            "judge_v1_agreed": v1_res.get("agreed"),
+            "judge_v2_verdict": v2_res.get("judge_label"),
+            "judge_v2_agreed": v2_res.get("agreed"),
+            "failure_category": c.get("failure_category"),
+            "failure_type": c.get("failure_type"),
+            "failure_reason": c.get("failure_reason"),
+            "resolution": c.get("resolution")
+        })
+
+    trace_results_path = pathlib.Path("week6/trace_eval_results.json")
+    with open(trace_results_path, "w", encoding="utf-8") as f:
+        json.dump(export_data, f, indent=2)
+    print(f"\n[Artifact Saved] Exported trace evaluation report to: {trace_results_path}")
 
 
 if __name__ == "__main__":

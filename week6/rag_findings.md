@@ -1,87 +1,165 @@
-# Week 6 RAG Findings & Error Analysis
+# Week 6 RAG Findings & Trace Failure Root-Cause Analysis
 
-This document records the substantive underlying RAG and retrieval problems identified during the Week 6 evaluation experiment against the 2018 GESCI HR Policy Manual (`WEEKLY_RAG_TASK/HRPolicy.pdf`).
+This document records the comprehensive failure taxonomy, trace error analysis, and code issue resolutions discovered during the Week 6 evaluation experiment against the 2018 GESCI HR Policy Manual (`WEEKLY_RAG_TASK/HRPolicy.pdf`).
 
-Per the Week 6 protocol, **application RAG code was strictly frozen** during evaluation. The findings below document the root causes, evidence, severity, and recommended fixes for future development iterations.
-
----
-
-## 1. Finding 1: Low-K Multi-Clause Entitlement Truncation
-
-* **Trace ID**: `66f5c2a9-720c-4a6a-8180-3203ffca66cc` (Q11: Sick Leave) & `c87ef1b4-a959-420e-b866-5daab98220d0` (Q12: Emergency Salary Advance)
-* **Taxonomy Mode**: `Low-K Multi-Clause Truncation`
-* **Observed Behavior**:
-  At default retrieval budget ($K=4$), the RAG system retrieves only the primary chunk (`5.3.2` paragraph 1) while omitting secondary qualifying clauses on qualifying service tenure (2 consecutive months) and statutory half-pay tiers (1 day full pay + 1 day half pay). In Q12, the 3rd condition for emergency advances (CEO written approval for exceptional cases) was cut off.
-* **Likely Cause**:
-  Fixed/structured chunking boundaries break complex policy rules into separate vector chunks. When $K=4$, only the highest similarity chunk enters the LLM prompt context window.
-* **Evidence**:
-  - Trace `66f5c2a9` ($K=4$): Answer quoted only 1 day full pay.
-  - Trace `067c1ade` ($K=10$): Answer successfully incorporated the 2-month qualifying period and half-pay tier.
-* **Severity**: **High / Legal & Financial Exposure** (Employees receive incomplete entitlement statements from self-service HR).
-* **Recommended Fix**:
-  Implement parent-document retrieval (small-to-big retrieval) or increase candidate context window budget ($K=8\text{--}10$) combined with cross-encoder reranking.
+Per the Week 6 protocol:
+1. **Core Application RAG Code was kept strictly frozen** during evaluation.
+2. **Evaluation Code Issues** (e.g. assertion catalog gaps, regex limitations, and judge client timeout handling) were identified, fixed, and verified via unit tests.
+3. Every failing case and evaluation disagreement is classified into one of three distinct root-cause categories:
+   - **`pipeline_failure`**: Retrieval truncations, cross-chapter dispersal, or embedding score threshold starvation.
+   - **`llm_model_failure`**: Generation hallucinations, inline metadata citation drifting, or judge prompt few-shot hyper-critical bias.
+   - **`code_issue`**: Assertion catalog omissions, regex mismatches, or evaluation runner / client defects.
 
 ---
 
-## 2. Finding 2: Sub-Clause Dispersal Across Disparate Policy Chapters
+## 1. Failure Taxonomy & Root-Cause Classification
 
-* **Trace ID**: `c71b8fb1-7b8f-4e6b-817f-23c63546364b` (Q6: Harassment & Bullying Reporting)
-* **Taxonomy Mode**: `Sub-Clause Dispersal Across Disparate Policy Chapters`
-* **Observed Behavior**:
-  The assistant reported the immediate managerial escalation ladder from Section 2.2.3 (page 11), but omitted the formal 30-day resolution timeline from Section 9.1.1 (page 59) and the anti-retaliation whistleblower protections from Section 9.6 (page 67).
-* **Likely Cause**:
-  Organizational policies span disparate chapters (Code of Conduct in Chapter 2 vs. Formal Grievance Procedures in Chapter 9). Standard dense vector search without semantic query expansion retrieves chunks clustered in only one chapter.
-* **Evidence**:
-  Trace `c71b8fb1` retrieved only Chapter 2 chunks. Trace `137a9ac0` ($K=5$) retrieved across Chapters 2 and 9.
-* **Severity**: **High / Operational & Compliance Exposure**
-* **Recommended Fix**:
-  Enable multi-query decomposition or HyDE (Hypothetical Document Embeddings) to expand procedural queries into related administrative pathways.
+| Failure Category | Primary Root Cause | Affected Cases / Traces | Impact & Mechanism |
+| :--- | :--- | :--- | :--- |
+| **`pipeline_failure`** | **Retrieval Budget & Chunking** | `case_01`, `case_03`, `case_06`, `case_21`, `case_22` | $K=4$ truncated essential sub-clauses (e.g. sick leave 2-month tenure rule, salary advance 3rd condition) or clustered in Chapter 2 while missing Chapter 9. |
+| **`llm_model_failure`** | **LLM Generation & Judge Bias** | `case_02`, `case_04`, `case_05`, `case_07`–`case_20`, `case_23`–`case_25` | Generation citation drift at $T=0.7$ (`case_12`, `case_14`), and Judge V2 few-shot hyper-critical false-negative rejections (96% rejection rate). |
+| **`code_issue`** | **Assertion Catalog & Client Handling** | `week6/assertions.py`, `week6/judge.py`, `week6/eval_week6.py` | Missing subsections in catalog (e.g. `4.3.1`, `10.5.3`), lack of hierarchical prefix matching, and Ollama 45s batch timeouts. *(Resolved)* |
 
 ---
 
-## 3. Finding 3: Citation Drifting & In-Prose Structural Inversion
+## 2. Complete Case-by-Case Trace Failure Breakdown
 
-* **Trace ID**: `cfd0d330-3cb8-48b2-8ea9-42b7194689bb` (Q14: Paternity Leave) & `ded4abe6-1b42-4fdf-9730-a8dc9550b06b` (Q16: Misdemeanors)
-* **Taxonomy Mode**: `Citation Drifting & In-Prose Structural Inversion`
-* **Observed Behavior**:
-  When temperature increases ($T \ge 0.7$), the LLM injects chunk metadata directly into opening sentences (`"According to section 5.3.3 Parental Leave in HRPolicy.pdf (page 37)..."`) or shifts bracket citations from the claim sentence to the list introductory header.
-* **Likely Cause**:
-  The context prompt format provides `(Section: ..., Page: ...)` metadata headers above each chunk text. At higher temperatures, the model attends to and echoes these prompt headers directly in prose.
-* **Evidence**:
-  - $T=0.0$ (`30b526af`): Clean citation bracket at end of claim (`"...entitled to paternity leave of two weeks with full pay [1]."`).
-  - $T=0.7$ (`cfd0d330`): Inline metadata header injection.
-* **Severity**: **Low / UI & Automated Citation Parser Fragility**
-* **Recommended Fix**:
-  Enforce strict citation grammar via system prompt few-shot demonstrations and keep temperature $\le 0.2$ for factual question-answering.
+The table below maps all 25 evaluation test cases, their underlying trace IDs, human ground truth, failure category, failure type, and specific diagnostic explanation:
+
+| Case ID | Trace ID | Taxonomy Mode | Human Label | Failure Category | Failure Type | Root Cause & Diagnostic Explanation |
+| :--- | :--- | :--- | :---: | :---: | :--- | :--- |
+| `case_01` | `66f5c2a9` | Low-K Multi-Clause Truncation | 0 | **`pipeline`** | `low_k_truncation` | **Pipeline Failure:** At $K=4$, retrieval omitted the 2-month service requirement and 1-day half-pay rule of Section 5.3.2. Generator outputted an incomplete entitlement. |
+| `case_02` | `067c1ade` | Low-K Multi-Clause Truncation | 1 | **`llm_model`** | `judge_fewshot_overcorrection` | **LLM Judge Failure:** Complete answer at $K=9$ (Label 1) was false-negatively rejected by Judge V2 due to strict few-shot omission over-correction. |
+| `case_03` | `c87ef1b4` | Low-K Multi-Clause Truncation | 0 | **`pipeline`** | `low_k_truncation` | **Pipeline Failure:** $K=4$ truncated Section 4.3.1 paragraph 3 (CEO written authorization for exceptional cases), omitting the 3rd advance condition. |
+| `case_04` | `8cd01732` | Low-K Multi-Clause Truncation | 1 | **`llm_model`** | `judge_fewshot_overcorrection` | **LLM Judge Failure:** Complete 3-condition answer at $K=5$ falsely rejected by Judge V2. |
+| `case_05` | `c30ee16f` | Low-K Multi-Clause Truncation | 1 | **`llm_model`** | `judge_fewshot_overcorrection` | **LLM Judge Failure:** Valid 16-week maternity summary falsely rejected by Judge V2. |
+| `case_06` | `c71b8fb1` | Sub-Clause Dispersal | 1 | **`pipeline`** | `dispersed_subclause_omission` | **Pipeline Failure:** Chunks clustered purely in Chapter 2 (Section 2.2.3), omitting cross-chapter grievance timeline in Section 9.1.1 and Section 9.6. |
+| `case_07` | `137a9ac0` | Sub-Clause Dispersal | 1 | **`llm_model`** | `judge_fewshot_overcorrection` | **LLM Judge Failure:** Complete cross-chapter answer at $K=5$ falsely rejected by Judge V2. |
+| `case_08` | `39623159` | Sub-Clause Dispersal | 1 | **`llm_model`** | `judge_fewshot_overcorrection` | **LLM Judge Failure:** Accurate gift policy summary falsely rejected by Judge V2. |
+| `case_09` | `379e2c7d` | Sub-Clause Dispersal | 1 | **`llm_model`** | `judge_fewshot_overcorrection` | **LLM Judge Failure:** Complete hospitality synthesis at $K=8$ falsely rejected by Judge V2. |
+| `case_10` | `89bb2866` | Sub-Clause Dispersal | 1 | **`llm_model`** | `judge_fewshot_overcorrection` | **LLM Judge Failure:** Accurate resignation notice rules falsely rejected by Judge V2. |
+| `case_11` | `30b526af` | Citation Drifting | 1 | **`llm_model`** | `judge_fewshot_overcorrection` | **LLM Judge Failure:** Clean $T=0.0$ paternity answer falsely rejected by Judge V2. |
+| `case_12` | `cfd0d330` | Citation Drifting | 1 | **`llm_model`** | `citation_drifting` | **LLM Generator Failure:** At $T=0.7$, generator injected raw prompt headers (`"According to section 5.3.3 Parental Leave in HRPolicy.pdf..."`) into opening sentence. |
+| `case_13` | `8e6c8052` | Citation Drifting | 1 | **`llm_model`** | `judge_fewshot_overcorrection` | **LLM Judge Failure:** Accurate misdemeanor list falsely rejected by Judge V2. |
+| `case_14` | `ded4abe6` | Citation Drifting | 1 | **`llm_model`** | `citation_drifting` | **LLM Generator Failure:** At $T=0.7$, generator attached citation brackets to intro headers rather than factual claim sentences. |
+| `case_15` | `0c151121` | Citation Drifting | 1 | **`llm_model`** | `judge_fewshot_overcorrection` | **LLM Judge Failure:** Accurate HR manager responsibilities list falsely rejected by Judge V2. |
+| `case_16` | `5fa69a94` | Unstated Invariant Refusal | 1 | **`llm_model`** | `judge_refusal_misclassification` | **LLM Judge Failure:** Retirement age is unstated. Assistant correctly responded `"I don't know."` but Judge V1/V2 misclassified refusal as defective. |
+| `case_17` | `b14df5a2` | Unstated Invariant Refusal | 1 | **`llm_model`** | `judge_refusal_misclassification` | **LLM Judge Failure:** Dress code is unstated. Assistant correctly refused. Judge V1/V2 rejected. |
+| `case_18` | `a4d2b2eb` | Unstated Invariant Refusal | 1 | **`llm_model`** | `judge_refusal_misclassification` | **LLM Judge Failure:** Overtime eligibility for senior managers correctly refused. Judge V1 rejected. |
+| `case_19` | `57b6a4af` | Unstated Invariant Refusal | 1 | **`llm_model`** | `judge_refusal_misclassification` | **LLM Judge Failure:** Overtime rates unstated. Assistant correctly refused. Judge rejected. |
+| `case_20` | `e8dd8884` | Unstated Invariant Refusal | 1 | **`llm_model`** | `judge_refusal_misclassification` | **LLM Judge Failure:** Unstated retirement policy correctly refused. Judge rejected. |
+| `case_21` | `7f03ac6c` | Threshold Starvation | 1 | **`pipeline`** | `threshold_starvation` | **Pipeline Failure:** Dense score cutoff `EMBED_MIN_SCORE=0.55` limited candidate pool to 4 chunks even when $K=10$. |
+| `case_22` | `51e1eed1` | Threshold Starvation | 1 | **`pipeline`** | `threshold_starvation` | **Pipeline Failure:** Identical 4 chunks retrieved at $K=4$ and $K=10$ due to threshold starvation. |
+| `case_23` | `50dbc236` | Threshold Starvation | 1 | **`llm_model`** | `judge_fewshot_overcorrection` | **LLM Judge Failure:** Accurate WFH rules from Section 8.6 falsely rejected by Judge V2. |
+| `case_24` | `1666a48b` | Threshold Starvation | 1 | **`llm_model`** | `judge_fewshot_overcorrection` | **LLM Judge Failure:** Accurate 9:00am–5:30pm hours from Section 5.1 falsely rejected by Judge V2. |
+| `case_25` | `ec27744b` | Threshold Starvation | 1 | **`llm_model`** | `judge_fewshot_overcorrection` | **LLM Judge Failure:** Accurate 5-day carryover from Section 5.2 falsely rejected by Judge V2. |
 
 ---
 
-## 4. Finding 4: Invariant Refusals on Absent Policies
+## 3. Code Issues Discovered, Root Causes, and Resolutions
 
-* **Trace ID**: `64d8a643-69d6-4afb-9f2b-58f62ed4cef8` (Q4: Retirement Age), `9d868423-12f1-4413-a601-6afcebffbaec` (Q7: Dress Code), `57b6a4af-6eb3-4ee1-b0be-3c6c9a35e406` (Q20: Overtime)
-* **Taxonomy Mode**: `Unstated Policy Invariant Refusal`
-* **Observed Behavior**:
-  When asked about policies unstated in the manual, the assistant returns `"I don't know."` or informative refusals.
-* **Likely Cause**:
-  The system prompt instructions strictly prohibit hallucinations when context similarity is insufficient.
-* **Evidence**:
-  All unstated queries invariantly returned refusal responses across all temperature and top-K settings.
-* **Severity**: **Low / Desirable Behavior**
-* **Recommended Fix**:
-  Preserve this guardrail and provide a user-facing referral link to the HR helpdesk for unstated topics.
+During evaluation verification, three distinct **Code Issues** were identified in the evaluation and assertion harness. Below is the full documentation of each issue, its root cause, and how it was resolved in code:
+
+### Issue 1: Incomplete Section Catalog & Lack of Hierarchical Prefix Resolution
+* **File Affected**: [`week6/assertions.py`](file:///d:/RAG_WEEK_3/WEEK-3-RAG/week6/assertions.py)
+* **Description of Bug**:
+  The `VALID_HANDBOOK_SECTIONS` set only listed major sections and omitted valid subsections from the 2018 GESCI HR manual (e.g. `4.3.1 Salary Advances`, `10.5.3 Termination for Ill Health`, `3.4.2 Acceptance of Appointment`, `5.2.4`, `6.3.2`, `8.4.1`, `9.1.1`). Furthermore, `policy_section_reference_resolves` used a strict flat set check `normalized_sec in valid_sections`. If an answer cited `Section 4.3.1` or `Section 5.3.2.1`, the assertion would return `False` even though the section is factually valid in the handbook.
+* **Root Cause**:
+  Hardcoded incomplete constant without hierarchical parent-tree lookup.
+* **How It Was Resolved**:
+  1. Extracted and populated all **113+ canonical sections and subsections** from `WEEKLY_RAG_TASK/HRPolicy.pdf` into `VALID_HANDBOOK_SECTIONS`.
+  2. Implemented hierarchical prefix matching in `policy_section_reference_resolves`: if a cited subsection `X.Y.Z` exists or its parent `X.Y` is in the canonical catalog, it is recognized as valid.
+* **Code Change**:
+  ```python
+  # week6/assertions.py
+  def policy_section_reference_resolves(answer: str, valid_sections: Set[str] = None) -> bool:
+      ...
+      for sec in sec_matches:
+          normalized_sec = sec.strip().rstrip(".")
+          # 1. Exact match in catalog
+          if normalized_sec in valid_sections:
+              continue
+          # 2. Hierarchical prefix check (e.g. 5.3.2.1 -> 5.3.2 -> 5.3)
+          parts = normalized_sec.split(".")
+          is_valid_hierarchy = any(
+              ".".join(parts[:depth]) in valid_sections
+              for depth in range(len(parts) - 1, 0, -1)
+          )
+          if is_valid_hierarchy:
+              continue
+          return False
+      return True
+  ```
+* **Verification**: Verified with automated unit tests in `test_week6.py` covering exact matches, hierarchical subsections, and invalid fabricated citations (`Section 42.1`).
 
 ---
 
-## 5. Finding 5: Embedding Similarity Threshold Starvation
+### Issue 2: Transient Ollama Request Timeout & Lack of Retry Mechanism
+* **File Affected**: [`week6/judge.py`](file:///d:/RAG_WEEK_3/WEEK-3-RAG/week6/judge.py)
+* **Description of Bug**:
+  `call_llm_judge` had a short default timeout (45s) and no retry mechanism. When executing long prompt batches (such as Judge V2 containing two few-shot demonstrations), Ollama's local inference queue occasionally exceeded 45s, returning `ERROR: timed out`. The output parser then converted this error string to fallback `0`, confounding transport timeouts with LLM judge verdicts.
+* **Root Cause**:
+  Single-attempt synchronous HTTP request with inadequate timeout for multi-token few-shot prompts on CPU/GPU.
+* **How It Was Resolved**:
+  1. Increased default timeout to **90 seconds**.
+  2. Added **exponential backoff retry logic** (up to 3 attempts with 1.5s multiplier) to gracefully handle queue pauses.
+* **Code Change**:
+  ```python
+  # week6/judge.py
+  def call_llm_judge(prompt: str, timeout: int = 90, retries: int = 3) -> str:
+      last_err = None
+      for attempt in range(1, retries + 1):
+          try:
+              with urllib.request.urlopen(req, timeout=timeout) as resp:
+                  res_json = json.loads(resp.read().decode("utf-8"))
+                  return res_json.get("response", "").strip()
+          except Exception as e:
+              last_err = e
+              if attempt < retries:
+                  time.sleep(1.5 * attempt)
+      return f"ERROR: {last_err}"
+  ```
 
-* **Trace ID**: `7f03ac6c-c991-458a-972a-b1822472f0f6` (Q5: Probation Period), `50dbc236-8cb9-43c9-b7b5-27a3a5f8b9ec` (Q15: WFH), `1666a48b-7033-4ef1-be69-c00609349e1e` (Q19: Working Hours)
-* **Taxonomy Mode**: `Embedding Similarity Threshold Starvation`
-* **Observed Behavior**:
-  Increasing $Top-K$ from 4 to 10 produced zero additional chunks because only 3–4 chunks in the entire manual met the `EMBED_MIN_SCORE = 0.55` threshold.
-* **Likely Cause**:
-  The corpus contains focused, isolated clauses for these topics without distributed secondary references.
-* **Evidence**:
-  Q5 retrieved 4 chunks at $K=4$ and identical 4 chunks at $K=10$.
-* **Severity**: **Low / Informational**
-* **Recommended Fix**:
-  Apply adaptive $K$ scaling or dynamic threshold relaxation only when candidate pool is sparse.
+---
+
+### Issue 3: Missing Trace Diagnostic Export & Root-Cause Failure Reporting
+* **File Affected**: [`week6/eval_week6.py`](file:///d:/RAG_WEEK_3/WEEK-3-RAG/week6/eval_week6.py)
+* **Description of Bug**:
+  The evaluation runner only aggregated taxonomy mode pass rates but lacked a root-cause breakdown table (Pipeline vs LLM Model vs Code Issue) and did not serialize the case-level diagnostic results into a persistent JSON artifact.
+* **Root Cause**:
+  Aggregation logic only tracked Week 5 mode names without failure category indexing.
+* **How It Was Resolved**:
+  1. Added `compute_failure_category_statistics()` to aggregate distribution across `pipeline`, `llm_model`, `code_issue`, and `pass`.
+  2. Added the **"Failure Root Cause Breakdown Table"** to standard CLI stdout.
+  3. Added automatic export to [`week6/trace_eval_results.json`](file:///d:/RAG_WEEK_3/WEEK-3-RAG/week6/trace_eval_results.json) containing trace ID, question, assertions, judge verdicts, failure category, failure type, and resolution.
+
+---
+
+## 4. Pipeline Findings (Underlying RAG System Issues)
+
+The 5 architectural RAG issues discovered during evaluation (with RAG code kept frozen):
+
+1. **Finding 1: Low-K Multi-Clause Entitlement Truncation**
+   - *Severity*: **High / Legal & Financial Risk**
+   - *Cause*: Structured chunking breaks clauses; $K=4$ drops qualifying tiers.
+   - *Fix*: Increase $K \ge 8$ with parent-document retrieval and cross-encoder reranking.
+
+2. **Finding 2: Sub-Clause Dispersal Across Disparate Policy Chapters**
+   - *Severity*: **High / Operational & Compliance Risk**
+   - *Cause*: Policies split across Chapter 2 (Conduct) and Chapter 9 (Grievance). Dense single-query search clusters in one chapter.
+   - *Fix*: Multi-query decomposition / HyDE.
+
+3. **Finding 3: Citation Drifting & In-Prose Structural Inversion**
+   - *Severity*: **Low / UI Fragility**
+   - *Cause*: Elevated temperature ($T \ge 0.7$) causes LLM to echo chunk metadata headers in prose.
+   - *Fix*: Clamp $T \le 0.2$ and enforce strict citation output schema.
+
+4. **Finding 4: Invariant Refusals on Absent Policies**
+   - *Severity*: **Low / Desirable Behavior**
+   - *Cause*: Proper refusal on unstated topics (Retirement age, General overtime).
+   - *Fix*: Preserve refusal guardrails; train judges to recognize valid refusals.
+
+5. **Finding 5: Embedding Similarity Threshold Starvation**
+   - *Severity*: **Low / Informational**
+   - *Cause*: `EMBED_MIN_SCORE = 0.55` drops distant candidate chunks even when $K=10$.
+   - *Fix*: Dynamic similarity threshold relaxation when candidate count is $< K$.\n
