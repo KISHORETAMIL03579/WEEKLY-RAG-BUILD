@@ -681,6 +681,7 @@ EMBED_MIN_SCORE = float(os.environ.get("EMBED_MIN_SCORE", "0.55"))  # recalibrat
 # Tested directly: a genuine top-ranked match scores ~0.9-1.0 here; a
 # plausible false positive (moderate, non-top rank in both methods)
 # scores ~0.39-0.42 — 0.55 sits cleanly between them.
+SAFETY_MIN_SCORE = float(os.environ.get("SAFETY_MIN_SCORE", "0.40"))  # bounded relaxation floor for supporting chunks
 EMBED_BATCH = 32
 
 # Retrieval strategy for the embeddings path. "hybrid" combines cosine
@@ -3376,12 +3377,20 @@ def ask(sid: OptionalSessionId, payload: AskRequest | None = Body(default=None))
                 raw_results = reciprocal_rank_fusion(active_store, search_query, top_k=top_k)
             near_miss = raw_results[0] if raw_results else None
             results = [r for r in raw_results if r["score"] >= EMBED_MIN_SCORE]
+            # Bounded Safety Threshold: If the top match clears EMBED_MIN_SCORE (confirming topical relevance),
+            # admit supporting context candidates down to SAFETY_MIN_SCORE (default 0.40) to prevent candidate starvation.
+            # If top match fails EMBED_MIN_SCORE, strict EMBED_MIN_SCORE applies to enforce refusal.
+            if near_miss and near_miss.get("score", 0.0) >= EMBED_MIN_SCORE:
+                results = [r for r in raw_results if r["score"] >= SAFETY_MIN_SCORE]
+            else:
+                results = [r for r in raw_results if r["score"] >= EMBED_MIN_SCORE]
             
             RAGTracer.trace("RETRIEVAL", 3, 6, "Hybrid Retrieval & RRF Fusion", {
                 "Retrieval Mode": RETRIEVAL_MODE,
                 "Top-K Requested": top_k,
                 "Raw Candidates Returned": len(raw_results),
                 "Above Min Threshold (" + str(EMBED_MIN_SCORE) + ")": len(results),
+                "Admitted Candidates": len(results),
                 "Top Match Score": f"{near_miss['score']:.4f}" if near_miss else "0.0000",
                 "Top Source File": near_miss["filename"] if near_miss else "None",
             })
