@@ -137,6 +137,7 @@ def run_week6_evaluation():
     print("\n[5/5] Running Judge V2 (Few-Shot Exemplars from V1 Disagreements)...")
     v2_output = run_judge_suite(cases, "week6/judge_v2.txt", labels)
 
+    # 5. Compute Mode Table
     # 5. Compute Mode Table & Failure Statistics
     mode_stats = compute_mode_statistics(cases, labels, v1_output["results"], v2_output["results"])
     failure_stats = compute_failure_category_statistics(cases)

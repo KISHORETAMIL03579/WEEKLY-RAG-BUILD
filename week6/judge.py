@@ -12,6 +12,8 @@ OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_CHAT_MODEL", "llama3.1:8b")
 
 
+def call_llm_judge(prompt: str, timeout: int = 45) -> str:
+    """Calls Ollama API with the formatted judge prompt."""
 import time
 
 
@@ -33,6 +35,13 @@ def call_llm_judge(prompt: str, timeout: int = 90, retries: int = 3) -> str:
         data=data,
         headers={"Content-Type": "application/json"}
     )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            res_json = json.loads(resp.read().decode("utf-8"))
+            return res_json.get("response", "").strip()
+    except Exception as e:
+        # Fallback or error reporting
+        return f"ERROR: {e}"
     
     last_err = None
     for attempt in range(1, retries + 1):

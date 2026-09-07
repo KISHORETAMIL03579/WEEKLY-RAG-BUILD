@@ -93,6 +93,7 @@ class TestWeek6Evaluation(unittest.TestCase):
         self.assertFalse(policy_section_reference_present("Employees receive 28 days of leave [1]."))
 
     def test_deterministic_assertion_section_resolves(self):
+        """Verify policy_section_reference_resolves validates against real handbook sections."""
         """Verify policy_section_reference_resolves validates against real handbook sections and subsections."""
         self.assertTrue(policy_section_reference_resolves("According to section 5.3.2"))
         self.assertTrue(policy_section_reference_resolves("As per section 2.2.3 and section 9.1"))
