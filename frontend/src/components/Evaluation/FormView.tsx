@@ -16,6 +16,7 @@ interface FormViewProps {
   onRun: () => void;
   onCancel: () => void;
   isRunning: boolean;
+  onNotify?: (msg: string, type?: 'info' | 'success' | 'error') => void;
 }
 
 export const FormView: React.FC<FormViewProps> = ({
@@ -30,10 +31,19 @@ export const FormView: React.FC<FormViewProps> = ({
   onRun,
   onCancel,
   isRunning,
+  onNotify,
 }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const importAbortRef = useRef<AbortController | null>(null);
+
+  const notify = (msg: string, type: 'info' | 'success' | 'error' = 'info') => {
+    if (onNotify) {
+      onNotify(msg, type);
+    } else {
+      alert(msg);
+    }
+  };
 
   useEffect(() => {
     return () => {
@@ -64,7 +74,7 @@ export const FormView: React.FC<FormViewProps> = ({
 
   const handleImport = async () => {
     if (!selectedFile) {
-      alert('Please choose a file (.pdf, .txt, .md) first.');
+      notify('Please choose a file (.pdf, .txt, .md, .json) first.', 'error');
       return;
     }
     if (importAbortRef.current) {
@@ -84,13 +94,14 @@ export const FormView: React.FC<FormViewProps> = ({
             expected: p.expected || '',
           }))
         );
+        notify(`Successfully imported ${data.pairs.length} Q/A pairs from ${selectedFile.name}!`, 'success');
       } else {
-        alert(data.error || 'No Q/A pairs found in file.');
+        notify(data.error || 'No Q/A pairs found in file.', 'error');
       }
     } catch (e: unknown) {
       const err = e as Error;
       if (err.name !== 'AbortError') {
-        alert('Import error: ' + err.message);
+        notify('Import error: ' + err.message, 'error');
       }
     } finally {
       if (importAbortRef.current === controller) {
@@ -157,7 +168,7 @@ export const FormView: React.FC<FormViewProps> = ({
             <input
               id="qa-file-upload"
               type="file"
-              accept=".pdf,.txt,.md"
+              accept=".pdf,.txt,.md,.json"
               style={{ display: 'none' }}
               onChange={(e) => {
                 if (e.target.files && e.target.files[0]) {
@@ -249,8 +260,17 @@ export const FormView: React.FC<FormViewProps> = ({
           </div>
         </div>
 
-        {/* Question Rows */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {/* Question Rows with internal scroll when list is large */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            maxHeight: questions.length > 5 ? '380px' : 'none',
+            overflowY: questions.length > 5 ? 'auto' : 'visible',
+            paddingRight: questions.length > 5 ? '6px' : '0',
+          }}
+        >
           {questions.map((q, idx) => (
             <div key={q.id} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <span

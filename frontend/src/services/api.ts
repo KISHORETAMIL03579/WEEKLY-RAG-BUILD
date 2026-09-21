@@ -7,7 +7,15 @@ import {
   ClearResponse,
   PagesResponse,
 } from '../types/api';
-import { EvalRunPayload, EvalRunResponse, ParseQaResponse } from '../types/evaluation';
+import {
+  EvalRunPayload,
+  EvalRunResponse,
+  ParseQaResponse,
+  JudgeEvalResponse,
+  JudgeCaseResult,
+  Week6EvalResponse,
+  Week6CaseResult,
+} from '../types/evaluation';
 import { TracesResponse, ReplayResponse } from '../types/trace';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
@@ -139,5 +147,43 @@ export const api = {
     const res = await fetch(`${API_BASE}/orphans`, { headers, signal });
     return handleResponse(res);
   },
-};
 
+  async getJudgeResults(signal?: AbortSignal): Promise<JudgeEvalResponse> {
+    const res = await fetch(`${API_BASE}/api/evaluation/judges`, { signal }).catch(async () => {
+      // Fallback to legacy path if needed
+      return fetch(`${API_BASE}/api/week6/results`, { signal });
+    });
+    return handleResponse<JudgeEvalResponse>(res);
+  },
+
+  async evaluateJudges(
+    cases?: JudgeCaseResult[],
+    runLlm: boolean = true,
+    signal?: AbortSignal
+  ): Promise<JudgeEvalResponse> {
+    const res = await fetch(`${API_BASE}/api/evaluation/judges`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cases, run_llm: runLlm }),
+      signal,
+    }).catch(async () => {
+      // Fallback to legacy path if needed
+      return fetch(`${API_BASE}/api/week6/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cases, run_llm: runLlm }),
+        signal,
+      });
+    });
+    return handleResponse<JudgeEvalResponse>(res);
+  },
+
+  // Backward compatibility methods
+  async getWeek6Results(signal?: AbortSignal): Promise<Week6EvalResponse> {
+    return this.getJudgeResults(signal);
+  },
+
+  async evaluateWeek6(cases?: Week6CaseResult[], runLlm: boolean = true, signal?: AbortSignal): Promise<Week6EvalResponse> {
+    return this.evaluateJudges(cases, runLlm, signal);
+  },
+};

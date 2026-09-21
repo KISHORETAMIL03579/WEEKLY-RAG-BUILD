@@ -33,7 +33,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   strategySelected,
 }) => {
   const [input, setInput] = useState('');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  const handleCopy = (id: string, text: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => {
+        setCopiedId((prev) => (prev === id ? null : prev));
+      }, 2000);
+    }
+  };
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -139,6 +150,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       🌡️ Temp: {m.temperature != null ? Number(m.temperature).toFixed(2) : '0.00'}
                     </span>
                     {m.sources && <span className="meta-pill">📄 {m.sources.length} sources</span>}
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(m.id, m.text)}
+                      className="copy-answer-btn"
+                      title="Copy response to clipboard"
+                    >
+                      {copiedId === m.id ? '✓ Copied' : '📋 Copy'}
+                    </button>
                   </div>
                 )}
               </div>

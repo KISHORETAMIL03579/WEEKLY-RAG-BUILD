@@ -3,6 +3,7 @@
   --bg:           hsl(220, 16%, 8%);
   --bg-surface:   hsl(220, 14%, 11%);
   --bg-raised:    hsl(220, 13%, 14%);
+  --bg-card:      hsl(220, 13%, 14%);
   --bg-hover:     hsl(220, 12%, 17%);
   --border:       hsl(220, 12%, 20%);
   --border-mid:   hsl(220, 10%, 26%);
@@ -68,6 +69,11 @@ html, body {
   font-family: var(--font);
   background: var(--bg);
   color: var(--text-primary);
+}
+
+#root {
+  height: 100%;
+  min-height: 100%;
 }
 
 /* Global Sleek Scrollbar (Replaces thick default white scrollbar) */
@@ -965,6 +971,27 @@ html, body {
   padding: 2px 8px;
 }
 
+.copy-answer-btn {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  padding: 2px 8px;
+  font-size: 0.68rem;
+  font-family: var(--mono);
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-left: auto;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.copy-answer-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
 /* ── Mobile Drawer Backdrop ────────────────────────────────── */
 .sidebar-backdrop {
   display: none;
@@ -1491,6 +1518,10 @@ a:focus-visible,
   --amber-text: #f59e0b;
   --amber-border: rgba(245, 158, 11, 0.25);
   min-height: 100vh;
+  height: 100vh;
+  max-height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   background: var(--bg);
@@ -1517,6 +1548,35 @@ a:focus-visible,
 
 .eval-input-field:focus {
   border-color: var(--accent);
+}
+
+/* Global Dark Theme Select & Option Dropdowns */
+select {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 6px;
+  cursor: pointer;
+  outline: none;
+}
+
+select:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25) !important;
+}
+
+select option,
+option {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  padding: 8px 12px !important;
+}
+
+select option:checked,
+select option:hover,
+select option:focus {
+  background-color: #2563eb !important;
+  color: #ffffff !important;
 }
 
 .stage-checkbox {

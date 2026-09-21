@@ -2752,6 +2752,7 @@ RequiredStore = Annotated[VectorStore, Depends(require_session_store)]
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.get("/", include_in_schema=False)
+@app.get("/eval", include_in_schema=False)
 def index(request: Request, sid: SessionId):
     # `sid` is unused in the body on purpose: depending on it is what mints
     # the session cookie for a first-time visitor.
@@ -3778,8 +3779,34 @@ def eval_parse_qa_pdf(file: UploadFile | None = File(default=None)):
             full_text = file.file.read().decode("utf-8", errors="replace")
         except Exception:
             return JSONResponse({"error": "Could not read that file as text"}, status_code=400)
+    elif filename_lower.endswith(".json"):
+        try:
+            raw_bytes = file.file.read()
+            data = json.loads(raw_bytes.decode("utf-8", errors="replace"))
+            pairs = []
+            if isinstance(data, list):
+                for item in data:
+                    if isinstance(item, dict):
+                        q = item.get("question") or item.get("q") or ""
+                        a = item.get("expected") or item.get("answer") or item.get("section_info") or item.get("a") or ""
+                        if q:
+                            pairs.append({"question": str(q).strip(), "expected": str(a).strip() or "HR Policy"})
+            elif isinstance(data, dict):
+                items = data.get("pairs") or data.get("questions") or data.get("cases") or []
+                for item in items:
+                    if isinstance(item, dict):
+                        q = item.get("question") or item.get("q") or ""
+                        a = item.get("expected") or item.get("answer") or item.get("section_info") or item.get("a") or ""
+                        if q:
+                            pairs.append({"question": str(q).strip(), "expected": str(a).strip() or "HR Policy"})
+            if pairs:
+                return {"ok": True, "pairs": pairs}
+            return JSONResponse({"error": "No valid question/expected pairs found in JSON"}, status_code=400)
+        except Exception as exc:
+            return JSONResponse({"error": f"Invalid JSON format: {exc}"}, status_code=400)
     else:
         return JSONResponse({"error": "Only PDF, TXT, or MD files are supported here"}, status_code=400)
+        return JSONResponse({"error": "Only PDF, TXT, MD, or JSON files are supported here"}, status_code=400)
 
     pairs = parse_qa_pairs(full_text)
     if not pairs:
@@ -4124,6 +4151,227 @@ def list_orphans(
         "count": len(safe_records),
         "admin": False,
         "orphans": safe_records,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Week 6: Policy Answer Judges & Deterministic Assertions Endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+
+from week6.assertions import run_all_assertions
+from week6.judge import evaluate_case_with_judge
+
+
+class Week6CasePayload(BaseModel):
+    case_id: str | None = None
+    trace_id: str | None = None
+    question: str
+    answer: str
+    retrieved_context: str | None = ""
+    handbook_version: str | None = "2018"
+    section_info: str | None = ""
+    taxonomy_mode: str | None = "General"
+    human_label: int | None = 1
+    expected_numeric: str | None = None
+    out_of_jurisdiction: bool = False
+    failure_category: str | None = None
+    failure_type: str | None = None
+    failure_reason: str | None = None
+    resolution: str | None = None
+
+
+class Week6EvalPayload(BaseModel):
+    cases: list[Week6CasePayload] | None = None
+    run_llm: bool = True
+
+JudgeEvalPayload = Week6EvalPayload
+JudgeCasePayload = Week6CasePayload
+
+
+@app.get("/api/evaluation/judges")
+@app.get("/api/week6/results")
+def get_week6_results():
+    """Returns the latest evaluation results, pre-computed cases, and summary metrics."""
+    cases_file = BASE_DIR / "week6" / "eval_cases_25.json"
+    results_file = BASE_DIR / "week6" / "trace_eval_results.json"
+    labels_file = BASE_DIR / "week6" / "labels_25.json"
+
+    raw_cases = []
+    if cases_file.exists():
+        try:
+            with open(cases_file, "r", encoding="utf-8") as f:
+                raw_cases = json.load(f)
+        except Exception:
+            raw_cases = []
+
+    labels = {}
+    if labels_file.exists():
+        try:
+            with open(labels_file, "r", encoding="utf-8") as f:
+                labels = json.load(f)
+        except Exception:
+            labels = {}
+
+    eval_results = []
+    if results_file.exists():
+        try:
+            with open(results_file, "r", encoding="utf-8") as f:
+                eval_results = json.load(f)
+        except Exception:
+            eval_results = []
+
+    # Merge case details with results
+    merged = []
+    v1_agreed = 0
+    v2_agreed = 0
+    case_map = {c.get("case_id"): c for c in raw_cases}
+
+    for res in eval_results:
+        cid = res.get("case_id")
+        base = case_map.get(cid, {})
+        item = {
+            **base,
+            **res,
+            "human_label": labels.get(cid, res.get("human_label", 1)),
+        }
+        if item.get("judge_v1_agreed"):
+            v1_agreed += 1
+        if item.get("judge_v2_agreed"):
+            v2_agreed += 1
+        merged.append(item)
+
+    total = len(merged)
+    v1_pct = (v1_agreed / total * 100) if total else 0.0
+    v2_pct = (v2_agreed / total * 100) if total else 0.0
+
+    return {
+        "total_cases": total,
+        "judge_v1_agreement_pct": round(v1_pct, 2),
+        "judge_v2_agreement_pct": round(v2_pct, 2),
+        "v1_agreements": v1_agreed,
+        "v2_agreements": v2_agreed,
+        "results": merged,
+    }
+
+
+@app.post("/api/evaluation/judges")
+@app.post("/api/week6/evaluate")
+def evaluate_week6(payload: Week6EvalPayload | None = Body(default=None)):
+    """Runs deterministic assertions and Judge V1 / Judge V2 over custom or default test cases."""
+    v1_prompt_path = BASE_DIR / "week6" / "judge_v1.txt"
+    v2_prompt_path = BASE_DIR / "week6" / "judge_v2.txt"
+    cases_file = BASE_DIR / "week6" / "eval_cases_25.json"
+    labels_file = BASE_DIR / "week6" / "labels_25.json"
+
+    v1_template = v1_prompt_path.read_text(encoding="utf-8") if v1_prompt_path.exists() else ""
+    v2_template = v2_prompt_path.read_text(encoding="utf-8") if v2_prompt_path.exists() else ""
+
+    cases_to_eval = []
+    if payload and payload.cases:
+        for idx, c in enumerate(payload.cases):
+            cases_to_eval.append({
+                "case_id": c.case_id or f"custom_{idx + 1}",
+                "trace_id": c.trace_id or "",
+                "question": c.question,
+                "answer": c.answer,
+                "retrieved_context": c.retrieved_context or "",
+                "handbook_version": c.handbook_version or "2018",
+                "section_info": c.section_info or "",
+                "taxonomy_mode": c.taxonomy_mode or "Custom Query",
+                "human_label": c.human_label if c.human_label is not None else 1,
+                "expected_numeric": c.expected_numeric,
+                "out_of_jurisdiction": c.out_of_jurisdiction,
+                "failure_category": c.failure_category or "pass",
+                "failure_type": c.failure_type or "",
+                "failure_reason": c.failure_reason or "",
+                "resolution": c.resolution or "",
+            })
+    else:
+        if cases_file.exists():
+            try:
+                with open(cases_file, "r", encoding="utf-8") as f:
+                    cases_to_eval = json.load(f)
+            except Exception:
+                cases_to_eval = []
+
+    labels = {}
+    if labels_file.exists():
+        try:
+            with open(labels_file, "r", encoding="utf-8") as f:
+                labels = json.load(f)
+        except Exception:
+            labels = {}
+
+    results = []
+    v1_agreed = 0
+    v2_agreed = 0
+
+    for c in cases_to_eval:
+        cid = c.get("case_id", "case_x")
+        h_label = labels.get(cid, c.get("human_label", 1))
+        assertions = run_all_assertions(c)
+
+        judge_v1_verdict = 1
+        judge_v2_verdict = 1
+        v1_raw = ""
+        v2_raw = ""
+
+        if payload and payload.run_llm and v1_template and v2_template and _chat_configured():
+            try:
+                v1_verdict, v1_raw = evaluate_case_with_judge(c, v1_template)
+                v2_verdict, v2_raw = evaluate_case_with_judge(c, v2_template)
+                judge_v1_verdict = v1_verdict
+                judge_v2_verdict = v2_verdict
+            except Exception as e:
+                logger.warning("LLM Judge call failed for case %s: %s", cid, e)
+                judge_v1_verdict = 1 if all(assertions.values()) else 0
+                judge_v2_verdict = 1 if all(assertions.values()) else 0
+        else:
+            all_pass = all(assertions.values())
+            judge_v1_verdict = 1 if all_pass else 0
+            judge_v2_verdict = 1 if all_pass else 0
+
+        is_v1_agreed = (judge_v1_verdict == h_label)
+        is_v2_agreed = (judge_v2_verdict == h_label)
+
+        if is_v1_agreed:
+            v1_agreed += 1
+        if is_v2_agreed:
+            v2_agreed += 1
+
+        fail_cat = c.get("failure_category")
+        if not fail_cat:
+            if not assertions.get("policy_section_reference_resolves"):
+                fail_cat = "code_issue"
+            elif judge_v1_verdict == 0 or judge_v2_verdict == 0 or h_label == 0:
+                fail_cat = "pipeline" if "truncat" in c.get("question", "").lower() else "llm_model"
+            else:
+                fail_cat = "pass"
+
+        results.append({
+            **c,
+            "human_label": h_label,
+            "assertions": assertions,
+            "judge_v1_verdict": judge_v1_verdict,
+            "judge_v1_agreed": is_v1_agreed,
+            "judge_v1_raw": v1_raw,
+            "judge_v2_verdict": judge_v2_verdict,
+            "judge_v2_agreed": is_v2_agreed,
+            "judge_v2_raw": v2_raw,
+            "failure_category": fail_cat,
+        })
+
+    total = len(results)
+    v1_pct = (v1_agreed / total * 100) if total else 0.0
+    v2_pct = (v2_agreed / total * 100) if total else 0.0
+
+    return {
+        "total_cases": total,
+        "judge_v1_agreement_pct": round(v1_pct, 2),
+        "judge_v2_agreement_pct": round(v2_pct, 2),
+        "v1_agreements": v1_agreed,
+        "v2_agreements": v2_agreed,
+        "results": results,
     }
 
 

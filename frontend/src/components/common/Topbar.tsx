@@ -44,8 +44,20 @@ export const Topbar: React.FC<TopbarProps> = ({
 
       <div className="topbar-spacer"></div>
 
-      <a href="/eval" className="eval-btn">
-        Evaluate ↗
+      <a
+        href="/eval"
+        className="eval-btn"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          fontWeight: 600,
+          background: 'rgba(59, 130, 246, 0.15)',
+          borderColor: 'var(--accent)',
+          color: '#60a5fa',
+        }}
+      >
+        ⚖️ Evaluator ↗
       </a>
 
       <div className="topbar-stat">
