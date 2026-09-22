@@ -4712,12 +4712,9 @@ def evaluate_week6(payload: Week6EvalPayload | None = Body(default=None)):
 
         judge_v1_verdict = 1
         judge_v2_verdict = 1
-        v1_raw = ""
-        v2_raw = ""
         v1_raw = "OFFLINE_DETERMINISTIC: Evaluated via deterministic policy assertions."
         v2_raw = "OFFLINE_DETERMINISTIC: Evaluated via deterministic policy assertions."
 
-        if payload and payload.run_llm and v1_template and v2_template and _chat_configured():
         if payload and payload.run_llm and v1_template and v2_template:
             try:
                 v1_verdict, v1_raw = evaluate_case_with_judge(c, v1_template)
@@ -4741,12 +4738,9 @@ def evaluate_week6(payload: Week6EvalPayload | None = Body(default=None)):
             v2_agreed += 1
 
         fail_cat = c.get("failure_category")
-        if not fail_cat:
         if not fail_cat or fail_cat == "pass":
             if not assertions.get("policy_section_reference_resolves"):
                 fail_cat = "code_issue"
-            elif judge_v1_verdict == 0 or judge_v2_verdict == 0 or h_label == 0:
-                fail_cat = "pipeline" if "truncat" in c.get("question", "").lower() else "llm_model"
             elif h_label == 0 or judge_v1_verdict == 0 or judge_v2_verdict == 0:
                 fail_cat = "pipeline" if ("truncat" in c.get("taxonomy_mode", "").lower() or "dispersal" in c.get("taxonomy_mode", "").lower()) else "llm_model"
             else:

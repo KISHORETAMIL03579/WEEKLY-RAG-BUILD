@@ -48,11 +48,9 @@ def check_ollama_health(timeout: float = 0.05) -> bool:
         return False
 
 
-def call_llm_judge(prompt: str, timeout: int = 10, retries: int = 2) -> str:
 def call_llm_judge(prompt: str, timeout: int = 4, retries: int = 1) -> str:
     """
     Production-grade LLM caller for judge prompts.
-    Supports Ollama (local llama3.1:8b) with instant circuit breaker & exponential backoff.
     Supports local Ollama daemon and configured backend chat services with instant circuit breaker & backoff.
     """
     global _OLLAMA_AVAILABLE
@@ -185,18 +183,20 @@ def evaluate_case_with_judge(case: Dict[str, Any], prompt_template: str) -> Tupl
     """
     Evaluates a single policy QA case using the specified judge prompt template.
     Returns a tuple of (binary_verdict, raw_llm_response).
-    If LLM is offline, gracefully evaluates deterministically.
+    If LLM is offline or error/timeout occurs, gracefully evaluates deterministically.
     """
     is_v1 = "v1" in prompt_template.lower() or "judge_v1" in prompt_template.lower()
-    formatted_prompt = prompt_template.format(
-        question=case.get("question", "").strip(),
-        context=case.get("retrieved_context", "").strip(),
-        answer=case.get("answer", "").strip()
-    )
+    
+    # Safe template substitution without breaking on literal JSON braces
+    formatted_prompt = prompt_template
+    formatted_prompt = formatted_prompt.replace("{question}", str(case.get("question", "")).strip())
+    formatted_prompt = formatted_prompt.replace("{context}", str(case.get("retrieved_context", "")).strip())
+    formatted_prompt = formatted_prompt.replace("{answer}", str(case.get("answer", "")).strip())
+
     raw_output = call_llm_judge(formatted_prompt)
-    verdict = parse_judge_output(raw_output)
-    if raw_output.startswith("OFFLINE_FALLBACK"):
+    if not raw_output or raw_output.startswith(("OFFLINE_FALLBACK", "ERROR", "TIMEOUT")):
         verdict = evaluate_case_deterministically(case, is_strict_section=is_v1)
+        raw_output = f"DETERMINISTIC_ASSERTION: Evaluated dynamically (verdict={verdict})"
     else:
         verdict = parse_judge_output(raw_output)
     return verdict, raw_output

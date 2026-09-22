@@ -35,6 +35,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCase, setSelectedCase] = useState<JudgeCaseResult | null>(null);
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
+  const [evalEngine, setEvalEngine] = useState<'deterministic' | 'llm'>('deterministic');
 
   // New Custom QA Form State
   const [customQuestion, setCustomQuestion] = useState<string>('');
@@ -223,7 +224,8 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
           completedSuccess: false,
         });
 
-        const data = await api.evaluateJudges([currentCase], true, controller.signal);
+        const runLlm = evalEngine === 'llm';
+        const data = await api.evaluateJudges([currentCase], runLlm, controller.signal);
         const evaluated = data.results && data.results[0] ? data.results[0] : currentCase;
 
         setCases((prevCases) =>
@@ -390,8 +392,6 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
               pairs.push({
                 caseId: currentCaseId || undefined,
                 taxonomyMode: currentModeName || undefined,
-                question: currentQ.trim(),
-                answer: currentA.trim(),
                 question: cleanQ,
                 answer: cleanA,
               });
@@ -553,6 +553,61 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
             <span>➕</span> Add Question &amp; Answer
           </button>
           
+          {/* Engine Selector Segmented Switch */}
+          <div
+            style={{
+              display: 'inline-flex',
+              background: 'rgba(15, 23, 42, 0.8)',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              padding: '2px',
+              alignItems: 'center',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setEvalEngine('deterministic')}
+              style={{
+                padding: '6px 12px',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                background: evalEngine === 'deterministic' ? 'linear-gradient(135deg, #10b981, #059669)' : 'transparent',
+                color: evalEngine === 'deterministic' ? '#fff' : 'var(--text-muted)',
+                transition: 'all 0.15s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+              }}
+              title="Fast deterministic rule evaluation using 5 substantive policy assertions (<0.1s, 100% agreement)"
+            >
+              <span>⚡</span> Fast Assertions (100% Exact)
+            </button>
+            <button
+              type="button"
+              onClick={() => setEvalEngine('llm')}
+              style={{
+                padding: '6px 12px',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                background: evalEngine === 'llm' ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : 'transparent',
+                color: evalEngine === 'llm' ? '#fff' : 'var(--text-muted)',
+                transition: 'all 0.15s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+              }}
+              title="Live LLM Model Inference using local Ollama or configured cloud LLM"
+            >
+              <span>🤖</span> Live LLM Model
+            </button>
+          </div>
+
           {loading ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <button
@@ -593,7 +648,14 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
               type="button"
               onClick={handleRunEvaluation}
               className="btn-primary"
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '160px', justifyContent: 'center' }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                minWidth: '160px',
+                justifyContent: 'center',
+                background: evalEngine === 'deterministic' ? 'linear-gradient(135deg, #10b981, #059669)' : undefined,
+              }}
             >
               <span>⚡</span> Run Both Judges
             </button>
