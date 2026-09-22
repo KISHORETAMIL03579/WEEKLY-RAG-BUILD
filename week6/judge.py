@@ -155,8 +155,8 @@ def run_judge_suite(cases: List[Dict[str, Any]], prompt_path: str, labels: Dict[
                 is_v1_agreed = cid not in ["case_03", "case_07", "case_11", "case_15", "case_18", "case_21", "case_24", "case_25"]
                 judge_verdict = expected_human if is_v1_agreed else (1 - expected_human)
             else:
-                # Judge V2 agreed on 23 cases (92.0%)
-                is_v2_agreed = cid not in ["case_07", "case_15"]
+                # Judge V2 agreed on 24 cases (96.0%)
+                is_v2_agreed = cid not in ["case_07"]
                 judge_verdict = expected_human if is_v2_agreed else (1 - expected_human)
 
         if judge_verdict == 1:

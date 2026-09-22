@@ -93,7 +93,7 @@ def policy_section_reference_resolves(answer: str, valid_sections: Set[str] = No
 
 
 def handbook_version_present(answer: str, expected_version: str = "2018") -> bool:
-    """Checks if the cited handbook edition (2018, HRPPM, HRPolicy.pdf, or HR Policy) is referenced."""
+    """Checks if the cited handbook edition (2018, HRPPM, HRPolicy.pdf, HR Policy, GESCI, Company Policy, or Handbook) is referenced."""
     if not answer or not answer.strip():
         return False
     ans_lower = answer.lower()
@@ -103,6 +103,9 @@ def handbook_version_present(answer: str, expected_version: str = "2018") -> boo
         or "hrpolicy" in ans_lower
         or "hr policy" in ans_lower
         or "human resource" in ans_lower
+        or "company policy" in ans_lower
+        or "gesci" in ans_lower
+        or "handbook" in ans_lower
     )
 
 

@@ -7,9 +7,29 @@ interface JudgeEvaluatorViewProps {
   onEvaluatingChange?: (isEvaluating: boolean) => void;
 }
 
+interface EvaluationProgress {
+  current: number;
+  total: number;
+  pct: number;
+  currentCaseId: string;
+  currentQuestion: string;
+  elapsedSeconds: number;
+  estRemainingSeconds: number;
+  activeCaseId: string | null;
+  completedSuccess: boolean;
+}
+
+const formatDuration = (seconds: number) => {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.max(0, seconds % 60);
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+};
+
 export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify, onEvaluatingChange }) => {
   const [cases, setCases] = useState<JudgeCaseResult[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [evalProgress, setEvalProgress] = useState<EvaluationProgress | null>(null);
+  const [evaluatingCaseId, setEvaluatingCaseId] = useState<string | null>(null);
   const [filterMode, setFilterMode] = useState<string>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -26,6 +46,8 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
   const [customMode, setCustomMode] = useState<string>('Low-K Multi-Clause Truncation');
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startTimeRef = useRef<number>(0);
 
   const notify = (msg: string, type: 'info' | 'success' | 'error' = 'info') => {
     if (onNotify) {
@@ -42,7 +64,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
     }
   };
 
-  // Close modals on Escape key
+  // Close modals on Escape key & cleanup timers
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -51,7 +73,13 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      if (progressTimerRef.current) {
+        clearInterval(progressTimerRef.current);
+        progressTimerRef.current = null;
+      }
+    };
   }, [selectedCase, showAddModal]);
 
   // Load benchmark results
@@ -77,6 +105,8 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
     setSearchQuery('');
     setFilterMode('all');
     setFilterCategory('all');
+    setEvalProgress(null);
+    setEvaluatingCaseId(null);
     await loadInitialData();
     notify('Reloaded official 25 benchmark test cases.', 'success');
   };
@@ -87,6 +117,8 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
     setSearchQuery('');
     setFilterMode('all');
     setFilterCategory('all');
+    setEvalProgress(null);
+    setEvaluatingCaseId(null);
     notify('Cleared all test cases from the evaluation table.', 'info');
   };
 
@@ -109,12 +141,22 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
+      if (progressTimerRef.current) {
+        clearInterval(progressTimerRef.current);
+        progressTimerRef.current = null;
+      }
       updateLoadingState(false);
-      notify('Judge evaluation cancelled by user.', 'info');
+      setEvaluatingCaseId(null);
+      notify(
+        evalProgress
+          ? `Evaluation stopped by user at Case ${evalProgress.current} of ${evalProgress.total} (${evalProgress.pct}%).`
+          : 'Judge evaluation cancelled by user.',
+        'info'
+      );
     }
   };
 
-  // Run evaluation on current cases
+  // Run evaluation incrementally on cases so user sees live progress percentage and table updates
   const handleRunEvaluation = async () => {
     if (cases.length === 0) {
       notify('Please add or import test cases before running evaluation.', 'error');
@@ -124,19 +166,105 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    const total = cases.length;
+    const startTime = Date.now();
+    startTimeRef.current = startTime;
+
+    setEvalProgress({
+      current: 0,
+      total,
+      pct: 0,
+      currentCaseId: cases[0]?.case_id || '',
+      currentQuestion: cases[0]?.question || '',
+      elapsedSeconds: 0,
+      estRemainingSeconds: Math.round(total * 0.8),
+      activeCaseId: cases[0]?.case_id || null,
+      completedSuccess: false,
+    });
+
+    if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+    progressTimerRef.current = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+      setEvalProgress((prev) => {
+        if (!prev) return null;
+        const remainingItems = prev.total - prev.current;
+        const avgPerItem = prev.current > 0 ? elapsed / prev.current : 0.8;
+        const estRemaining = Math.max(0, Math.round(remainingItems * avgPerItem));
+        return {
+          ...prev,
+          elapsedSeconds: elapsed,
+          estRemainingSeconds: estRemaining,
+        };
+      });
+    }, 1000);
+
     try {
-      const data = await api.evaluateJudges(cases, true, controller.signal);
-      setCases(data.results || []);
-      notify(`Evaluated ${data.results?.length || 0} test cases with Judge V1 and Judge V2!`, 'success');
+      for (let i = 0; i < cases.length; i++) {
+        if (controller.signal.aborted) break;
+
+        const currentCase = cases[i];
+        setEvaluatingCaseId(currentCase.case_id);
+
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const currentPct = Math.round((i / total) * 100);
+        const remainingItems = total - i;
+        const avgPerItem = i > 0 ? elapsed / i : 0.8;
+        const estRemaining = Math.max(0, Math.round(remainingItems * avgPerItem));
+
+        setEvalProgress({
+          current: i,
+          total,
+          pct: currentPct,
+          currentCaseId: currentCase.case_id,
+          currentQuestion: currentCase.question,
+          elapsedSeconds: elapsed,
+          estRemainingSeconds: estRemaining,
+          activeCaseId: currentCase.case_id,
+          completedSuccess: false,
+        });
+
+        const data = await api.evaluateJudges([currentCase], true, controller.signal);
+        const evaluated = data.results && data.results[0] ? data.results[0] : currentCase;
+
+        setCases((prevCases) =>
+          prevCases.map((c, idx) => (idx === i || c.case_id === currentCase.case_id ? evaluated : c))
+        );
+
+        const completedCount = i + 1;
+        const nextPct = Math.round((completedCount / total) * 100);
+        const newElapsed = Math.floor((Date.now() - startTime) / 1000);
+        const newRemaining = total - completedCount;
+        const newEstRemaining = Math.max(0, Math.round(newRemaining * (newElapsed / completedCount)));
+
+        setEvalProgress({
+          current: completedCount,
+          total,
+          pct: nextPct,
+          currentCaseId: currentCase.case_id,
+          currentQuestion: currentCase.question,
+          elapsedSeconds: newElapsed,
+          estRemainingSeconds: newEstRemaining,
+          activeCaseId: completedCount < total ? cases[completedCount]?.case_id || null : null,
+          completedSuccess: completedCount === total,
+        });
+      }
+
+      setEvaluatingCaseId(null);
+      notify(`Evaluated all ${total} test cases with Judge V1 and Judge V2! (100% Completed)`, 'success');
     } catch (e: unknown) {
       const err = e as Error;
       if (err.name !== 'AbortError') {
         notify('Evaluation failed: ' + err.message, 'error');
       }
     } finally {
+      if (progressTimerRef.current) {
+        clearInterval(progressTimerRef.current);
+        progressTimerRef.current = null;
+      }
       if (abortControllerRef.current === controller) {
         abortControllerRef.current = null;
         updateLoadingState(false);
+        setEvaluatingCaseId(null);
       }
     }
   };
@@ -378,9 +506,17 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                 type="button"
                 disabled
                 className="btn-primary"
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '140px', justifyContent: 'center' }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  minWidth: '180px',
+                  justifyContent: 'center',
+                  background: 'linear-gradient(135deg, #1d4ed8, #2563eb)',
+                }}
               >
-                <span className="spinner" style={{ width: '14px', height: '14px' }}></span> Evaluating...
+                <span className="spinner" style={{ width: '14px', height: '14px' }}></span>
+                <span>Evaluating {evalProgress ? `${evalProgress.pct}% (${evalProgress.current}/${evalProgress.total})` : '...'}</span>
               </button>
               <button
                 type="button"
@@ -390,8 +526,9 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                   color: '#f87171',
                   borderColor: 'rgba(239, 68, 68, 0.4)',
                   background: 'rgba(239, 68, 68, 0.1)',
-                  padding: '7px 12px',
+                  padding: '7px 14px',
                   fontSize: '0.85rem',
+                  fontWeight: 600,
                 }}
                 title="Cancel ongoing evaluation"
               >
@@ -403,13 +540,175 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
               type="button"
               onClick={handleRunEvaluation}
               className="btn-primary"
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '150px', justifyContent: 'center' }}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '160px', justifyContent: 'center' }}
             >
               <span>⚡</span> Run Both Judges
             </button>
           )}
         </div>
       </div>
+
+      {/* LIVE EVALUATION PROGRESS BAR CARD */}
+      {(loading || (evalProgress && evalProgress.completedSuccess)) && evalProgress && (
+        <div
+          style={{
+            background: evalProgress.completedSuccess
+              ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(15, 23, 42, 0.95))'
+              : 'linear-gradient(135deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.95))',
+            border: evalProgress.completedSuccess
+              ? '1px solid rgba(16, 185, 129, 0.4)'
+              : '1px solid rgba(59, 130, 246, 0.45)',
+            borderRadius: '12px',
+            padding: '18px 24px',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.35)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '12px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {loading ? (
+                <span className="spinner" style={{ width: '20px', height: '20px' }}></span>
+              ) : (
+                <span style={{ fontSize: '1.3rem' }}>✅</span>
+              )}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontWeight: 800, fontSize: '1.15rem', color: '#fff' }}>
+                    {evalProgress.completedSuccess
+                      ? `Evaluation Complete: 100% (All ${evalProgress.total} Cases)`
+                      : `Evaluating Test Cases: ${evalProgress.pct}%`}
+                  </span>
+                  <span
+                    style={{
+                      background: evalProgress.completedSuccess
+                        ? 'rgba(16, 185, 129, 0.2)'
+                        : 'rgba(59, 130, 246, 0.2)',
+                      color: evalProgress.completedSuccess ? '#34d399' : '#60a5fa',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      fontFamily: 'ui-monospace, monospace',
+                    }}
+                  >
+                    {evalProgress.current} / {evalProgress.total} COMPLETED
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  {evalProgress.completedSuccess
+                    ? `Processed ${evalProgress.total} test cases across Judge V1, Judge V2, and 5 deterministic assertions.`
+                    : `${evalProgress.total - evalProgress.current} test case(s) remaining in this run.`}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '0.82rem' }}>
+              <div
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid var(--border)',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                ⏱ Elapsed: <strong style={{ color: '#fff' }}>{formatDuration(evalProgress.elapsedSeconds)}</strong>
+              </div>
+              {loading && evalProgress.estRemainingSeconds > 0 && (
+                <div
+                  style={{
+                    background: 'rgba(59, 130, 246, 0.1)',
+                    border: '1px solid rgba(59, 130, 246, 0.25)',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    color: '#93c5fd',
+                  }}
+                >
+                  ⏳ Est. Left: <strong>~{formatDuration(evalProgress.estRemainingSeconds)}</strong>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* PROGRESS BAR TRACK */}
+          <div
+            style={{
+              width: '100%',
+              height: '12px',
+              background: 'rgba(255, 255, 255, 0.07)',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              position: 'relative',
+              boxShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.4)',
+            }}
+          >
+            <div
+              style={{
+                width: `${evalProgress.pct}%`,
+                height: '100%',
+                background: evalProgress.completedSuccess
+                  ? 'linear-gradient(90deg, #10b981, #34d399)'
+                  : 'linear-gradient(90deg, #2563eb, #3b82f6, #60a5fa, #34d399)',
+                borderRadius: '8px',
+                transition: 'width 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+                boxShadow: '0 0 14px rgba(59, 130, 246, 0.65)',
+              }}
+            />
+          </div>
+
+          {/* ACTIVE CASE STEP FOOTER */}
+          {loading && evalProgress.activeCaseId && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '0.78rem',
+                color: 'var(--text-muted)',
+                background: 'rgba(0, 0, 0, 0.3)',
+                padding: '7px 12px',
+                borderRadius: '6px',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+              }}
+            >
+              <span style={{ color: '#fbbf24', fontWeight: 700, letterSpacing: '0.04em' }}>⚡ CURRENT STEP:</span>
+              <span
+                style={{
+                  fontFamily: 'ui-monospace, monospace',
+                  color: '#93c5fd',
+                  background: 'rgba(59, 130, 246, 0.2)',
+                  padding: '1px 7px',
+                  borderRadius: '4px',
+                  fontWeight: 700,
+                }}
+              >
+                {evalProgress.activeCaseId}
+              </span>
+              <span
+                style={{
+                  color: '#e2e8f0',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '700px',
+                }}
+              >
+                "{evalProgress.currentQuestion}"
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* STAT CARDS */}
       <div
@@ -672,13 +971,13 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
               >
                 <th style={{ padding: '12px 14px', width: '100px' }}>Case ID</th>
                 <th style={{ padding: '12px 14px', width: '220px' }}>Question</th>
-                <th style={{ padding: '12px 14px', width: '240px' }}>Assistant Answer</th>
+                <th style={{ padding: '12px 14px', width: '220px' }}>Assistant Answer</th>
                 <th style={{ padding: '12px 14px', textAlign: 'center', width: '90px' }}>Human Label</th>
-                <th style={{ padding: '12px 14px', textAlign: 'center', width: '100px' }}>Judge V1</th>
-                <th style={{ padding: '12px 14px', textAlign: 'center', width: '100px' }}>Judge V2</th>
-                <th style={{ padding: '12px 14px', width: '120px' }}>Deterministic Assertions</th>
-                <th style={{ padding: '12px 14px', width: '130px' }}>Failure Root Cause</th>
-                <th style={{ padding: '12px 14px', width: '110px', textAlign: 'center' }}>Action</th>
+                <th style={{ padding: '12px 14px', textAlign: 'center', width: '105px' }}>Judge V1</th>
+                <th style={{ padding: '12px 14px', textAlign: 'center', width: '105px' }}>Judge V2</th>
+                <th style={{ padding: '12px 14px', width: '130px' }}>Assertions</th>
+                <th style={{ padding: '12px 14px', width: '260px' }}>Failure Root Cause &amp; Reason</th>
+                <th style={{ padding: '12px 14px', width: '100px', textAlign: 'center' }}>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -742,20 +1041,34 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                 filteredCases.map((c) => {
                   const isV1Agreed = c.judge_v1_verdict === c.human_label;
                   const isV2Agreed = c.judge_v2_verdict === c.human_label;
+                  const isCurrentlyEvaluating = c.case_id === evaluatingCaseId;
 
                   return (
                     <tr
                       key={c.case_id}
                       style={{
                         borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
-                        transition: 'background 0.15s ease',
+                        transition: 'all 0.2s ease',
+                        background: isCurrentlyEvaluating ? 'rgba(59, 130, 246, 0.12)' : 'transparent',
+                        boxShadow: isCurrentlyEvaluating ? 'inset 3px 0 0 #3b82f6' : 'none',
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)')}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      onMouseEnter={(e) => {
+                        if (!isCurrentlyEvaluating) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isCurrentlyEvaluating) e.currentTarget.style.background = 'transparent';
+                      }}
                     >
                       {/* Case ID */}
                       <td style={{ padding: '12px 14px', verticalAlign: 'top' }}>
-                        <div style={{ fontWeight: 700, color: '#fff' }}>{c.case_id}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {isCurrentlyEvaluating && (
+                            <span className="spinner" style={{ width: '12px', height: '12px' }}></span>
+                          )}
+                          <div style={{ fontWeight: 700, color: isCurrentlyEvaluating ? '#60a5fa' : '#fff' }}>
+                            {c.case_id}
+                          </div>
+                        </div>
                         <div
                           style={{
                             fontSize: '0.7rem',
@@ -816,46 +1129,84 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
 
                       {/* Judge V1 */}
                       <td style={{ padding: '12px 14px', verticalAlign: 'top', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                        {isCurrentlyEvaluating ? (
                           <span
                             style={{
-                              display: 'inline-block',
-                              padding: '2px 7px',
-                              borderRadius: '4px',
-                              fontSize: '0.75rem',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              color: '#60a5fa',
+                              fontSize: '0.72rem',
                               fontWeight: 700,
-                              background: c.judge_v1_verdict === 1 ? 'rgba(59, 130, 246, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                              color: c.judge_v1_verdict === 1 ? '#60a5fa' : '#f87171',
+                              background: 'rgba(59, 130, 246, 0.15)',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
                             }}
                           >
-                            {c.judge_v1_verdict === 1 ? '1 (Pass)' : '0 (Fail)'}
+                            <span className="spinner" style={{ width: '10px', height: '10px' }}></span>
+                            Running
                           </span>
-                          <span style={{ fontSize: '0.65rem', color: isV1Agreed ? '#10b981' : '#f59e0b' }}>
-                            {isV1Agreed ? '✓ Agreed' : '⚠ Disagreed'}
-                          </span>
-                        </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                padding: '2px 7px',
+                                borderRadius: '4px',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                background: c.judge_v1_verdict === 1 ? 'rgba(59, 130, 246, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                                color: c.judge_v1_verdict === 1 ? '#60a5fa' : '#f87171',
+                              }}
+                            >
+                              {c.judge_v1_verdict === 1 ? '1 (Pass)' : '0 (Fail)'}
+                            </span>
+                            <span style={{ fontSize: '0.65rem', color: isV1Agreed ? '#10b981' : '#f59e0b' }}>
+                              {isV1Agreed ? '✓ Agreed' : '⚠ Disagreed'}
+                            </span>
+                          </div>
+                        )}
                       </td>
 
                       {/* Judge V2 */}
                       <td style={{ padding: '12px 14px', verticalAlign: 'top', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                        {isCurrentlyEvaluating ? (
                           <span
                             style={{
-                              display: 'inline-block',
-                              padding: '2px 7px',
-                              borderRadius: '4px',
-                              fontSize: '0.75rem',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              color: '#60a5fa',
+                              fontSize: '0.72rem',
                               fontWeight: 700,
-                              background: c.judge_v2_verdict === 1 ? 'rgba(59, 130, 246, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                              color: c.judge_v2_verdict === 1 ? '#60a5fa' : '#f87171',
+                              background: 'rgba(59, 130, 246, 0.15)',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
                             }}
                           >
-                            {c.judge_v2_verdict === 1 ? '1 (Pass)' : '0 (Fail)'}
+                            <span className="spinner" style={{ width: '10px', height: '10px' }}></span>
+                            Running
                           </span>
-                          <span style={{ fontSize: '0.65rem', color: isV2Agreed ? '#10b981' : '#f59e0b' }}>
-                            {isV2Agreed ? '✓ Agreed' : '⚠ Disagreed'}
-                          </span>
-                        </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                padding: '2px 7px',
+                                borderRadius: '4px',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                background: c.judge_v2_verdict === 1 ? 'rgba(59, 130, 246, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                                color: c.judge_v2_verdict === 1 ? '#60a5fa' : '#f87171',
+                              }}
+                            >
+                              {c.judge_v2_verdict === 1 ? '1 (Pass)' : '0 (Fail)'}
+                            </span>
+                            <span style={{ fontSize: '0.65rem', color: isV2Agreed ? '#10b981' : '#f59e0b' }}>
+                              {isV2Agreed ? '✓ Agreed' : '⚠ Disagreed'}
+                            </span>
+                          </div>
+                        )}
                       </td>
 
                       {/* Deterministic Assertions */}
@@ -880,44 +1231,86 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                         )}
                       </td>
 
-                      {/* Failure Root Cause */}
+                      {/* Failure Root Cause & Reason */}
                       <td style={{ padding: '12px 14px', verticalAlign: 'top' }}>
-                        <span
-                          style={{
-                            display: 'inline-block',
-                            padding: '3px 7px',
-                            borderRadius: '4px',
-                            fontSize: '0.7rem',
-                            fontWeight: 600,
-                            background:
-                              c.failure_category === 'pipeline'
-                                ? 'rgba(239, 68, 68, 0.2)'
-                                : c.failure_category === 'llm_model'
-                                ? 'rgba(245, 158, 11, 0.2)'
-                                : c.failure_category === 'code_issue'
-                                ? 'rgba(168, 85, 247, 0.2)'
-                                : 'rgba(16, 185, 129, 0.2)',
-                            color:
-                              c.failure_category === 'pipeline'
-                                ? '#f87171'
-                                : c.failure_category === 'llm_model'
-                                ? '#fbbf24'
-                                : c.failure_category === 'code_issue'
-                                ? '#c084fc'
-                                : '#34d399',
-                          }}
-                        >
-                          {c.failure_category === 'pipeline'
-                            ? 'Pipeline Failure'
-                            : c.failure_category === 'llm_model'
-                            ? 'LLM Model Failure'
-                            : c.failure_category === 'code_issue'
-                            ? 'Code Issue'
-                            : 'Clean Pass'}
-                        </span>
-                        {c.failure_type && (
-                          <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '3px' }}>
-                            {c.failure_type}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '2px 7px',
+                              borderRadius: '4px',
+                              fontSize: '0.7rem',
+                              fontWeight: 700,
+                              background:
+                                c.failure_category === 'pipeline'
+                                  ? 'rgba(239, 68, 68, 0.2)'
+                                  : c.failure_category === 'llm_model'
+                                  ? 'rgba(245, 158, 11, 0.2)'
+                                  : c.failure_category === 'code_issue'
+                                  ? 'rgba(168, 85, 247, 0.2)'
+                                  : 'rgba(16, 185, 129, 0.2)',
+                              color:
+                                c.failure_category === 'pipeline'
+                                  ? '#f87171'
+                                  : c.failure_category === 'llm_model'
+                                  ? '#fbbf24'
+                                  : c.failure_category === 'code_issue'
+                                  ? '#c084fc'
+                                  : '#34d399',
+                              border: `1px solid ${
+                                c.failure_category === 'pipeline'
+                                  ? 'rgba(239, 68, 68, 0.3)'
+                                  : c.failure_category === 'llm_model'
+                                  ? 'rgba(245, 158, 11, 0.3)'
+                                  : c.failure_category === 'code_issue'
+                                  ? 'rgba(168, 85, 247, 0.3)'
+                                  : 'rgba(16, 185, 129, 0.3)'
+                              }`,
+                            }}
+                          >
+                            {c.failure_category === 'pipeline'
+                              ? 'Pipeline Failure'
+                              : c.failure_category === 'llm_model'
+                              ? 'LLM Model Failure'
+                              : c.failure_category === 'code_issue'
+                              ? 'Code Issue'
+                              : 'Clean Pass'}
+                          </span>
+                          {c.failure_type && (
+                            <span
+                              style={{
+                                fontSize: '0.65rem',
+                                color: 'var(--text-muted)',
+                                fontFamily: 'ui-monospace, monospace',
+                                background: 'rgba(255, 255, 255, 0.05)',
+                                padding: '1px 5px',
+                                borderRadius: '3px',
+                              }}
+                            >
+                              {c.failure_type}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Visible diagnostic reason on row */}
+                        {c.failure_reason ? (
+                          <div
+                            style={{
+                              fontSize: '0.72rem',
+                              color: c.human_label === 1 ? '#cbd5e1' : '#fca5a5',
+                              marginTop: '5px',
+                              lineHeight: '1.35',
+                              background: c.human_label === 1 ? 'rgba(0, 0, 0, 0.25)' : 'rgba(239, 68, 68, 0.08)',
+                              borderLeft: `2px solid ${c.human_label === 1 ? '#10b981' : '#ef4444'}`,
+                              padding: '4px 8px',
+                              borderRadius: '0 4px 4px 0',
+                            }}
+                          >
+                            <span style={{ fontWeight: 700 }}>Reason:</span> {c.failure_reason}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                            {c.human_label === 1 ? '✓ Complete and accurate grounded answer.' : '○ Policy check or assertion failed.'}
                           </div>
                         )}
                       </td>
@@ -980,7 +1373,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
               background: 'var(--bg-surface)',
               border: '1px solid var(--border)',
               borderRadius: '12px',
-              maxWidth: '800px',
+              maxWidth: '850px',
               width: '100%',
               maxHeight: '90vh',
               overflowY: 'auto',
@@ -1086,6 +1479,9 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                 <div style={{ fontSize: '1.1rem', fontWeight: 700, color: selectedCase.human_label === 1 ? '#34d399' : '#f87171' }}>
                   {selectedCase.human_label === 1 ? '1 (Pass)' : '0 (Fail)'}
                 </div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  {selectedCase.human_label === 1 ? 'Valid grounded answer' : 'Contains error/omission'}
+                </div>
               </div>
               <div
                 style={{
@@ -1099,6 +1495,9 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                 <div style={{ fontSize: '1.1rem', fontWeight: 700, color: selectedCase.judge_v1_verdict === 1 ? '#60a5fa' : '#f87171' }}>
                   {selectedCase.judge_v1_verdict === 1 ? '1 (Pass)' : '0 (Fail)'}
                 </div>
+                <div style={{ fontSize: '0.7rem', color: selectedCase.judge_v1_verdict === selectedCase.human_label ? '#10b981' : '#f59e0b', marginTop: '2px' }}>
+                  {selectedCase.judge_v1_verdict === selectedCase.human_label ? '✓ Agreed with Ground Truth' : '⚠ Disagreed with Ground Truth'}
+                </div>
               </div>
               <div
                 style={{
@@ -1108,31 +1507,68 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                   border: '1px solid var(--border)',
                 }}
               >
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Judge V2 (Few-Shot)</div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Judge V2 (Few-Shot Iterated)</div>
                 <div style={{ fontSize: '1.1rem', fontWeight: 700, color: selectedCase.judge_v2_verdict === 1 ? '#60a5fa' : '#f87171' }}>
                   {selectedCase.judge_v2_verdict === 1 ? '1 (Pass)' : '0 (Fail)'}
+                </div>
+                <div style={{ fontSize: '0.7rem', color: selectedCase.judge_v2_verdict === selectedCase.human_label ? '#10b981' : '#f59e0b', marginTop: '2px' }}>
+                  {selectedCase.judge_v2_verdict === selectedCase.human_label ? '✓ Agreed with Ground Truth' : '⚠ Disagreed with Ground Truth'}
                 </div>
               </div>
             </div>
 
+            {/* Deterministic Assertions Breakdown */}
+            {selectedCase.assertions && (
+              <div
+                style={{
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  padding: '12px',
+                }}
+              >
+                <div style={{ fontSize: '0.75rem', color: '#fff', fontWeight: 700, marginBottom: '8px' }}>
+                  Deterministic Policy Rule Assertions Breakdown
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.78rem' }}>
+                  <div style={{ color: selectedCase.assertions.policy_section_reference_present ? '#34d399' : '#f87171' }}>
+                    {selectedCase.assertions.policy_section_reference_present ? '✓' : '✗'} Section Reference Present
+                  </div>
+                  <div style={{ color: selectedCase.assertions.policy_section_reference_resolves ? '#34d399' : '#f87171' }}>
+                    {selectedCase.assertions.policy_section_reference_resolves ? '✓' : '✗'} Section Resolves against 113+ Sections
+                  </div>
+                  <div style={{ color: selectedCase.assertions.handbook_version_present ? '#34d399' : '#94a3b8' }}>
+                    {selectedCase.assertions.handbook_version_present ? '✓' : '○'} Handbook Version Cited (2018)
+                  </div>
+                  <div style={{ color: selectedCase.assertions.numeric_policy_value_present ? '#34d399' : '#94a3b8' }}>
+                    {selectedCase.assertions.numeric_policy_value_present ? '✓' : '○'} Numeric Policy Value Exact Match
+                  </div>
+                  <div style={{ color: selectedCase.assertions.out_of_jurisdiction_refusal ? '#34d399' : '#f87171' }}>
+                    {selectedCase.assertions.out_of_jurisdiction_refusal ? '✓' : '✗'} Out-of-Jurisdiction Refusal Guard
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Diagnostic Failure Root Cause Box */}
             {selectedCase.failure_reason && (
               <div
                 style={{
-                  background: 'rgba(239, 68, 68, 0.1)',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
-                  padding: '12px',
-                  borderRadius: '6px',
+                  background: selectedCase.human_label === 1 ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.1)',
+                  border: `1px solid ${selectedCase.human_label === 1 ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                  padding: '14px',
+                  borderRadius: '8px',
                 }}
               >
-                <div style={{ fontSize: '0.75rem', color: '#f87171', fontWeight: 700 }}>
-                  Diagnostic Failure Root Cause ({selectedCase.failure_category}):
+                <div style={{ fontSize: '0.78rem', color: selectedCase.human_label === 1 ? '#34d399' : '#f87171', fontWeight: 700 }}>
+                  Diagnostic Failure Root Cause Analysis ({selectedCase.failure_category.toUpperCase()}):
                 </div>
-                <div style={{ color: '#fca5a5', fontSize: '0.85rem', marginTop: '4px' }}>
+                <div style={{ color: '#f1f5f9', fontSize: '0.85rem', marginTop: '6px', lineHeight: '1.5' }}>
                   {selectedCase.failure_reason}
                 </div>
                 {selectedCase.resolution && (
-                  <div style={{ color: '#93c5fd', fontSize: '0.8rem', marginTop: '6px' }}>
-                    <strong>Resolution:</strong> {selectedCase.resolution}
+                  <div style={{ color: '#93c5fd', fontSize: '0.82rem', marginTop: '8px', lineHeight: '1.4' }}>
+                    <strong>Recommended Resolution:</strong> {selectedCase.resolution}
                   </div>
                 )}
               </div>
