@@ -19,9 +19,12 @@ import json
 import sys
 from pathlib import Path
 
-from trace_store import TraceStore
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
 
-DEFAULT_LOG = Path(__file__).parent / "traces" / "traces.jsonl"
+from backend.storage.trace_store import TraceStore
+
+DEFAULT_LOG = REPO_ROOT / "traces" / "traces.jsonl"
 
 
 def main():

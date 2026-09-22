@@ -64,7 +64,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.types import ASGIApp, Receive, Scope, Send
 from werkzeug.utils import secure_filename  # Starlette does not vendor this; werkzeug is an explicit dep
 
-from trace_store import (
+from backend.storage.trace_store import (
     TraceStore, redact, redact_deep, register_prompt, get_prompt,
     QA_PROMPT_VERSION, RERANK_PROMPT_VERSION, REWRITE_PROMPT_VERSION,
 )

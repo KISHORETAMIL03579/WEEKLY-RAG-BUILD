@@ -18,7 +18,7 @@ from pathlib import Path
 import itsdangerous
 from fastapi.testclient import TestClient
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app import _rr_rank, _hit_check
 
@@ -254,7 +254,7 @@ class TestEvalMetrics(unittest.TestCase):
         store.chunks = [{"id": "c1", "text": "initial"}]
         store.vectors = [[0.1, 0.2]]
 
-        with patch("qdrant_store._client") as mock_client_fn:
+        with patch("backend.storage.qdrant_store._client") as mock_client_fn:
             mock_client = MagicMock()
             mock_client.get_collections.return_value.collections = []
             mock_client.upsert.side_effect = RuntimeError("Upsert connection dropped")
@@ -276,7 +276,7 @@ class TestEvalMetrics(unittest.TestCase):
         store.chunks = [{"id": "c1", "doc_id": "doc1", "text": "foo"}]
         store.vectors = [[0.1, 0.2]]
 
-        with patch("qdrant_store._client") as mock_client_fn:
+        with patch("backend.storage.qdrant_store._client") as mock_client_fn:
             mock_client = MagicMock()
             mock_collection = MagicMock()
             mock_collection.name = store.collection
@@ -299,7 +299,7 @@ class TestEvalMetrics(unittest.TestCase):
         store.chunks = [{"id": "c1", "doc_id": "doc1", "text": "foo"}]
         store.vectors = [[0.1, 0.2]]
 
-        with patch("qdrant_store._client") as mock_client_fn:
+        with patch("backend.storage.qdrant_store._client") as mock_client_fn:
             mock_client = MagicMock()
             mock_collection = MagicMock()
             mock_collection.name = store.collection
@@ -319,7 +319,7 @@ class TestEvalMetrics(unittest.TestCase):
 
         store = QdrantVectorStore("test_session")
 
-        with patch("qdrant_store._client") as mock_client_fn:
+        with patch("backend.storage.qdrant_store._client") as mock_client_fn:
             mock_client = MagicMock()
             mock_collection = MagicMock()
             mock_collection.name = store.collection
@@ -332,9 +332,10 @@ class TestEvalMetrics(unittest.TestCase):
 
     def test_sample_trace_invalid_n(self):
         import subprocess
+        sample_script = str(Path(__file__).resolve().parent.parent / "scripts" / "sample_trace.py")
         # Run sample_trace.py CLI with --n 0
         res = subprocess.run(
-            [sys.executable, "sample_trace.py", "--n", "0", "--seed", "42"],
+            [sys.executable, sample_script, "--n", "0", "--seed", "42"],
             capture_output=True,
             text=True,
         )
@@ -1154,7 +1155,7 @@ class TestEvalMetrics(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_log = Path(tmpdir) / "orphans.jsonl"
-            repo_dir = str(Path(__file__).parent.resolve())
+            repo_dir = str(Path(__file__).resolve().parent.parent)
 
             env = dict(os.environ)
             env["ORPHAN_LOG_PATH"] = str(temp_log)

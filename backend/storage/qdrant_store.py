@@ -19,7 +19,7 @@ class _QdrantSingleton:
     client: Optional[QdrantClient] = None
 
 
-def get_qdrant_client() -> QdrantClient:
+def _client() -> QdrantClient:
     if _QdrantSingleton.client is None:
         _QdrantSingleton.client = QdrantClient(
             url=QDRANT_URL,
@@ -28,6 +28,10 @@ def get_qdrant_client() -> QdrantClient:
             prefer_grpc=False,
         )
     return _QdrantSingleton.client
+
+
+def get_qdrant_client() -> QdrantClient:
+    return _client()
 
 
 class QdrantVectorStore:
@@ -45,12 +49,12 @@ class QdrantVectorStore:
         self.last_backend_error: Optional[str] = None
 
     def _collection_exists(self) -> bool:
-        client = get_qdrant_client()
+        client = _client()
         names = [c.name for c in client.get_collections().collections]
         return self.collection in names
 
     def _ensure_collection(self, dim: int) -> None:
-        client = get_qdrant_client()
+        client = _client()
         if not self._collection_exists():
             client.create_collection(
                 collection_name=self.collection,
@@ -89,7 +93,7 @@ class QdrantVectorStore:
                 return
             chunks, vectors = [], []
             offset = None
-            client = get_qdrant_client()
+            client = _client()
             while True:
                 points, offset = client.scroll(
                     collection_name=self.collection, with_payload=True, with_vectors=True,
@@ -128,7 +132,7 @@ class QdrantVectorStore:
             qmodels.PointStruct(id=self._point_id(c["id"]), vector=v, payload=c)
             for c, v in zip(chunks, vectors)
         ]
-        get_qdrant_client().upsert(collection_name=self.collection, points=points)
+        _client().upsert(collection_name=self.collection, points=points)
 
         self.chunks.extend(chunks)
         self.vectors.extend(vectors)
@@ -140,7 +144,7 @@ class QdrantVectorStore:
         self.last_backend_error = None
         try:
             if self._collection_exists():
-                get_qdrant_client().delete(
+                _client().delete(
                     collection_name=self.collection,
                     points_selector=qmodels.FilterSelector(filter=qmodels.Filter(must=[
                         qmodels.FieldCondition(key="doc_id", match=qmodels.MatchValue(value=doc_id))
@@ -164,7 +168,7 @@ class QdrantVectorStore:
         self.last_backend_error = None
         try:
             if self._collection_exists():
-                get_qdrant_client().delete_collection(self.collection)
+                _client().delete_collection(self.collection)
         except Exception as exc:
             self.last_backend_error = f"Qdrant delete_collection failed: {exc}"
             logger.error("Qdrant delete_collection failed for %s: %s", self.collection, exc, exc_info=True)
@@ -186,7 +190,7 @@ class QdrantVectorStore:
         try:
             if not self._collection_exists():
                 return []
-            response = get_qdrant_client().query_points(
+            response = _client().query_points(
                 collection_name=self.collection, query=vector,
                 query_filter=self._qdrant_filter(),
                 limit=top_k, score_threshold=min_score,
@@ -202,7 +206,7 @@ class QdrantVectorStore:
         try:
             if not self._collection_exists():
                 return [0.0] * len(self.chunks)
-            response = get_qdrant_client().query_points(
+            response = _client().query_points(
                 collection_name=self.collection, query=vector,
                 query_filter=self._qdrant_filter(),
                 limit=QDRANT_CANDIDATE_POOL,

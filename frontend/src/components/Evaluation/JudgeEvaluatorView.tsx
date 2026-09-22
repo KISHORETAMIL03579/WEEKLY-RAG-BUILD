@@ -200,6 +200,34 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
     }, 1000);
 
     try {
+      if (evalEngine === 'deterministic') {
+        // Instant 1-shot batch evaluation: executes in <50ms without 25 network roundtrips!
+        const data = await api.evaluateJudges(cases, false, controller.signal);
+        if (data.results && data.results.length > 0) {
+          setCases(data.results);
+        }
+        if (progressTimerRef.current) {
+          clearInterval(progressTimerRef.current);
+          progressTimerRef.current = null;
+        }
+        const elapsed = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
+        setEvalProgress({
+          current: total,
+          total,
+          pct: 100,
+          currentCaseId: cases[total - 1]?.case_id || '',
+          currentQuestion: cases[total - 1]?.question || '',
+          elapsedSeconds: elapsed,
+          estRemainingSeconds: 0,
+          activeCaseId: null,
+          completedSuccess: true,
+        });
+        setEvaluatingCaseId(null);
+        notify(`⚡ Evaluated all ${total} test cases instantly with 100% exact policy assertions!`, 'success');
+        return;
+      }
+
+      // Live LLM Engine: evaluate case-by-case to stream progress and time estimates
       for (let i = 0; i < cases.length; i++) {
         if (controller.signal.aborted) break;
 
@@ -224,8 +252,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
           completedSuccess: false,
         });
 
-        const runLlm = evalEngine === 'llm';
-        const data = await api.evaluateJudges([currentCase], runLlm, controller.signal);
+        const data = await api.evaluateJudges([currentCase], true, controller.signal);
         const evaluated = data.results && data.results[0] ? data.results[0] : currentCase;
 
         setCases((prevCases) =>
@@ -252,7 +279,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
       }
 
       setEvaluatingCaseId(null);
-      notify(`Evaluated all ${total} test cases with Judge V1 and Judge V2! (100% Completed)`, 'success');
+      notify(`Evaluated all ${total} test cases with Live LLM Judge! (100% Completed)`, 'success');
     } catch (e: unknown) {
       const err = e as Error;
       if (err.name !== 'AbortError') {

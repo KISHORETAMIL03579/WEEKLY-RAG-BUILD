@@ -4,9 +4,8 @@
 .gitignore
 .vscode/settings.json
 app.py
-docker-compose.yaml
+docker-compose.yml
 Dockerfile
-eval_retrieval.py
 frontend/.gitignore
 frontend/index.html
 frontend/package.json
@@ -21,6 +20,7 @@ frontend/src/components/Chat/ChatArea.tsx
 frontend/src/components/common/ToastContainer.tsx
 frontend/src/components/common/Topbar.tsx
 frontend/src/components/Evaluation/FormView.tsx
+frontend/src/components/Evaluation/JudgeEvaluatorView.tsx
 frontend/src/components/Evaluation/KeyTakeaways.tsx
 frontend/src/components/Evaluation/ResultsView.tsx
 frontend/src/components/Evaluation/ScoreBadge.tsx
@@ -50,22 +50,28 @@ prompts/rewrite-v1.txt
 qdrant_store.py
 README.md
 requirements.txt
-sample_trace.py
+scripts/eval_retrieval.py
 scripts/fix-git.ps1
+scripts/sample_trace.py
 taxonomy.md
-test_eval_metrics.py
+tests/__init__.py
+tests/test_eval_metrics.py
+tests/test_hr_policy_25_questions.txt
+tests/test_week6.py
 trace_store.py
 traces/trace_analysis_summary.json
 traces/traces.jsonl
+week6/assertions.py
+week6/disagreements.md
+week6/ERROR_ANALYSIS_AND_FIXES.md
+week6/eval_cases_25.json
+week6/eval_week6.py
+week6/judge.py
+week6/judge_v1.txt
+week6/judge_v2.txt
+week6/labels_25.json
+week6/prediction.txt
+week6/rag_findings.md
+week6/test_hr_policy_25_questions.txt
+week6/trace_eval_results.json
 WEEKLY_RAG_TASK/HRPolicy.pdf
-WEEKLY_RAG_TASK/test_angular.pdf
-WEEKLY_RAG_TASK/W5-Task-Set-C.md
-WEEKLY_RAG_TASK/W6-Task-Set-C.md
-WEEKLY_RAG_TASK/W7-Task-Set-C.md
-WEEKLY_RAG_TASK/Week-4-Debugging-Retrieval 1 1.docx
-WEEKLY_RAG_TASK/Week1-Module1-Foundations 1 1 1.docx
-WEEKLY_RAG_TASK/Week2-Module1-Prompting-Tool-Calling 2.docx
-WEEKLY_RAG_TASK/Week3_Module2_Retrieval_and_RAG.pdf
-WEEKLY_RAG_TASK/Week5_Module3_Error_Analysis_Task_Brief 1.docx
-WEEKLY_RAG_TASK/Week6_Module3_Evals_Task_Brief.docx
-WEEKLY_RAG_TASK/Week7_Module4_Agent_Loops_Task_Brief.docx
