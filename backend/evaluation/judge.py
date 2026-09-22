@@ -3,6 +3,7 @@
 from week6.judge import (
     call_llm_judge,
     check_ollama_health,
+    evaluate_case_deterministically,
     evaluate_case_with_judge,
     parse_judge_output,
     run_judge_suite,

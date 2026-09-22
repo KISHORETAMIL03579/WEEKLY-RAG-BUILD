@@ -1561,7 +1561,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                 }}
               >
                 <div style={{ fontSize: '0.78rem', color: selectedCase.human_label === 1 ? '#34d399' : '#f87171', fontWeight: 700 }}>
-                  Diagnostic Failure Root Cause Analysis ({selectedCase.failure_category.toUpperCase()}):
+                  Diagnostic Failure Root Cause Analysis ({(selectedCase.failure_category || 'DIAGNOSTIC').toUpperCase()}):
                 </div>
                 <div style={{ color: '#f1f5f9', fontSize: '0.85rem', marginTop: '6px', lineHeight: '1.5' }}>
                   {selectedCase.failure_reason}

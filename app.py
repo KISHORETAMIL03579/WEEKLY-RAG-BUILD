@@ -4465,7 +4465,7 @@ def list_orphans(
 # ─────────────────────────────────────────────────────────────────────────────
 
 from week6.assertions import run_all_assertions
-from week6.judge import evaluate_case_with_judge
+from week6.judge import evaluate_case_deterministically, evaluate_case_with_judge
 
 
 class Week6CasePayload(BaseModel):
@@ -4630,12 +4630,11 @@ def evaluate_week6(payload: Week6EvalPayload | None = Body(default=None)):
                 judge_v2_verdict = v2_verdict
             except Exception as e:
                 logger.warning("LLM Judge call failed for case %s: %s", cid, e)
-                judge_v1_verdict = 1 if all(assertions.values()) else 0
-                judge_v2_verdict = 1 if all(assertions.values()) else 0
+                judge_v1_verdict = evaluate_case_deterministically(c, is_strict_section=True)
+                judge_v2_verdict = evaluate_case_deterministically(c, is_strict_section=False)
         else:
-            all_pass = all(assertions.values())
-            judge_v1_verdict = 1 if all_pass else 0
-            judge_v2_verdict = 1 if all_pass else 0
+            judge_v1_verdict = evaluate_case_deterministically(c, is_strict_section=True)
+            judge_v2_verdict = evaluate_case_deterministically(c, is_strict_section=False)
 
         is_v1_agreed = (judge_v1_verdict == h_label)
         is_v2_agreed = (judge_v2_verdict == h_label)
