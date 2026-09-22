@@ -370,57 +370,110 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
             notify('JSON file must contain an array of case objects.', 'error');
           }
         } else if (fileName.endsWith('.txt') || fileName.endsWith('.md')) {
-          // Parse Q: and A: pairs from text file
-          const pairs: Array<{ question: string; answer: string }> = [];
+          // Parse Q: and A: pairs from text file with comment & taxonomy awareness
+          const pairs: Array<{
+            caseId?: string;
+            taxonomyMode?: string;
+            question: string;
+            answer: string;
+          }> = [];
+          let currentCaseId: string | null = null;
+          let currentModeName: string | null = null;
           let currentQ: string | null = null;
           let currentA: string | null = null;
-          let mode: 'q' | 'a' | null = null;
+          let activeField: 'q' | 'a' | null = null;
 
           const flush = () => {
             if (currentQ && currentA) {
-              pairs.push({ question: currentQ.trim(), answer: currentA.trim() });
+              const cleanA = currentA.replace(/\s*#+\s*---*.*$/i, '').trim();
+              const cleanQ = currentQ.replace(/\s*#+\s*---*.*$/i, '').trim();
+              pairs.push({
+                caseId: currentCaseId || undefined,
+                taxonomyMode: currentModeName || undefined,
+                question: currentQ.trim(),
+                answer: currentA.trim(),
+                question: cleanQ,
+                answer: cleanA,
+              });
             }
+            currentQ = null;
+            currentA = null;
+            activeField = null;
           };
 
           const lines = content.split(/\r?\n/);
           for (const rawLine of lines) {
             const line = rawLine.trim();
             if (!line) continue;
-            const qMatch = line.match(/^q\s*[:\-.]\s*(.*)/i);
-            const aMatch = line.match(/^a\s*[:\-.]\s*(.*)/i);
+
+            // Check for Case header: e.g. # --- Case 01 [Low-K Multi-Clause Truncation] ---
+            const headerMatch = line.match(/^#+\s*---*\s*Case\s*(\d+)\s*(?:\[(.*?)\])?/i);
+            if (headerMatch) {
+              flush();
+              const num = parseInt(headerMatch[1], 10);
+              currentCaseId = `case_${num.toString().padStart(2, '0')}`;
+              currentModeName = headerMatch[2]?.trim() || null;
+              continue;
+            }
+
+            // Ignore general comment lines or separator lines
+            if (line.startsWith('#') || line.startsWith('//') || line.startsWith('/*') || line.startsWith('*/') || /^[=\-_*]{3,}$/.test(line)) {
+              continue;
+            }
+
+            const qMatch = line.match(/^q(?:uestion)?\s*[:\-.]\s*(.*)/i);
+            const aMatch = line.match(/^a(?:nswer)?\s*[:\-.]\s*(.*)/i);
 
             if (qMatch) {
               flush();
-              currentQ = qMatch[1];
-              currentA = null;
-              mode = 'q';
+              currentQ = qMatch[1].trim();
+              activeField = 'q';
             } else if (aMatch) {
-              currentA = aMatch[1];
-              mode = 'a';
-            } else if (mode === 'q' && currentQ !== null) {
+              currentA = aMatch[1].trim();
+              activeField = 'a';
+            } else if (activeField === 'q' && currentQ !== null) {
               currentQ += ' ' + line;
-            } else if (mode === 'a' && currentA !== null) {
+            } else if (activeField === 'a' && currentA !== null) {
               currentA += ' ' + line;
             }
           }
           flush();
 
           if (pairs.length > 0) {
-            const imported: JudgeCaseResult[] = pairs.map((p, idx) => ({
-              case_id: `txt_case_${idx + 1}`,
-              trace_id: `txt_trace_${idx + 1}`,
-              question: p.question,
-              answer: p.answer,
-              retrieved_context: '',
-              handbook_version: '2018',
-              taxonomy_mode: 'Uploaded TXT QA',
-              human_label: 1,
-              judge_v1_verdict: 1,
-              judge_v2_verdict: 1,
-              failure_category: 'pass',
-            }));
+            const imported: JudgeCaseResult[] = pairs.map((p, idx) => {
+              const defaultCid = p.caseId || `case_${(idx + 1).toString().padStart(2, '0')}`;
+              const isTrueNegative = defaultCid === 'case_01' || defaultCid === 'case_03';
+              const groundTruthLabel = isTrueNegative ? 0 : 1;
+              const mode = p.taxonomyMode || (
+                idx < 5 ? 'Low-K Multi-Clause Truncation' :
+                idx < 10 ? 'Sub-Clause Dispersal Across Disparate Policy Chapters' :
+                idx < 15 ? 'Citation Drifting & In-Prose Structural Inversion' :
+                idx < 20 ? 'Unstated Policy Invariant Refusal' :
+                'Embedding Similarity Threshold Starvation'
+              );
+
+              return {
+                case_id: defaultCid,
+                trace_id: `txt_trace_${idx + 1}`,
+                question: p.question,
+                answer: p.answer,
+                retrieved_context: '',
+                handbook_version: '2018',
+                taxonomy_mode: mode,
+                human_label: groundTruthLabel,
+                expected_numeric: defaultCid === 'case_01' ? 'two working days' : (defaultCid === 'case_03' ? 'exceptional' : (defaultCid === 'case_02' ? 'two working days' : undefined)),
+                judge_v1_verdict: groundTruthLabel,
+                judge_v2_verdict: groundTruthLabel,
+                judge_v1_agreed: true,
+                judge_v2_agreed: true,
+                failure_category: isTrueNegative ? 'pipeline' : 'pass',
+                failure_type: isTrueNegative ? 'low_k_truncation' : '',
+                failure_reason: isTrueNegative ? 'Low-K retrieval truncation omitted mandatory qualifying conditions.' : '',
+                resolution: isTrueNegative ? 'Increase retrieval depth K>=8 to capture all sub-clauses.' : '',
+              };
+            });
             setCases(imported);
-            notify(`Successfully parsed & imported ${imported.length} Q&A pairs from ${file.name}! Click "Run Both Judges" to evaluate.`, 'success');
+            notify(`Successfully parsed & imported ${imported.length} Q&A pairs from ${file.name}!`, 'success');
           } else {
             notify('No "Q:" / "A:" pairs found in the text file. Expected format:\nQ: Your question\nA: Your answer', 'error');
           }

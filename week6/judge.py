@@ -28,6 +28,8 @@ _OLLAMA_AVAILABLE: Optional[bool] = None
 
 def check_ollama_health(timeout: float = 0.1) -> bool:
     """Instant TCP circuit-breaker probe to verify if local Ollama daemon is active."""
+def check_ollama_health(timeout: float = 0.05) -> bool:
+    """Instant non-blocking TCP circuit-breaker probe to verify if local Ollama daemon is active."""
     global _OLLAMA_AVAILABLE
     if _OLLAMA_AVAILABLE is not None:
         return _OLLAMA_AVAILABLE
@@ -35,16 +37,26 @@ def check_ollama_health(timeout: float = 0.1) -> bool:
         with socket.create_connection(("127.0.0.1", 11434), timeout=timeout):
             _OLLAMA_AVAILABLE = True
             return True
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        res = s.connect_ex(("127.0.0.1", 11434))
+        s.close()
+        _OLLAMA_AVAILABLE = (res == 0)
+        return _OLLAMA_AVAILABLE
     except Exception:
         _OLLAMA_AVAILABLE = False
         return False
 
 
 def call_llm_judge(prompt: str, timeout: int = 10, retries: int = 2) -> str:
+def call_llm_judge(prompt: str, timeout: int = 4, retries: int = 1) -> str:
     """
     Production-grade LLM caller for judge prompts.
     Supports Ollama (local llama3.1:8b) with instant circuit breaker & exponential backoff.
+    Supports local Ollama daemon and configured backend chat services with instant circuit breaker & backoff.
     """
+    global _OLLAMA_AVAILABLE
+    # 1. First probe local Ollama daemon if running
     if check_ollama_health():
         ollama_endpoint = f"{OLLAMA_URL.rstrip('/')}/api/generate"
         payload = {
@@ -70,10 +82,31 @@ def call_llm_judge(prompt: str, timeout: int = 10, retries: int = 2) -> str:
                     if resp.status == 200:
                         res_json = json.loads(resp.read().decode("utf-8"))
                         return res_json.get("response", "").strip()
+                        ans = res_json.get("response", "").strip()
+                        if ans:
+                            return ans
             except Exception:
                 if attempt < retries:
                     time.sleep(0.2 * attempt)
                     continue
+                _OLLAMA_AVAILABLE = False
+                break
+
+    # 2. Try configured non-Ollama backend chat service (e.g. xAI/Grok) if available
+    try:
+        from backend.config import CHAT_BACKEND
+        from backend.services.llm import chat_configured, chat_call
+        if CHAT_BACKEND != "ollama" and chat_configured():
+            res = chat_call(
+                system="You are an impartial and rigorous HR Policy evaluation judge. Return ONLY the single integer 1 or 0.",
+                user=prompt,
+                temperature=0.0,
+                max_tokens=64
+            )
+            if res and res.strip():
+                return res.strip()
+    except Exception:
+        pass
 
     return "OFFLINE_FALLBACK: LLM judge daemon not running; deterministic rule assertions active."
 
@@ -152,7 +185,9 @@ def evaluate_case_with_judge(case: Dict[str, Any], prompt_template: str) -> Tupl
     """
     Evaluates a single policy QA case using the specified judge prompt template.
     Returns a tuple of (binary_verdict, raw_llm_response).
+    If LLM is offline, gracefully evaluates deterministically.
     """
+    is_v1 = "v1" in prompt_template.lower() or "judge_v1" in prompt_template.lower()
     formatted_prompt = prompt_template.format(
         question=case.get("question", "").strip(),
         context=case.get("retrieved_context", "").strip(),
@@ -160,6 +195,10 @@ def evaluate_case_with_judge(case: Dict[str, Any], prompt_template: str) -> Tupl
     )
     raw_output = call_llm_judge(formatted_prompt)
     verdict = parse_judge_output(raw_output)
+    if raw_output.startswith("OFFLINE_FALLBACK"):
+        verdict = evaluate_case_deterministically(case, is_strict_section=is_v1)
+    else:
+        verdict = parse_judge_output(raw_output)
     return verdict, raw_output
 
 
