@@ -1,3 +1,12 @@
+# app.py — Backward-Compatible Root Facade for Clean Modular Backend
+"""
+Ask My Docs — Multimodal RAG Application
+This module serves as the backwards-compatible entrypoint and facade,
+re-exporting configuration, storage layers, evaluation metrics, and the
+FastAPI application from the modular `backend/` package.
+"""
+from __future__ import annotations
+
 import os
 import re
 import sys
@@ -22,15 +31,22 @@ import urllib.parse
 import urllib.error
 import html.parser
 from datetime import datetime, timezone
+
+# Ensure project root is in sys.path
 from pathlib import Path
 from collections import Counter
 from typing import Annotated, Any
 from filelock import FileLock
+_ROOT_DIR = Path(__file__).resolve().parent
+if str(_ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(_ROOT_DIR))
 
 try:
     import docx  # type: ignore
 except ImportError:
     docx = None
+# Re-export application and factory
+from backend.main import app, create_app
 
 import pymupdf as fitz  # PyMuPDF — imports the real module directly, avoiding
                         # the deprecated `import fitz` legacy-alias shim that
@@ -52,12 +68,73 @@ from trace_store import (
     TraceStore, redact, redact_deep, register_prompt, get_prompt,
     QA_PROMPT_VERSION, RERANK_PROMPT_VERSION, REWRITE_PROMPT_VERSION,
 )
+# Re-export configuration and environment
+from backend.config import (
+    ADMIN_API_KEY,
+    ALLOWED_EXTENSIONS,
+    APP_DEBUG,
+    BASE_DIR,
+    BM25_B,
+    BM25_K1,
+    CHAT_BACKEND,
+    DEFAULT_CHUNK_MODE,
+    DEFAULT_CHUNK_SIZE,
+    EMBED_BACKEND,
+    EMBED_BATCH,
+    EMBED_MIN_SCORE,
+    EMBED_MODEL,
+    FRONTEND_DIR,
+    FRONTEND_DIST,
+    GEMINI_API_KEY,
+    GEMINI_URL,
+    GEMINI_VISION_MODEL,
+    HOST,
+    HYBRID_ALPHA,
+    LLM_MODEL,
+    LOG_LEVEL,
+    MAX_CONTENT_LENGTH,
+    MAX_CONTEXT_TOKENS,
+    OLLAMA_CHAT_MODEL,
+    OLLAMA_EMBED_MODEL,
+    OLLAMA_URL,
+    OLLAMA_VISION_MODEL,
+    ORPHAN_LOG_PATH,
+    PORT,
+    QDRANT_API_KEY,
+    QDRANT_CANDIDATE_POOL,
+    QDRANT_SCROLL_LIMIT,
+    QDRANT_TIMEOUT,
+    QDRANT_URL,
+    QUERY_REWRITE_ENABLED,
+    RERANK_ENABLED,
+    RERANK_MIN_RELEVANCE,
+    RERANK_TOP_N,
+    RETRIEVAL_MODE,
+    RRF_K,
+    SAFETY_MIN_SCORE,
+    SECRET_KEY,
+    SESSION_COOKIE_MAX_AGE,
+    SESSION_COOKIE_SECURE,
+    TFIDF_MIN_SCORE,
+    TOP_K,
+    TRACE_LOG_PATH,
+    UPLOAD_FOLDER,
+    VECTOR_BACKEND,
+    VECTOR_FOLDER,
+    VISION_BACKEND,
+    XAI_API_KEY,
+    XAI_MODEL,
+    XAI_URL,
+    logger,
+)
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 except Exception:
     pass
+# Re-export middleware
+from backend.middleware import MaxBodySizeMiddleware, ensure_frontend_built
 
 def _load_env():
     env_path = Path(__file__).parent / ".env"
@@ -67,6 +144,47 @@ def _load_env():
             if line and not line.startswith("#") and "=" in line:
                 key, value = line.split("=", 1)
                 os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+# Re-export Pydantic schemas
+from backend.schemas.chat import (
+    AskPayload,
+    AskRequest,
+    AskResponse,
+    ClearResponse,
+    HealthzResponse,
+    ReadyzResponse,
+    SourceMetadata,
+    StatusDocument,
+    StatusResponse,
+    _LenientModel,
+)
+from backend.schemas.document import (
+    LoadUrlRequest,
+    OkResponse,
+    RemovePayload,
+    RemoveRequest,
+    RemoveResponse,
+    UploadCancelPayload,
+    UploadCancelRequest,
+    UrlPayload,
+)
+from backend.schemas.evaluation import (
+    EvalModeResult,
+    EvalQuestion,
+    EvalQuestionInput,
+    EvalQuestionResult,
+    EvalRunPayload,
+    EvalRunRequest,
+    EvalRunResponse,
+    JudgeCasePayload,
+    JudgeEvalPayload,
+    Week6CasePayload,
+    Week6EvalPayload,
+)
+from backend.schemas.trace import (
+    ReplayResponse,
+    TraceRecord,
+    TracesResponse,
+)
 
 
 _load_env()
@@ -289,6 +407,78 @@ app = FastAPI(
         ),
     ],
 )
+
+# Re-export storage & session structures
+from backend.storage.exceptions import RetrievalBackendError
+from backend.storage.orphan_store import (
+    ORPHANED_DOCS,
+    get_orphan_lock,
+    is_admin_request,
+    load_orphaned_docs,
+    read_durable_orphans,
+    record_orphaned_doc,
+    resolve_orphaned_doc,
+    _get_orphan_lock,
+    _is_admin_request,
+    _load_orphaned_docs,
+    _read_durable_orphans,
+    _record_orphaned_doc,
+    _resolve_orphaned_doc,
+)
+from backend.storage.qdrant_store import QdrantVectorStore
+from backend.storage.session_manager import (
+    CANCELLED_UPLOADS,
+    CANCELLED_UPLOAD_TTL,
+    CHUNK_COUNTS,
+    HASH_BY_DOC,
+    HASH_STORE,
+    MAX_SESSIONS,
+    NoActiveSessionError,
+    OptionalSessionId,
+    RequiredSessionId,
+    RequiredStore,
+    SESSION_ACCESS,
+    SESSION_FILES,
+    SESSION_TTL,
+    SessionId,
+    VECTOR_STORE,
+    _MANIFEST_MTIMES,
+    _cleanup_session_files,
+    _get_store,
+    _load_session_manifest,
+    _manifest_path,
+    _save_session_manifest,
+    _save_upload_to,
+    _sweep_cancelled_uploads,
+    _sweep_orphan_uploads,
+    allowed_file,
+    cleanup_session_files,
+    ensure_session_id,
+    evict_session_store,
+    get_store,
+    load_session_manifest,
+    make_store,
+    manifest_path,
+    optional_session_id,
+    require_session_id,
+    require_session_store,
+    save_session_manifest,
+    save_upload_to,
+    sweep_cancelled_uploads,
+    sweep_orphan_uploads,
+)
+from backend.storage.trace_store import (
+    QA_PROMPT_VERSION,
+    RERANK_PROMPT_VERSION,
+    REWRITE_PROMPT_VERSION,
+    TRACES,
+    TraceStore,
+    get_prompt,
+    redact,
+    redact_deep,
+    register_prompt,
+)
+from backend.storage.vector_store import VectorStore
 
 FRONTEND_DIR = BASE_DIR / "frontend"
 FRONTEND_DIST = FRONTEND_DIR / "dist"
@@ -1347,6 +1537,87 @@ _OCR_PROMPT = (
     "Extract all text, table content, diagram descriptions, titles, bullet points, "
     "and key information from this image into clean, structured Markdown text."
 )
+# Re-export services
+from backend.services.chunker import (
+    chunk_text,
+    chunk_text_fixed,
+    chunk_text_structured,
+    extract_blocks,
+    split_sentences,
+)
+from backend.services.embeddings import (
+    _embeddings_configured,
+    embed_text,
+    embed_texts,
+    embeddings_configured,
+)
+from backend.services.llm import (
+    RAGTracer,
+    _chat_call,
+    _chat_configured,
+    chat_call,
+    chat_configured,
+)
+from backend.services.reranker import (
+    _rerank_with_llm,
+    _rewrite_query,
+    rerank_with_llm,
+    rewrite_query,
+)
+from backend.services.search import (
+    _bm25_score,
+    _bm25_scores_for_corpus,
+    _build_index,
+    _build_qa_user_prompt,
+    _build_tfidf_index,
+    _compute_idf,
+    _compute_tf,
+    _estimate_tokens,
+    _fit_to_token_budget,
+    _generate_answer,
+    _hybrid_search,
+    _is_dont_know,
+    _reciprocal_rank_fusion,
+    _search_chunks,
+    _synthesize_answer,
+    _tokenize,
+    _validate_context,
+    bm25_score,
+    bm25_scores_for_corpus,
+    build_index,
+    build_qa_user_prompt,
+    build_tfidf_index,
+    compute_idf,
+    compute_tf,
+    cosine_sim,
+    estimate_tokens,
+    fit_to_token_budget,
+    generate_answer,
+    hybrid_search,
+    is_dont_know,
+    reciprocal_rank_fusion,
+    search_chunks,
+    synthesize_answer,
+    tfidf_vector,
+    tokenize,
+    validate_context,
+)
+from backend.services.text_extractor import (
+    _extract_web_title,
+    _extract_web_visible_text,
+    _gemini_vision_ocr,
+    _is_private_ip,
+    _ollama_vision_ocr,
+    _validate_url_is_public,
+    extract_code_pages,
+    extract_data_pages,
+    extract_document_pages,
+    extract_docx_pages,
+    extract_image_pages,
+    extract_pdf_pages,
+    extract_txt_pages,
+    fetch_web_page,
+)
 
 
 def _gemini_vision_ocr(img_b64: str, mime_type: str, filename: str) -> str:
@@ -2346,6 +2617,41 @@ _DONT_KNOW_MARKERS = (
     "not enough information", "doesn't contain", "does not contain",
     "not available in the", "no information",
 )
+# Re-export evaluation & metrics
+from backend.evaluation.assertions import (
+    CANONICAL_SECTIONS,
+    DETERMINISTIC_ASSERTION_COUNT,
+    JUDGE_CRITERION_COUNT,
+    assert_handbook_version_present,
+    assert_numeric_policy_value_present,
+    assert_out_of_jurisdiction_refusal,
+    assert_policy_section_reference_present,
+    assert_policy_section_reference_resolves,
+    handbook_version_present,
+    numeric_policy_value_present,
+    out_of_jurisdiction_refusal,
+    policy_section_reference_present,
+    policy_section_reference_resolves,
+    run_all_assertions,
+)
+from backend.evaluation.judge import (
+    evaluate_case_with_judge,
+    parse_judge_output,
+)
+from backend.evaluation.metrics import (
+    _hit_check,
+    _rr_rank,
+    hit_check,
+    rr_rank,
+)
+from backend.evaluation.retrieval_runner import (
+    EVAL_PRESETS,
+    _retrieve_for_eval,
+    _run_eval_preset,
+    retrieve_for_eval,
+    run_eval_preset,
+)
+from backend.routes.evaluation import parse_qa_pairs
 
 
 def _stem_lite(token: str) -> str:
@@ -4380,6 +4686,7 @@ def evaluate_week6(payload: Week6EvalPayload | None = Body(default=None)):
 # 413 of its own, because it imposes no body-size limit in the first place.
 
 
+# Root CLI Runner
 if __name__ == "__main__":
     import uvicorn
 
@@ -4395,10 +4702,18 @@ if __name__ == "__main__":
     # unless you actually want this reachable from your whole network.
     host = os.environ.get("HOST", "127.0.0.1")
     debug = os.environ.get("APP_DEBUG", "").lower() in ("1", "true", "yes")
+    port = int(os.environ.get("PORT", PORT))
+    host = os.environ.get("HOST", HOST)
+    debug = os.environ.get("APP_DEBUG", "").lower() in ("1", "true", "yes") or APP_DEBUG
     embed_label = "Ollama (local)" if EMBED_BACKEND == "ollama" else "Gemini"
     chat_label = "Ollama (local)" if CHAT_BACKEND == "ollama" else "xAI Grok"
     mode_label = (f"embeddings ({embed_label}) + LLM ({chat_label})" if (_embeddings_configured() and _chat_configured())
                   else "TF-IDF (offline fallback)")
+    mode_label = (
+        f"embeddings ({embed_label}) + LLM ({chat_label})"
+        if (embeddings_configured() and chat_configured())
+        else "TF-IDF (offline fallback)"
+    )
     print(f"\n🚀 Ask My Docs is running → http://localhost:{port}")
     print(f"   Mode: {mode_label}")
     print(f"   API docs: http://localhost:{port}/docs\n")

@@ -9,7 +9,7 @@ import { api } from '../services/api';
 import { generateId } from '../utils/helpers';
 
 export const EvaluationPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'week6' | 'retrieval'>('week6');
+  const [activeTab, setActiveTab] = useState<'judge' | 'retrieval'>('judge');
   const [isJudgeEvaluating, setIsJudgeEvaluating] = useState<boolean>(false);
 
   // Retrieval Benchmark State
@@ -256,16 +256,16 @@ export const EvaluationPage: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
             type="button"
-            onClick={() => setActiveTab('week6')}
+            onClick={() => setActiveTab('judge')}
             style={{
               padding: '6px 14px',
               borderRadius: '6px',
               fontSize: '0.85rem',
               fontWeight: 600,
               cursor: 'pointer',
-              border: activeTab === 'week6' ? '1px solid var(--accent)' : '1px solid var(--border)',
-              background: activeTab === 'week6' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-              color: activeTab === 'week6' ? '#60a5fa' : 'var(--text-muted)',
+              border: activeTab === 'judge' ? '1px solid var(--accent)' : '1px solid var(--border)',
+              background: activeTab === 'judge' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+              color: activeTab === 'judge' ? '#60a5fa' : 'var(--text-muted)',
               transition: 'all 0.15s ease',
               display: 'flex',
               alignItems: 'center',
@@ -348,7 +348,7 @@ export const EvaluationPage: React.FC = () => {
       {/* MAIN CONTENT WITH PERSISTENT DUAL-TAB DOM MOUNTING */}
       <main style={{ maxWidth: '1200px', width: '100%', margin: '0 auto', padding: '28px 20px 50px 20px', flex: 1 }}>
         {/* TAB 1: JUDGE EVALUATOR */}
-        <div style={{ display: activeTab === 'week6' ? 'block' : 'none' }}>
+        <div style={{ display: activeTab === 'judge' ? 'block' : 'none' }}>
           <JudgeEvaluatorView
             onNotify={showToast}
             onEvaluatingChange={setIsJudgeEvaluating}
