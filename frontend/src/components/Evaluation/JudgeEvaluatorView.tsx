@@ -1448,23 +1448,6 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                           >
                             {c.human_label ?? '—'}
                           </span>
-                        ) : isCurrentlyEvaluating ? (
-                          <span
-                            style={{
-                              display: 'inline-block',
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              background: 'rgba(59, 130, 246, 0.15)',
-                              color: '#93c5fd',
-                              border: '1px solid rgba(59, 130, 246, 0.3)',
-                              fontFamily: 'ui-monospace, monospace',
-                            }}
-                            title="Evaluating Ground Truth"
-                          >
-                            {c.human_label ?? '—'}
-                          </span>
                         ) : (
                           <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>—</span>
                         )}
