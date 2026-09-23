@@ -257,10 +257,76 @@ def find_matching_benchmark(cid: str, question: str, answer: str, raw_cases: lis
     return {}
 
 
+@router.get("/api/evaluation/benchmark")
+@router.get("/api/week6/benchmark")
+def get_week6_benchmark():
+    """Returns the pure 25 benchmark case definitions without any precomputed evaluation results."""
+    cases_file = BASE_DIR / "week6" / "eval_cases_25.json"
+    labels_file = BASE_DIR / "week6" / "labels_25.json"
+
+    raw_cases = []
+    if cases_file.exists():
+        try:
+            with open(cases_file, "r", encoding="utf-8") as f:
+                raw_cases = json.load(f)
+        except Exception:
+            raw_cases = []
+
+    labels = {}
+    if labels_file.exists():
+        try:
+            with open(labels_file, "r", encoding="utf-8") as f:
+                labels = json.load(f)
+        except Exception:
+            labels = {}
+
+    clean_cases = []
+    for c in raw_cases:
+        cid = c.get("case_id")
+        clean_cases.append({
+            "case_id": cid,
+            "trace_id": c.get("trace_id", ""),
+            "question": c.get("question", ""),
+            "answer": c.get("answer", ""),
+            "retrieved_context": c.get("retrieved_context", ""),
+            "handbook_version": c.get("handbook_version", "2018"),
+            "section_info": c.get("section_info", ""),
+            "taxonomy_mode": c.get("taxonomy_mode", ""),
+            "human_label": labels.get(cid, c.get("human_label", 1)),
+            "expected_numeric": c.get("expected_numeric"),
+            "out_of_jurisdiction": c.get("out_of_jurisdiction", False),
+            "status": "PENDING",
+            "evaluation_run_id": None,
+            "judge_v1_verdict": None,
+            "judge_v1_agreed": None,
+            "judge_v1_raw": None,
+            "judge_v2_verdict": None,
+            "judge_v2_agreed": None,
+            "judge_v2_raw": None,
+            "assertions": None,
+            "failure_category": None,
+            "failure_type": None,
+            "failure_reason": None,
+            "resolution": None,
+            "source": None,
+            "llm_completed": None,
+            "latency_ms": None,
+        })
+
+    return {
+        "total_cases": len(clean_cases),
+        "cases": clean_cases,
+        "results": clean_cases,
+    }
+
+
 @router.get("/api/evaluation/judges")
 @router.get("/api/week6/results")
-def get_week6_results():
-    """Returns the latest evaluation results, pre-computed cases, and summary metrics."""
+def get_week6_results(include_history: bool = False):
+    """Returns benchmark cases or historical evaluation results."""
+    if not include_history:
+        return get_week6_benchmark()
+
     cases_file = BASE_DIR / "week6" / "eval_cases_25.json"
     results_file = BASE_DIR / "week6" / "trace_eval_results.json"
     labels_file = BASE_DIR / "week6" / "labels_25.json"
@@ -301,6 +367,7 @@ def get_week6_results():
             **base,
             **res,
             "human_label": labels.get(cid, res.get("human_label", 1)),
+            "status": "COMPLETED",
         }
         if item.get("judge_v1_agreed"):
             v1_agreed += 1
@@ -480,6 +547,7 @@ def evaluate_week6(payload: Optional[Week6EvalPayload] = Body(default=None)):
 
         results.append({
             **c,
+            "status": "COMPLETED",
             "evaluation_run_id": eval_run_id,
             "human_label": h_label,
             "assertions": assertions,
@@ -495,6 +563,9 @@ def evaluate_week6(payload: Optional[Week6EvalPayload] = Body(default=None)):
             "judge_v2_source": v2_src,
             "judge_v2_latency_ms": round(v2_lat, 2),
             "judge_v2_llm_completed": v2_completed,
+            "source": v2_src,
+            "latency_ms": round(v2_lat, 2),
+            "llm_completed": v2_completed,
             "failure_category": fail_cat,
         })
 

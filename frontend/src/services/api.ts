@@ -148,10 +148,18 @@ export const api = {
     return handleResponse(res);
   },
 
-  async getJudgeResults(signal?: AbortSignal): Promise<JudgeEvalResponse> {
-    const res = await fetch(`${API_BASE}/api/evaluation/judges`, { signal }).catch(async () => {
+  async getBenchmarkCases(signal?: AbortSignal): Promise<JudgeEvalResponse> {
+    const res = await fetch(`${API_BASE}/api/evaluation/benchmark`, { signal }).catch(async () => {
+      return fetch(`${API_BASE}/api/week6/benchmark`, { signal });
+    });
+    return handleResponse<JudgeEvalResponse>(res);
+  },
+
+  async getJudgeResults(includeHistory: boolean = false, signal?: AbortSignal): Promise<JudgeEvalResponse> {
+    const query = includeHistory ? '?include_history=true' : '';
+    const res = await fetch(`${API_BASE}/api/evaluation/judges${query}`, { signal }).catch(async () => {
       // Fallback to legacy path if needed
-      return fetch(`${API_BASE}/api/week6/results`, { signal });
+      return fetch(`${API_BASE}/api/week6/results${query}`, { signal });
     });
     return handleResponse<JudgeEvalResponse>(res);
   },
@@ -180,7 +188,7 @@ export const api = {
 
   // Backward compatibility methods
   async getWeek6Results(signal?: AbortSignal): Promise<Week6EvalResponse> {
-    return this.getJudgeResults(signal);
+    return this.getJudgeResults(false, signal);
   },
 
   async evaluateWeek6(cases?: Week6CaseResult[], runLlm: boolean = true, signal?: AbortSignal): Promise<Week6EvalResponse> {

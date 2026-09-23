@@ -27,6 +27,7 @@ const formatDuration = (seconds: number) => {
 
 export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify, onEvaluatingChange }) => {
   const [cases, setCases] = useState<JudgeCaseResult[]>([]);
+  const [currentRunId, setCurrentRunId] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [evalProgress, setEvalProgress] = useState<EvaluationProgress | null>(null);
   const [evaluatingCaseId, setEvaluatingCaseId] = useState<string | null>(null);
@@ -83,38 +84,57 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
     };
   }, [selectedCase, showAddModal]);
 
-  // Load benchmark results
-  const loadInitialData = async () => {
+  // Load clean 25 benchmark cases without precomputed evaluation results
+  const handleLoadBenchmark = async () => {
     updateLoadingState(true);
-    try {
-      const data = await api.getJudgeResults();
-      setCases(data.results || []);
-    } catch (e) {
-      console.error('Failed to load benchmark results:', e);
-      notify('Failed to load benchmark results: ' + (e as Error).message, 'error');
-    } finally {
-      updateLoadingState(false);
-    }
-  };
-
-  useEffect(() => {
-    loadInitialData();
-  }, []);
-
-  // Reload official 25 benchmark cases and reset filters
-  const handleReloadBenchmark = async () => {
     setSearchQuery('');
     setFilterMode('all');
     setFilterCategory('all');
     setEvalProgress(null);
     setEvaluatingCaseId(null);
-    await loadInitialData();
-    notify('Reloaded official 25 benchmark test cases.', 'success');
+    setCurrentRunId(null);
+    try {
+      const data = await api.getBenchmarkCases();
+      const rawCases = data.cases || data.results || [];
+      const cleanCases: JudgeCaseResult[] = rawCases.map((c) => ({
+        ...c,
+        status: 'PENDING' as const,
+        evaluation_run_id: null,
+        judge_v1_verdict: null,
+        judge_v1_agreed: null,
+        judge_v1_raw: null,
+        judge_v1_source: null,
+        judge_v1_latency_ms: null,
+        judge_v1_llm_completed: null,
+        judge_v2_verdict: null,
+        judge_v2_agreed: null,
+        judge_v2_raw: null,
+        judge_v2_source: null,
+        judge_v2_latency_ms: null,
+        judge_v2_llm_completed: null,
+        source: null,
+        latency_ms: null,
+        llm_completed: null,
+        assertions: null,
+        failure_category: null,
+        failure_type: null,
+        failure_reason: null,
+        resolution: null,
+      }));
+      setCases(cleanCases);
+      notify(`Loaded official ${cleanCases.length} benchmark test cases (All Pending). Click "Run Both Judges" to evaluate.`, 'success');
+    } catch (e) {
+      console.error('Failed to load benchmark cases:', e);
+      notify('Failed to load benchmark cases: ' + (e as Error).message, 'error');
+    } finally {
+      updateLoadingState(false);
+    }
   };
 
   // Clear all cases in the table
   const handleClearTable = () => {
     setCases([]);
+    setCurrentRunId(null);
     setSearchQuery('');
     setFilterMode('all');
     setFilterCategory('all');
@@ -160,7 +180,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
   // Run evaluation incrementally on cases so user sees live progress percentage and table updates
   const handleRunEvaluation = async () => {
     if (cases.length === 0) {
-      notify('Please add or import test cases before running evaluation.', 'error');
+      notify('Please load or import test cases before running evaluation.', 'error');
       return;
     }
     updateLoadingState(true);
@@ -170,6 +190,36 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
     const total = cases.length;
     const startTime = Date.now();
     startTimeRef.current = startTime;
+    const runId = `eval_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+    setCurrentRunId(runId);
+
+    // Explicitly reset all cases to PENDING and clear previous verdicts
+    const pendingCases: JudgeCaseResult[] = cases.map((c) => ({
+      ...c,
+      status: 'PENDING' as const,
+      evaluation_run_id: runId,
+      judge_v1_verdict: null,
+      judge_v1_agreed: null,
+      judge_v1_raw: null,
+      judge_v1_source: null,
+      judge_v1_latency_ms: null,
+      judge_v1_llm_completed: null,
+      judge_v2_verdict: null,
+      judge_v2_agreed: null,
+      judge_v2_raw: null,
+      judge_v2_source: null,
+      judge_v2_latency_ms: null,
+      judge_v2_llm_completed: null,
+      source: null,
+      latency_ms: null,
+      llm_completed: null,
+      assertions: null,
+      failure_category: null,
+      failure_type: null,
+      failure_reason: null,
+      resolution: null,
+    }));
+    setCases(pendingCases);
 
     setEvalProgress({
       current: 0,
@@ -178,7 +228,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
       currentCaseId: cases[0]?.case_id || '',
       currentQuestion: cases[0]?.question || '',
       elapsedSeconds: 0,
-      estRemainingSeconds: Math.round(total * 0.8),
+      estRemainingSeconds: evalEngine === 'deterministic' ? 1 : Math.round(total * 38),
       activeCaseId: cases[0]?.case_id || null,
       completedSuccess: false,
     });
@@ -189,7 +239,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
       setEvalProgress((prev) => {
         if (!prev) return null;
         const remainingItems = prev.total - prev.current;
-        const avgPerItem = prev.current > 0 ? elapsed / prev.current : 0.8;
+        const avgPerItem = prev.current > 0 ? elapsed / prev.current : (evalEngine === 'deterministic' ? 0.05 : 38);
         const estRemaining = Math.max(0, Math.round(remainingItems * avgPerItem));
         return {
           ...prev,
@@ -201,11 +251,18 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
 
     try {
       if (evalEngine === 'deterministic') {
-        // Instant 1-shot batch evaluation: executes in <50ms without 25 network roundtrips!
-        const data = await api.evaluateJudges(cases, false, controller.signal);
-        if (data.results && data.results.length > 0) {
-          setCases(data.results);
-        }
+        // Fast deterministic batch evaluation
+        const data = await api.evaluateJudges(pendingCases, false, controller.signal);
+        const rawResults = data.results || [];
+        const evaluatedList: JudgeCaseResult[] = rawResults.map((r, idx) => ({
+          ...(pendingCases[idx] || {}),
+          ...r,
+          status: 'COMPLETED' as const,
+          evaluation_run_id: runId,
+          source: 'DETERMINISTIC' as const,
+        }));
+        setCases(evaluatedList);
+
         if (progressTimerRef.current) {
           clearInterval(progressTimerRef.current);
           progressTimerRef.current = null;
@@ -223,21 +280,31 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
           completedSuccess: true,
         });
         setEvaluatingCaseId(null);
-        notify(`⚡ Evaluated all ${total} test cases instantly with 100% exact policy assertions!`, 'success');
+        notify(`⚡ Evaluated all ${total} test cases with exact deterministic rule assertions!`, 'success');
         return;
       }
 
-      // Live LLM Engine: evaluate case-by-case to stream progress and time estimates
-      for (let i = 0; i < cases.length; i++) {
+      // Live LLM Engine: evaluate sequentially case-by-case
+      for (let i = 0; i < total; i++) {
         if (controller.signal.aborted) break;
 
-        const currentCase = cases[i];
+        const currentCase = pendingCases[i];
         setEvaluatingCaseId(currentCase.case_id);
+
+        // Mark current case as RUNNING in state while future cases remain PENDING
+        setCases((prev) =>
+          prev.map((c, idx) => {
+            if (idx === i) {
+              return { ...c, status: 'RUNNING' as const };
+            }
+            return c;
+          })
+        );
 
         const elapsed = Math.floor((Date.now() - startTime) / 1000);
         const currentPct = Math.round((i / total) * 100);
         const remainingItems = total - i;
-        const avgPerItem = i > 0 ? elapsed / i : 0.8;
+        const avgPerItem = i > 0 ? elapsed / i : 38;
         const estRemaining = Math.max(0, Math.round(remainingItems * avgPerItem));
 
         setEvalProgress({
@@ -253,7 +320,16 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
         });
 
         const data = await api.evaluateJudges([currentCase], true, controller.signal);
-        const evaluated = data.results && data.results[0] ? data.results[0] : currentCase;
+        const evaluatedRaw = data.results && data.results[0] ? data.results[0] : currentCase;
+        const evaluated: JudgeCaseResult = {
+          ...currentCase,
+          ...evaluatedRaw,
+          status: 'COMPLETED' as const,
+          evaluation_run_id: runId,
+          source: (evaluatedRaw.source || (evaluatedRaw.judge_v2_source as any) || 'LLM') as any,
+          llm_completed: evaluatedRaw.llm_completed !== undefined ? evaluatedRaw.llm_completed : true,
+          latency_ms: evaluatedRaw.latency_ms || evaluatedRaw.judge_v2_latency_ms || 0,
+        };
 
         setCases((prevCases) =>
           prevCases.map((c, idx) => (idx === i || c.case_id === currentCase.case_id ? evaluated : c))
@@ -273,13 +349,12 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
           currentQuestion: currentCase.question,
           elapsedSeconds: newElapsed,
           estRemainingSeconds: newEstRemaining,
-          activeCaseId: completedCount < total ? cases[completedCount]?.case_id || null : null,
+          activeCaseId: completedCount < total ? pendingCases[completedCount]?.case_id || null : null,
           completedSuccess: completedCount === total,
         });
       }
 
       setEvaluatingCaseId(null);
-      notify(`Evaluated all ${total} test cases with Judge V1 and Judge V2! (100% Completed)`, 'success');
       notify(`Evaluated all ${total} test cases with Live LLM Judge! (100% Completed)`, 'success');
     } catch (e: unknown) {
       const err = e as Error;
@@ -318,9 +393,28 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
       human_label: customHumanLabel,
       expected_numeric: customNumeric.trim() || undefined,
       out_of_jurisdiction: customOoj,
-      judge_v1_verdict: 1,
-      judge_v2_verdict: 1,
-      failure_category: 'pass',
+      status: 'PENDING',
+      evaluation_run_id: null,
+      judge_v1_verdict: null,
+      judge_v1_agreed: null,
+      judge_v1_raw: null,
+      judge_v1_source: null,
+      judge_v1_latency_ms: null,
+      judge_v1_llm_completed: null,
+      judge_v2_verdict: null,
+      judge_v2_agreed: null,
+      judge_v2_raw: null,
+      judge_v2_source: null,
+      judge_v2_latency_ms: null,
+      judge_v2_llm_completed: null,
+      source: null,
+      latency_ms: null,
+      llm_completed: null,
+      assertions: null,
+      failure_category: null,
+      failure_type: null,
+      failure_reason: null,
+      resolution: null,
     };
 
     setCases((prev) => [newCase, ...prev]);
@@ -331,13 +425,19 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
     setCustomNumeric('');
     setCustomOoj(false);
     setCustomHumanLabel(1);
-    notify(`Added custom test case "${newCase.case_id}" to table.`, 'success');
+    notify(`Added custom test case "${newCase.case_id}" to table (Pending).`, 'success');
   };
 
   // Filtered cases
   const filteredCases = cases.filter((c) => {
     if (filterMode !== 'all' && c.taxonomy_mode !== filterMode) return false;
-    if (filterCategory !== 'all' && c.failure_category !== filterCategory) return false;
+    if (filterCategory !== 'all') {
+      if (filterCategory === 'pending') {
+        if (c.status !== 'PENDING' && c.status !== 'RUNNING') return false;
+      } else if (c.failure_category !== filterCategory) {
+        return false;
+      }
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchQ = c.question.toLowerCase().includes(q);
@@ -348,17 +448,21 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
     return true;
   });
 
-  // Calculate statistics
+  // Calculate statistics (computed strictly on completed evaluations of the active run)
+  const evaluatedCases = cases.filter(
+    (c) => c.status === 'COMPLETED' && c.judge_v1_verdict !== null && c.judge_v1_verdict !== undefined
+  );
   const totalCount = cases.length;
+  const totalEvaluated = evaluatedCases.length;
   const humanCorrectCount = cases.filter((c) => c.human_label === 1).length;
-  const v1AgreementCount = cases.filter((c) => c.judge_v1_verdict === c.human_label).length;
-  const v2AgreementCount = cases.filter((c) => c.judge_v2_verdict === c.human_label).length;
-  const v1Pct = totalCount ? ((v1AgreementCount / totalCount) * 100).toFixed(1) : '0.0';
-  const v2Pct = totalCount ? ((v2AgreementCount / totalCount) * 100).toFixed(1) : '0.0';
+  const v1AgreementCount = evaluatedCases.filter((c) => c.judge_v1_verdict === c.human_label).length;
+  const v2AgreementCount = evaluatedCases.filter((c) => c.judge_v2_verdict === c.human_label).length;
+  const v1Pct = totalEvaluated > 0 ? ((v1AgreementCount / totalEvaluated) * 100).toFixed(1) : '—';
+  const v2Pct = totalEvaluated > 0 ? ((v2AgreementCount / totalEvaluated) * 100).toFixed(1) : '—';
 
-  const pipelineFails = cases.filter((c) => c.failure_category === 'pipeline').length;
-  const modelFails = cases.filter((c) => c.failure_category === 'llm_model').length;
-  const codeFails = cases.filter((c) => c.failure_category === 'code_issue').length;
+  const pipelineFails = evaluatedCases.filter((c) => c.failure_category === 'pipeline').length;
+  const modelFails = evaluatedCases.filter((c) => c.failure_category === 'llm_model').length;
+  const codeFails = evaluatedCases.filter((c) => c.failure_category === 'code_issue').length;
 
   // File Import Handler (supports .txt, .md, and .json)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -386,16 +490,32 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
               human_label: item.human_label !== undefined ? item.human_label : 1,
               expected_numeric: item.expected_numeric,
               out_of_jurisdiction: item.out_of_jurisdiction || false,
-              judge_v1_verdict: item.judge_v1_verdict !== undefined ? item.judge_v1_verdict : 1,
-              judge_v2_verdict: item.judge_v2_verdict !== undefined ? item.judge_v2_verdict : 1,
-              assertions: item.assertions,
-              failure_category: item.failure_category || 'pass',
-              failure_type: item.failure_type,
-              failure_reason: item.failure_reason,
-              resolution: item.resolution,
+              status: 'PENDING' as const,
+              evaluation_run_id: null,
+              judge_v1_verdict: null,
+              judge_v1_agreed: null,
+              judge_v1_raw: null,
+              judge_v1_source: null,
+              judge_v1_latency_ms: null,
+              judge_v1_llm_completed: null,
+              judge_v2_verdict: null,
+              judge_v2_agreed: null,
+              judge_v2_raw: null,
+              judge_v2_source: null,
+              judge_v2_latency_ms: null,
+              judge_v2_llm_completed: null,
+              source: null,
+              latency_ms: null,
+              llm_completed: null,
+              assertions: null,
+              failure_category: null,
+              failure_type: null,
+              failure_reason: null,
+              resolution: null,
             }));
             setCases(imported);
-            notify(`Successfully imported ${imported.length} test cases from ${file.name}!`, 'success');
+            setCurrentRunId(null);
+            notify(`Successfully imported ${imported.length} test cases from ${file.name} (All Pending)!`, 'success');
           } else {
             notify('JSON file must contain an array of case objects.', 'error');
           }
@@ -490,18 +610,33 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                 taxonomy_mode: mode,
                 human_label: groundTruthLabel,
                 expected_numeric: defaultCid === 'case_01' ? 'two working days' : (defaultCid === 'case_03' ? 'exceptional' : (defaultCid === 'case_02' ? 'two working days' : undefined)),
-                judge_v1_verdict: groundTruthLabel,
-                judge_v2_verdict: groundTruthLabel,
-                judge_v1_agreed: true,
-                judge_v2_agreed: true,
-                failure_category: isTrueNegative ? 'pipeline' : 'pass',
-                failure_type: isTrueNegative ? 'low_k_truncation' : '',
-                failure_reason: isTrueNegative ? 'Low-K retrieval truncation omitted mandatory qualifying conditions.' : '',
-                resolution: isTrueNegative ? 'Increase retrieval depth K>=8 to capture all sub-clauses.' : '',
+                status: 'PENDING' as const,
+                evaluation_run_id: null,
+                judge_v1_verdict: null,
+                judge_v1_agreed: null,
+                judge_v1_raw: null,
+                judge_v1_source: null,
+                judge_v1_latency_ms: null,
+                judge_v1_llm_completed: null,
+                judge_v2_verdict: null,
+                judge_v2_agreed: null,
+                judge_v2_raw: null,
+                judge_v2_source: null,
+                judge_v2_latency_ms: null,
+                judge_v2_llm_completed: null,
+                source: null,
+                latency_ms: null,
+                llm_completed: null,
+                assertions: null,
+                failure_category: null,
+                failure_type: null,
+                failure_reason: null,
+                resolution: null,
               };
             });
             setCases(imported);
-            notify(`Successfully parsed & imported ${imported.length} Q&A pairs from ${file.name}!`, 'success');
+            setCurrentRunId(null);
+            notify(`Successfully parsed & imported ${imported.length} Q&A pairs from ${file.name} (All Pending)!`, 'success');
           } else {
             notify('No "Q:" / "A:" pairs found in the text file. Expected format:\nQ: Your question\nA: Your answer', 'error');
           }
@@ -892,7 +1027,10 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
             Judge V1 Agreement (Baseline)
           </div>
           <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#60a5fa', marginTop: '4px' }}>
-            {v1Pct}% <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500 }}>({v1AgreementCount}/{totalCount})</span>
+            {v1Pct !== '—' ? `${v1Pct}%` : '—'}{' '}
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+              ({v1AgreementCount}/{totalEvaluated})
+            </span>
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
             Zero-Shot Binary Semantic Prompt
@@ -911,10 +1049,43 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
             Judge V2 Agreement (Iterated)
           </div>
           <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#f59e0b', marginTop: '4px' }}>
-            {v2Pct}% <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500 }}>({v2AgreementCount}/{totalCount})</span>
+            {v2Pct !== '—' ? `${v2Pct}%` : '—'}{' '}
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+              ({v2AgreementCount}/{totalEvaluated})
+            </span>
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
             Few-Shot with 2 Disagreements
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border)',
+            borderRadius: '10px',
+            padding: '16px',
+          }}
+        >
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+            Evaluation Progress
+          </div>
+          <div
+            style={{
+              fontSize: '1.5rem',
+              fontWeight: 800,
+              color: totalEvaluated === totalCount && totalCount > 0 ? '#34d399' : totalEvaluated > 0 ? '#60a5fa' : 'var(--text-muted)',
+              marginTop: '4px',
+            }}
+          >
+            {totalEvaluated === totalCount && totalCount > 0
+              ? 'Complete'
+              : totalEvaluated > 0
+              ? `${totalEvaluated}/${totalCount} Evaluated`
+              : 'Pending Run'}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+            {currentRunId ? `Run: ${currentRunId.slice(0, 16)}` : 'No active run ID'}
           </div>
         </div>
 
@@ -1038,7 +1209,8 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
               cursor: 'pointer',
             }}
           >
-            <option value="all" style={{ background: '#0f172a', color: '#f8fafc' }}>All Failure Categories</option>
+            <option value="all" style={{ background: '#0f172a', color: '#f8fafc' }}>All Statuses &amp; Categories</option>
+            <option value="pending" style={{ background: '#0f172a', color: '#f8fafc' }}>Pending / In Progress</option>
             <option value="pipeline" style={{ background: '#0f172a', color: '#f8fafc' }}>Pipeline Failure</option>
             <option value="llm_model" style={{ background: '#0f172a', color: '#f8fafc' }}>LLM Model Failure</option>
             <option value="code_issue" style={{ background: '#0f172a', color: '#f8fafc' }}>Code Issue</option>
@@ -1065,12 +1237,12 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
 
           <button
             type="button"
-            onClick={handleReloadBenchmark}
+            onClick={handleLoadBenchmark}
             className="btn-secondary"
             style={{ padding: '5px 10px', fontSize: '0.8rem' }}
-            title="Reload official 25 benchmark cases"
+            title="Load the 25 official benchmark test cases"
           >
-            🔄 Load Benchmark (25 Cases)
+            🔄 Load 25 Benchmark
           </button>
 
           <button
@@ -1129,10 +1301,10 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                   <td colSpan={9} style={{ padding: '48px 24px', textAlign: 'center' }}>
                     <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📋</div>
                     <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>
-                      Evaluation Table is Empty
+                      No evaluation run yet
                     </div>
                     <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '18px', maxWidth: '520px', margin: '0 auto 18px auto', lineHeight: '1.5' }}>
-                      No evaluation test cases are currently loaded. Add custom question-answer pairs, import a file (.txt, .md, .json), or reload the official benchmark dataset.
+                      Load the 25 benchmark test cases to begin, add custom question-answer pairs, or import a file (.txt, .md, .json).
                     </div>
                     <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
                       <button
@@ -1157,11 +1329,11 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                       </label>
                       <button
                         type="button"
-                        onClick={handleReloadBenchmark}
+                        onClick={handleLoadBenchmark}
                         className="btn-primary"
                         style={{ fontSize: '0.8rem', padding: '6px 14px', width: 'auto' }}
                       >
-                        🔄 Load Benchmark (25 Cases)
+                        🔄 Load 25 Benchmark
                       </button>
                     </div>
                   </td>
@@ -1182,9 +1354,11 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                 </tr>
               ) : (
                 filteredCases.map((c) => {
-                  const isV1Agreed = c.judge_v1_verdict === c.human_label;
-                  const isV2Agreed = c.judge_v2_verdict === c.human_label;
-                  const isCurrentlyEvaluating = c.case_id === evaluatingCaseId;
+                  const isCompleted = c.status === 'COMPLETED' && c.judge_v1_verdict !== null && c.judge_v1_verdict !== undefined;
+                  const isCurrentlyEvaluating = c.status === 'RUNNING' || c.case_id === evaluatingCaseId;
+
+                  const isV1Agreed = isCompleted && c.judge_v1_verdict === c.human_label;
+                  const isV2Agreed = isCompleted && c.judge_v2_verdict === c.human_label;
 
                   return (
                     <tr
@@ -1289,7 +1463,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                             <span className="spinner" style={{ width: '10px', height: '10px' }}></span>
                             Running
                           </span>
-                        ) : (
+                        ) : isCompleted ? (
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
                             <span
                               style={{
@@ -1308,6 +1482,8 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                               {isV1Agreed ? '✓ Agreed' : '⚠ Disagreed'}
                             </span>
                           </div>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>— (Pending)</span>
                         )}
                       </td>
 
@@ -1330,7 +1506,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                             <span className="spinner" style={{ width: '10px', height: '10px' }}></span>
                             Running
                           </span>
-                        ) : (
+                        ) : isCompleted ? (
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
                             <span
                               style={{
@@ -1349,12 +1525,16 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                               {isV2Agreed ? '✓ Agreed' : '⚠ Disagreed'}
                             </span>
                           </div>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>— (Pending)</span>
                         )}
                       </td>
 
                       {/* Deterministic Assertions */}
                       <td style={{ padding: '12px 14px', verticalAlign: 'top' }}>
-                        {c.assertions ? (
+                        {isCurrentlyEvaluating ? (
+                          <span style={{ color: '#60a5fa', fontSize: '0.75rem' }}>Evaluating...</span>
+                        ) : isCompleted && c.assertions ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.7rem' }}>
                             <span style={{ color: c.assertions.policy_section_reference_resolves ? '#10b981' : '#ef4444' }}>
                               {c.assertions.policy_section_reference_resolves ? '✓' : '✗'} Section Resolves
@@ -1369,14 +1549,16 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                               {c.assertions.out_of_jurisdiction_refusal ? '✓' : '✗'} Refusal Guard
                             </span>
                           </div>
-                        ) : (
+                        ) : isCompleted ? (
                           <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Deterministic OK</span>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>—</span>
                         )}
                       </td>
 
                       {/* Failure Root Cause & Reason */}
                       <td style={{ padding: '12px 14px', verticalAlign: 'top' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        {isCurrentlyEvaluating ? (
                           <span
                             style={{
                               display: 'inline-block',
@@ -1384,77 +1566,115 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                               borderRadius: '4px',
                               fontSize: '0.7rem',
                               fontWeight: 700,
-                              background:
-                                c.failure_category === 'pipeline'
-                                  ? 'rgba(239, 68, 68, 0.2)'
-                                  : c.failure_category === 'llm_model'
-                                  ? 'rgba(245, 158, 11, 0.2)'
-                                  : c.failure_category === 'code_issue'
-                                  ? 'rgba(168, 85, 247, 0.2)'
-                                  : 'rgba(16, 185, 129, 0.2)',
-                              color:
-                                c.failure_category === 'pipeline'
-                                  ? '#f87171'
-                                  : c.failure_category === 'llm_model'
-                                  ? '#fbbf24'
-                                  : c.failure_category === 'code_issue'
-                                  ? '#c084fc'
-                                  : '#34d399',
-                              border: `1px solid ${
-                                c.failure_category === 'pipeline'
-                                  ? 'rgba(239, 68, 68, 0.3)'
-                                  : c.failure_category === 'llm_model'
-                                  ? 'rgba(245, 158, 11, 0.3)'
-                                  : c.failure_category === 'code_issue'
-                                  ? 'rgba(168, 85, 247, 0.3)'
-                                  : 'rgba(16, 185, 129, 0.3)'
-                              }`,
+                              background: 'rgba(59, 130, 246, 0.2)',
+                              color: '#60a5fa',
                             }}
                           >
-                            {c.failure_category === 'pipeline'
-                              ? 'Pipeline Failure'
-                              : c.failure_category === 'llm_model'
-                              ? 'LLM Model Failure'
-                              : c.failure_category === 'code_issue'
-                              ? 'Code Issue'
-                              : 'Clean Pass'}
+                            Evaluating...
                           </span>
-                          {c.failure_type && (
-                            <span
-                              style={{
-                                fontSize: '0.65rem',
-                                color: 'var(--text-muted)',
-                                fontFamily: 'ui-monospace, monospace',
-                                background: 'rgba(255, 255, 255, 0.05)',
-                                padding: '1px 5px',
-                                borderRadius: '3px',
-                              }}
-                            >
-                              {c.failure_type}
-                            </span>
-                          )}
-                        </div>
+                        ) : isCompleted ? (
+                          <>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                              <span
+                                style={{
+                                  display: 'inline-block',
+                                  padding: '2px 7px',
+                                  borderRadius: '4px',
+                                  fontSize: '0.7rem',
+                                  fontWeight: 700,
+                                  background:
+                                    c.failure_category === 'pipeline'
+                                      ? 'rgba(239, 68, 68, 0.2)'
+                                      : c.failure_category === 'llm_model'
+                                      ? 'rgba(245, 158, 11, 0.2)'
+                                      : c.failure_category === 'code_issue'
+                                      ? 'rgba(168, 85, 247, 0.2)'
+                                      : 'rgba(16, 185, 129, 0.2)',
+                                  color:
+                                    c.failure_category === 'pipeline'
+                                      ? '#f87171'
+                                      : c.failure_category === 'llm_model'
+                                      ? '#fbbf24'
+                                      : c.failure_category === 'code_issue'
+                                      ? '#c084fc'
+                                      : '#34d399',
+                                  border: `1px solid ${
+                                    c.failure_category === 'pipeline'
+                                      ? 'rgba(239, 68, 68, 0.3)'
+                                      : c.failure_category === 'llm_model'
+                                      ? 'rgba(245, 158, 11, 0.3)'
+                                      : c.failure_category === 'code_issue'
+                                      ? 'rgba(168, 85, 247, 0.3)'
+                                      : 'rgba(16, 185, 129, 0.3)'
+                                  }`,
+                                }}
+                              >
+                                {c.failure_category === 'pipeline'
+                                  ? 'Pipeline Failure'
+                                  : c.failure_category === 'llm_model'
+                                  ? 'LLM Model Failure'
+                                  : c.failure_category === 'code_issue'
+                                  ? 'Code Issue'
+                                  : 'Clean Pass'}
+                              </span>
 
-                        {/* Visible diagnostic reason on row */}
-                        {c.failure_reason ? (
-                          <div
-                            style={{
-                              fontSize: '0.72rem',
-                              color: c.human_label === 1 ? '#cbd5e1' : '#fca5a5',
-                              marginTop: '5px',
-                              lineHeight: '1.35',
-                              background: c.human_label === 1 ? 'rgba(0, 0, 0, 0.25)' : 'rgba(239, 68, 68, 0.08)',
-                              borderLeft: `2px solid ${c.human_label === 1 ? '#10b981' : '#ef4444'}`,
-                              padding: '4px 8px',
-                              borderRadius: '0 4px 4px 0',
-                            }}
-                          >
-                            <span style={{ fontWeight: 700 }}>Reason:</span> {c.failure_reason}
-                          </div>
+                              {c.source && (
+                                <span
+                                  style={{
+                                    fontSize: '0.65rem',
+                                    color: c.source === 'LLM' ? '#60a5fa' : '#34d399',
+                                    fontFamily: 'ui-monospace, monospace',
+                                    background: c.source === 'LLM' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                                    padding: '1px 5px',
+                                    borderRadius: '3px',
+                                    border: `1px solid ${c.source === 'LLM' ? 'rgba(59, 130, 246, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+                                  }}
+                                  title={`Verdict Origin: ${c.source}${c.latency_ms ? ` (${(c.latency_ms / 1000).toFixed(1)}s)` : ''}`}
+                                >
+                                  {c.source === 'LLM' ? '🤖 LLM' : c.source === 'DETERMINISTIC' ? '⚡ Rules' : c.source}
+                                </span>
+                              )}
+
+                              {c.failure_type && (
+                                <span
+                                  style={{
+                                    fontSize: '0.65rem',
+                                    color: 'var(--text-muted)',
+                                    fontFamily: 'ui-monospace, monospace',
+                                    background: 'rgba(255, 255, 255, 0.05)',
+                                    padding: '1px 5px',
+                                    borderRadius: '3px',
+                                  }}
+                                >
+                                  {c.failure_type}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Visible diagnostic reason on row */}
+                            {c.failure_reason ? (
+                              <div
+                                style={{
+                                  fontSize: '0.72rem',
+                                  color: c.human_label === 1 ? '#cbd5e1' : '#fca5a5',
+                                  marginTop: '5px',
+                                  lineHeight: '1.35',
+                                  background: c.human_label === 1 ? 'rgba(0, 0, 0, 0.25)' : 'rgba(239, 68, 68, 0.08)',
+                                  borderLeft: `2px solid ${c.human_label === 1 ? '#10b981' : '#ef4444'}`,
+                                  padding: '4px 8px',
+                                  borderRadius: '0 4px 4px 0',
+                                }}
+                              >
+                                <span style={{ fontWeight: 700 }}>Reason:</span> {c.failure_reason}
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                                {c.human_label === 1 ? '✓ Complete and accurate grounded answer.' : '○ Policy check or assertion failed.'}
+                              </div>
+                            )}
+                          </>
                         ) : (
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                            {c.human_label === 1 ? '✓ Complete and accurate grounded answer.' : '○ Policy check or assertion failed.'}
-                          </div>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Pending</span>
                         )}
                       </td>
 
@@ -1635,13 +1855,44 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                 }}
               >
                 <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Judge V1 (Zero-Shot)</div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: selectedCase.judge_v1_verdict === 1 ? '#60a5fa' : '#f87171' }}>
-                  {selectedCase.judge_v1_verdict === 1 ? '1 (Pass)' : '0 (Fail)'}
+                <div
+                  style={{
+                    fontSize: '1.1rem',
+                    fontWeight: 700,
+                    color:
+                      selectedCase.judge_v1_verdict === 1
+                        ? '#60a5fa'
+                        : selectedCase.judge_v1_verdict === 0
+                        ? '#f87171'
+                        : 'var(--text-muted)',
+                  }}
+                >
+                  {selectedCase.judge_v1_verdict === 1
+                    ? '1 (Pass)'
+                    : selectedCase.judge_v1_verdict === 0
+                    ? '0 (Fail)'
+                    : '— (Pending)'}
                 </div>
-                <div style={{ fontSize: '0.7rem', color: selectedCase.judge_v1_verdict === selectedCase.human_label ? '#10b981' : '#f59e0b', marginTop: '2px' }}>
-                  {selectedCase.judge_v1_verdict === selectedCase.human_label ? '✓ Agreed with Ground Truth' : '⚠ Disagreed with Ground Truth'}
+                <div
+                  style={{
+                    fontSize: '0.7rem',
+                    color:
+                      selectedCase.judge_v1_verdict !== null && selectedCase.judge_v1_verdict !== undefined
+                        ? selectedCase.judge_v1_verdict === selectedCase.human_label
+                          ? '#10b981'
+                          : '#f59e0b'
+                        : 'var(--text-muted)',
+                    marginTop: '2px',
+                  }}
+                >
+                  {selectedCase.judge_v1_verdict !== null && selectedCase.judge_v1_verdict !== undefined
+                    ? selectedCase.judge_v1_verdict === selectedCase.human_label
+                      ? '✓ Agreed with Ground Truth'
+                      : '⚠ Disagreed with Ground Truth'
+                    : 'Not evaluated in current run'}
                 </div>
               </div>
+
               <div
                 style={{
                   background: 'rgba(255, 255, 255, 0.03)',
@@ -1651,11 +1902,41 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                 }}
               >
                 <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Judge V2 (Few-Shot Iterated)</div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: selectedCase.judge_v2_verdict === 1 ? '#60a5fa' : '#f87171' }}>
-                  {selectedCase.judge_v2_verdict === 1 ? '1 (Pass)' : '0 (Fail)'}
+                <div
+                  style={{
+                    fontSize: '1.1rem',
+                    fontWeight: 700,
+                    color:
+                      selectedCase.judge_v2_verdict === 1
+                        ? '#60a5fa'
+                        : selectedCase.judge_v2_verdict === 0
+                        ? '#f87171'
+                        : 'var(--text-muted)',
+                  }}
+                >
+                  {selectedCase.judge_v2_verdict === 1
+                    ? '1 (Pass)'
+                    : selectedCase.judge_v2_verdict === 0
+                    ? '0 (Fail)'
+                    : '— (Pending)'}
                 </div>
-                <div style={{ fontSize: '0.7rem', color: selectedCase.judge_v2_verdict === selectedCase.human_label ? '#10b981' : '#f59e0b', marginTop: '2px' }}>
-                  {selectedCase.judge_v2_verdict === selectedCase.human_label ? '✓ Agreed with Ground Truth' : '⚠ Disagreed with Ground Truth'}
+                <div
+                  style={{
+                    fontSize: '0.7rem',
+                    color:
+                      selectedCase.judge_v2_verdict !== null && selectedCase.judge_v2_verdict !== undefined
+                        ? selectedCase.judge_v2_verdict === selectedCase.human_label
+                          ? '#10b981'
+                          : '#f59e0b'
+                        : 'var(--text-muted)',
+                    marginTop: '2px',
+                  }}
+                >
+                  {selectedCase.judge_v2_verdict !== null && selectedCase.judge_v2_verdict !== undefined
+                    ? selectedCase.judge_v2_verdict === selectedCase.human_label
+                      ? '✓ Agreed with Ground Truth'
+                      : '⚠ Disagreed with Ground Truth'
+                    : 'Not evaluated in current run'}
                 </div>
               </div>
             </div>
