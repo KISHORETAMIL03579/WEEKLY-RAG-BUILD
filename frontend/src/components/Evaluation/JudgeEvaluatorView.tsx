@@ -1062,12 +1062,21 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
             style={{
               fontSize: '1.5rem',
               fontWeight: 800,
-              color: totalEvaluated === totalCount && totalCount > 0 ? '#34d399' : totalEvaluated > 0 ? '#60a5fa' : 'var(--text-muted)',
+              color:
+                totalEvaluated === totalCount && totalCount > 0
+                  ? '#34d399'
+                  : loading || totalEvaluated > 0
+                  ? '#60a5fa'
+                  : 'var(--text-muted)',
               marginTop: '4px',
             }}
           >
             {totalEvaluated === totalCount && totalCount > 0
               ? 'Complete'
+              : loading
+              ? evalProgress
+                ? `Running (${evalProgress.current}/${evalProgress.total})`
+                : `Running (0/${totalCount})`
               : totalEvaluated > 0
               ? `${totalEvaluated}/${totalCount} Evaluated`
               : 'Not Started'}
