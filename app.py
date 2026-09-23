@@ -1414,7 +1414,7 @@ def _make_store(sid: str):
     got. The qdrant_store import is lazy — only needed, and only
     attempted, when VECTOR_BACKEND=qdrant is actually set."""
     if VECTOR_BACKEND == "qdrant":
-        from qdrant_store import QdrantVectorStore
+        from backend.storage.qdrant_store import QdrantVectorStore
         store = QdrantVectorStore(sid)
     else:
         store = VectorStore(sid)
@@ -1430,7 +1430,7 @@ def _evict_session_store(sid: str) -> None:
     (VECTOR_FOLDER / f"{sid}.pkl").unlink(missing_ok=True)
     if VECTOR_BACKEND == "qdrant":
         try:
-            from qdrant_store import QdrantVectorStore
+            from backend.storage.qdrant_store import QdrantVectorStore
             QdrantVectorStore(sid).clear()
         except Exception:
             logger.warning("Failed to release Qdrant collection for evicted session %s", sid, exc_info=True)
@@ -4357,7 +4357,7 @@ def readyz(response: Response):
 
     if VECTOR_BACKEND == "qdrant":
         try:
-            from qdrant_store import _client
+            from backend.storage.qdrant_store import _client
             _client().get_collections()
             checks["qdrant"] = True
         except Exception as exc:

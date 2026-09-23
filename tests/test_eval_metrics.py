@@ -189,7 +189,7 @@ class TestEvalMetrics(unittest.TestCase):
 
     def test_trace_store_defensive_redaction(self):
         import tempfile
-        from trace_store import TraceStore
+        from backend.storage.trace_store import TraceStore
 
         with tempfile.NamedTemporaryFile(mode="w+", delete=False) as tf:
             temp_path = tf.name
@@ -228,7 +228,7 @@ class TestEvalMetrics(unittest.TestCase):
                 os.remove(temp_path)
 
     def test_durable_prompt_registry_persistence(self):
-        from trace_store import register_prompt, get_prompt, PROMPT_REGISTRY, PROMPTS_DIR
+        from backend.storage.trace_store import register_prompt, get_prompt, PROMPT_REGISTRY, PROMPTS_DIR
 
         version = "test-durable-prompt-v1"
         prompt_text = "You are an HR assistant adhering to strict company policies."
@@ -249,13 +249,13 @@ class TestEvalMetrics(unittest.TestCase):
 
     def test_qdrant_add_consistency_on_error(self):
         from unittest.mock import patch, MagicMock
-        from qdrant_store import QdrantVectorStore
+        from backend.storage.qdrant_store import QdrantVectorStore
 
         store = QdrantVectorStore("test_session")
         store.chunks = [{"id": "c1", "text": "initial"}]
         store.vectors = [[0.1, 0.2]]
 
-        with patch("qdrant_store._client") as mock_client_fn:
+        with patch("backend.storage.qdrant_store._client") as mock_client_fn:
             mock_client = MagicMock()
             mock_client.get_collections.return_value.collections = []
             mock_client.upsert.side_effect = RuntimeError("Upsert connection dropped")
@@ -271,13 +271,14 @@ class TestEvalMetrics(unittest.TestCase):
 
     def test_qdrant_remove_doc_consistency_on_error(self):
         from unittest.mock import patch, MagicMock
-        from qdrant_store import QdrantVectorStore, RetrievalBackendError
+        from backend.storage.qdrant_store import QdrantVectorStore
+        from backend.storage.exceptions import RetrievalBackendError
 
         store = QdrantVectorStore("test_session")
         store.chunks = [{"id": "c1", "doc_id": "doc1", "text": "foo"}]
         store.vectors = [[0.1, 0.2]]
 
-        with patch("qdrant_store._client") as mock_client_fn:
+        with patch("backend.storage.qdrant_store._client") as mock_client_fn:
             mock_client = MagicMock()
             mock_collection = MagicMock()
             mock_collection.name = store.collection
@@ -294,13 +295,14 @@ class TestEvalMetrics(unittest.TestCase):
 
     def test_qdrant_clear_consistency_on_error(self):
         from unittest.mock import patch, MagicMock
-        from qdrant_store import QdrantVectorStore, RetrievalBackendError
+        from backend.storage.qdrant_store import QdrantVectorStore
+        from backend.storage.exceptions import RetrievalBackendError
 
         store = QdrantVectorStore("test_session")
         store.chunks = [{"id": "c1", "doc_id": "doc1", "text": "foo"}]
         store.vectors = [[0.1, 0.2]]
 
-        with patch("qdrant_store._client") as mock_client_fn:
+        with patch("backend.storage.qdrant_store._client") as mock_client_fn:
             mock_client = MagicMock()
             mock_collection = MagicMock()
             mock_collection.name = store.collection
@@ -316,11 +318,12 @@ class TestEvalMetrics(unittest.TestCase):
 
     def test_qdrant_load_raises_retrieval_backend_error(self):
         from unittest.mock import patch, MagicMock
-        from qdrant_store import QdrantVectorStore, RetrievalBackendError
+        from backend.storage.qdrant_store import QdrantVectorStore
+        from backend.storage.exceptions import RetrievalBackendError
 
         store = QdrantVectorStore("test_session")
 
-        with patch("qdrant_store._client") as mock_client_fn:
+        with patch("backend.storage.qdrant_store._client") as mock_client_fn:
             mock_client = MagicMock()
             mock_collection = MagicMock()
             mock_collection.name = store.collection
@@ -355,7 +358,7 @@ class TestEvalMetrics(unittest.TestCase):
 
 
     def test_qdrant_chunk_vector_length_mismatch(self):
-        from qdrant_store import QdrantVectorStore
+        from backend.storage.qdrant_store import QdrantVectorStore
         store = QdrantVectorStore("test_session")
         chunks = [{"id": "c1", "text": "foo"}, {"id": "c2", "text": "bar"}]
         vectors = [[0.1, 0.2]]  # 2 chunks vs 1 vector
@@ -364,7 +367,7 @@ class TestEvalMetrics(unittest.TestCase):
         self.assertIn("mismatch", str(ctx.exception).lower())
 
     def test_qdrant_vectorless_insert_rejected(self):
-        from qdrant_store import QdrantVectorStore
+        from backend.storage.qdrant_store import QdrantVectorStore
         store = QdrantVectorStore("test_session")
         chunks = [{"id": "c1", "text": "foo"}]
         vectors = []
@@ -396,7 +399,7 @@ class TestEvalMetrics(unittest.TestCase):
         from pathlib import Path
         from unittest.mock import patch
         from app import app
-        from trace_store import TraceStore
+        from backend.storage.trace_store import TraceStore
 
         with tempfile.TemporaryDirectory() as tmpdir:
             test_store = TraceStore(Path(tmpdir) / "test_traces.jsonl")
@@ -439,7 +442,7 @@ class TestEvalMetrics(unittest.TestCase):
         from pathlib import Path
         from unittest.mock import patch
         from app import app
-        from trace_store import TraceStore
+        from backend.storage.trace_store import TraceStore
 
         with tempfile.TemporaryDirectory() as tmpdir:
             test_store = TraceStore(Path(tmpdir) / "test_traces.jsonl")
@@ -474,7 +477,7 @@ class TestEvalMetrics(unittest.TestCase):
         from pathlib import Path
         from unittest.mock import patch
         from app import app
-        from trace_store import TraceStore
+        from backend.storage.trace_store import TraceStore
 
         with tempfile.TemporaryDirectory() as tmpdir:
             test_store = TraceStore(Path(tmpdir) / "test_traces.jsonl")
@@ -506,7 +509,7 @@ class TestEvalMetrics(unittest.TestCase):
     def test_ask_does_not_mask_retrieval_backend_error(self):
         from unittest.mock import patch
         from app import app
-        from qdrant_store import RetrievalBackendError
+        from backend.storage.exceptions import RetrievalBackendError
 
         client = make_client(app)
         set_session(client, "test_ask_error_session")
@@ -618,7 +621,7 @@ class TestEvalMetrics(unittest.TestCase):
         import io
         from unittest.mock import patch, MagicMock
         from app import app, ORPHANED_DOCS
-        from qdrant_store import RetrievalBackendError
+        from backend.storage.exceptions import RetrievalBackendError
 
         sid = "test_rollback_failure_tracked"
         ORPHANED_DOCS.pop(sid, None)
@@ -704,7 +707,7 @@ class TestEvalMetrics(unittest.TestCase):
         import time
         from unittest.mock import patch, MagicMock
         from app import app, ORPHANED_DOCS, SESSION_FILES
-        from qdrant_store import RetrievalBackendError
+        from backend.storage.exceptions import RetrievalBackendError
 
         sid = "test_cancel_cleanup_incomplete"
         ORPHANED_DOCS.pop(sid, None)
@@ -790,7 +793,7 @@ class TestEvalMetrics(unittest.TestCase):
         """Verify that TraceStore.sample produces identical samples regardless of physical line order."""
         import tempfile
         from pathlib import Path
-        from trace_store import TraceStore
+        from backend.storage.trace_store import TraceStore
 
         ids = [f"trace_{i:03d}" for i in range(50)]
         reversed_ids = list(reversed(ids))
@@ -910,7 +913,7 @@ class TestEvalMetrics(unittest.TestCase):
         from pathlib import Path
         from unittest.mock import patch, MagicMock
         from app import app, ORPHANED_DOCS
-        from qdrant_store import RetrievalBackendError
+        from backend.storage.exceptions import RetrievalBackendError
 
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_log = Path(tmpdir) / "orphans.jsonl"
@@ -1072,7 +1075,7 @@ class TestEvalMetrics(unittest.TestCase):
         from pathlib import Path
         from unittest.mock import patch, MagicMock
         from app import app, ORPHANED_DOCS, _record_orphaned_doc
-        from qdrant_store import RetrievalBackendError
+        from backend.storage.exceptions import RetrievalBackendError
 
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_log = Path(tmpdir) / "orphans.jsonl"

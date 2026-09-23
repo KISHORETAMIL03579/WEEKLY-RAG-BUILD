@@ -6,6 +6,54 @@ Every model call in the pipeline — embeddings, image OCR, and chat/answer gene
 
 ---
 
+## 🏛️ Clean Architecture Summary
+
+The application follows **Clean Architecture** and layered-architecture principles by separating HTTP/API concerns, application services, evaluation logic, domain-oriented schemas, and infrastructure/storage implementations:
+
+- **`backend/routes/`**: Handles REST API concerns, request validation, and HTTP serialization.
+- **`backend/services/`**: Contains application workflows, embedding/LLM integrations, hybrid search, RRF fusion, and background worker runners.
+- **`backend/evaluation/`**: Contains deterministic assertions, LLM-based judges, and retrieval benchmark runners.
+- **`backend/storage/`**: Isolates persistence, session management, durable trace storage, and vector-store infrastructure (`QdrantVectorStore`).
+- **`backend/schemas/`**: Pydantic models enforcing strict contract boundaries between layers.
+- **`week6/`**: Contains evaluation-specific benchmark datasets (`eval_cases_25.json`), human ground-truth labels (`labels_25.json`), and calibrated judge prompts (`judge_v1.txt`, `judge_v2.txt`), cleanly separating benchmark assets from production RAG code.
+- **Evaluation Lifecycle**: The Week 6 evaluation lifecycle is backend-managed through `EvaluationRunManager`, allowing long-running 25-case evaluations to continue independently of the React component lifecycle. The frontend observes the active evaluation run through its API client and seamlessly reconnects to an existing run after navigation or page refresh.
+- **Docker & Compose**: `Dockerfile` and `docker-compose.yml` reside at the repository root because the multi-stage production build and service orchestration use the complete repository as the build context, coordinating the application container, Qdrant vector database, and Ollama inference engine.
+
+```text
+WEEK-3-RAG/
+│
+├── backend/
+│   ├── main.py
+│   ├── config.py
+│   ├── middleware.py
+│   ├── routes/
+│   ├── services/
+│   ├── evaluation/
+│   ├── schemas/
+│   └── storage/
+│
+├── frontend/
+│   └── src/
+│       ├── components/
+│       ├── services/
+│       └── types/
+│
+├── tests/
+├── week6/
+├── scripts/
+├── prompts/
+├── traces/
+├── uploads/
+├── vectorstore/
+│
+├── Dockerfile
+├── docker-compose.yml
+├── requirements.txt
+└── README.md
+```
+
+---
+
 ## ⚡ Quick Start & Setup
 
 ### 1. Environment Setup
