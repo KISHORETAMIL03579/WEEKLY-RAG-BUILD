@@ -155,30 +155,95 @@ export const api = {
     runLlm: boolean = true,
     signal?: AbortSignal
   ): Promise<EvaluationRunStateResponse> {
-    const res = await fetch(`${API_BASE}/api/evaluation/runs`, {
+    const payload = JSON.stringify({ cases, run_llm: runLlm });
+    let res = await fetch(`${API_BASE}/api/evaluation/runs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cases, run_llm: runLlm }),
+      body: payload,
       signal,
-    });
+    }).catch(() => null);
+
+    if (!res || !res.ok) {
+      const fallbackRes = await fetch(`${API_BASE}/api/week6/runs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+        signal,
+      }).catch(() => null);
+
+      if (fallbackRes && fallbackRes.ok) {
+        return handleResponse<EvaluationRunStateResponse>(fallbackRes);
+      }
+
+      // Synchronous evaluate fallback if backend background runner is unavailable
+      if (!res || res.status === 404) {
+        const syncData = await this.evaluateJudges(cases, runLlm, signal);
+        const results = syncData.results || [];
+        return {
+          evaluation_run_id: syncData.evaluation_run_id || `eval_${Date.now()}`,
+          status: 'COMPLETED',
+          eval_engine: runLlm ? 'llm' : 'deterministic',
+          total_cases: syncData.total_cases || results.length,
+          completed_cases: syncData.total_cases || results.length,
+          judge_v1_agreement_pct: syncData.judge_v1_agreement_pct ?? 0,
+          judge_v2_agreement_pct: syncData.judge_v2_agreement_pct ?? 0,
+          v1_agreements: syncData.v1_agreements ?? 0,
+          v2_agreements: syncData.v2_agreements ?? 0,
+          created_at: Date.now() / 1000,
+          updated_at: Date.now() / 1000,
+          elapsed_seconds: 0.1,
+          cases: results,
+          results,
+        };
+      }
+    }
+
     return handleResponse<EvaluationRunStateResponse>(res);
   },
 
   async getActiveEvaluationRun(signal?: AbortSignal): Promise<ActiveEvaluationRunResponse> {
-    const res = await fetch(`${API_BASE}/api/evaluation/runs/active`, { signal });
-    return handleResponse<ActiveEvaluationRunResponse>(res);
+    try {
+      const res = await fetch(`${API_BASE}/api/evaluation/runs/active`, { signal });
+      if (res.status === 404) {
+        const fallbackRes = await fetch(`${API_BASE}/api/week6/runs/active`, { signal });
+        if (fallbackRes && fallbackRes.ok) return await fallbackRes.json();
+        return { active_run_id: null, run: null };
+      }
+      return handleResponse<ActiveEvaluationRunResponse>(res);
+    } catch {
+      return { active_run_id: null, run: null };
+    }
   },
 
   async getEvaluationRun(runId: string, signal?: AbortSignal): Promise<EvaluationRunStateResponse> {
-    const res = await fetch(`${API_BASE}/api/evaluation/runs/${encodeURIComponent(runId)}`, { signal });
+    let res = await fetch(`${API_BASE}/api/evaluation/runs/${encodeURIComponent(runId)}`, { signal }).catch(() => null);
+    if (!res || !res.ok) {
+      const fallbackRes = await fetch(`${API_BASE}/api/week6/runs/${encodeURIComponent(runId)}`, { signal }).catch(() => null);
+      if (fallbackRes && fallbackRes.ok) {
+        return handleResponse<EvaluationRunStateResponse>(fallbackRes);
+      }
+    }
+    if (!res) {
+      throw new Error(`Failed to fetch evaluation run ${runId}`);
+    }
     return handleResponse<EvaluationRunStateResponse>(res);
   },
 
   async cancelEvaluationRun(runId: string, signal?: AbortSignal): Promise<{ ok: boolean; status: string }> {
-    const res = await fetch(`${API_BASE}/api/evaluation/runs/${encodeURIComponent(runId)}/cancel`, {
+    let res = await fetch(`${API_BASE}/api/evaluation/runs/${encodeURIComponent(runId)}/cancel`, {
       method: 'POST',
       signal,
-    });
+    }).catch(() => null);
+    if (!res || !res.ok) {
+      const fallbackRes = await fetch(`${API_BASE}/api/week6/runs/${encodeURIComponent(runId)}/cancel`, {
+        method: 'POST',
+        signal,
+      }).catch(() => null);
+      if (fallbackRes) return handleResponse<{ ok: boolean; status: string }>(fallbackRes);
+    }
+    if (!res) {
+      return { ok: false, status: 'UNKNOWN' };
+    }
     return handleResponse<{ ok: boolean; status: string }>(res);
   },
 

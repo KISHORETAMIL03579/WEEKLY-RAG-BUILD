@@ -103,8 +103,7 @@ def create_app() -> FastAPI:
 
     # Register all modular routers
     for r in (chat_router, ingestion_router, documents_router, traces_router, evaluation_router):
-        for route in r.routes:
-            app.router.routes.append(route)
+        app.include_router(r)
 
 
     # Startup event to load orphans

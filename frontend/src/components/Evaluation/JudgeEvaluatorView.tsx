@@ -957,7 +957,12 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
             Total Test Cases
           </div>
           <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#fff', marginTop: '4px' }}>
-            {totalCount} <span style={{ fontSize: '0.85rem', color: '#10b981', fontWeight: 500 }}>({humanCorrectCount} Human Correct)</span>
+            {totalCount}{' '}
+            {totalEvaluated > 0 && (
+              <span style={{ fontSize: '0.85rem', color: '#10b981', fontWeight: 500 }}>
+                ({humanCorrectCount} Human Correct)
+              </span>
+            )}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
             5 Taxonomy Modes + 6 Regressions
@@ -976,10 +981,16 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
             Judge V1 Agreement (Baseline)
           </div>
           <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#60a5fa', marginTop: '4px' }}>
-            {v1Pct !== '—' ? `${v1Pct}%` : '—'}{' '}
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500 }}>
-              ({v1AgreementCount}/{totalEvaluated})
-            </span>
+            {totalEvaluated > 0 ? (
+              <>
+                {v1Pct}%{' '}
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+                  ({v1AgreementCount}/{totalEvaluated})
+                </span>
+              </>
+            ) : (
+              '—'
+            )}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
             Zero-Shot Binary Semantic Prompt
@@ -998,10 +1009,16 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
             Judge V2 Agreement (Iterated)
           </div>
           <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#f59e0b', marginTop: '4px' }}>
-            {v2Pct !== '—' ? `${v2Pct}%` : '—'}{' '}
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500 }}>
-              ({v2AgreementCount}/{totalEvaluated})
-            </span>
+            {totalEvaluated > 0 ? (
+              <>
+                {v2Pct}%{' '}
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+                  ({v2AgreementCount}/{totalEvaluated})
+                </span>
+              </>
+            ) : (
+              '—'
+            )}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
             Few-Shot with 2 Disagreements
@@ -1031,10 +1048,10 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
               ? 'Complete'
               : totalEvaluated > 0
               ? `${totalEvaluated}/${totalCount} Evaluated`
-              : 'Pending Run'}
+              : 'Not Started'}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-            {currentRunId ? `Run: ${currentRunId.slice(0, 16)}` : 'No active run ID'}
+            {currentRunId ? `Run: ${currentRunId.slice(0, 16)}` : 'No active run'}
           </div>
         </div>
 
@@ -1049,46 +1066,52 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
             Failure Root Causes
           </div>
-          <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
-            <span
-              style={{
-                background: 'rgba(239, 68, 68, 0.2)',
-                color: '#f87171',
-                fontSize: '0.75rem',
-                padding: '3px 8px',
-                borderRadius: '4px',
-                fontWeight: 600,
-              }}
-            >
-              Pipeline: {pipelineFails}
-            </span>
-            <span
-              style={{
-                background: 'rgba(245, 158, 11, 0.2)',
-                color: '#fbbf24',
-                fontSize: '0.75rem',
-                padding: '3px 8px',
-                borderRadius: '4px',
-                fontWeight: 600,
-              }}
-            >
-              Model: {modelFails}
-            </span>
-            <span
-              style={{
-                background: 'rgba(16, 185, 129, 0.2)',
-                color: '#34d399',
-                fontSize: '0.75rem',
-                padding: '3px 8px',
-                borderRadius: '4px',
-                fontWeight: 600,
-              }}
-            >
-              Code: {codeFails}
-            </span>
-          </div>
+          {totalEvaluated > 0 ? (
+            <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
+              <span
+                style={{
+                  background: 'rgba(239, 68, 68, 0.2)',
+                  color: '#f87171',
+                  fontSize: '0.75rem',
+                  padding: '3px 8px',
+                  borderRadius: '4px',
+                  fontWeight: 600,
+                }}
+              >
+                Pipeline: {pipelineFails}
+              </span>
+              <span
+                style={{
+                  background: 'rgba(245, 158, 11, 0.2)',
+                  color: '#fbbf24',
+                  fontSize: '0.75rem',
+                  padding: '3px 8px',
+                  borderRadius: '4px',
+                  fontWeight: 600,
+                }}
+              >
+                Model: {modelFails}
+              </span>
+              <span
+                style={{
+                  background: 'rgba(16, 185, 129, 0.2)',
+                  color: '#34d399',
+                  fontSize: '0.75rem',
+                  padding: '3px 8px',
+                  borderRadius: '4px',
+                  fontWeight: 600,
+                }}
+              >
+                Code: {codeFails}
+              </span>
+            </div>
+          ) : (
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-muted)', marginTop: '4px' }}>
+              —
+            </div>
+          )}
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '6px' }}>
-            5 Assertions vs 1 Judge Criterion
+            {totalEvaluated > 0 ? '5 Assertions vs 1 Judge Criterion' : 'No evaluation run'}
           </div>
         </div>
       </div>
@@ -1394,7 +1417,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                           >
                             {c.human_label ?? '—'}
                           </span>
-                        ) : (
+                        ) : isCurrentlyEvaluating ? (
                           <span
                             style={{
                               display: 'inline-block',
@@ -1402,15 +1425,17 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                               borderRadius: '4px',
                               fontSize: '0.75rem',
                               fontWeight: 600,
-                              background: 'rgba(255, 255, 255, 0.05)',
-                              color: 'var(--text-muted)',
-                              border: '1px solid rgba(255, 255, 255, 0.1)',
+                              background: 'rgba(59, 130, 246, 0.15)',
+                              color: '#93c5fd',
+                              border: '1px solid rgba(59, 130, 246, 0.3)',
                               fontFamily: 'ui-monospace, monospace',
                             }}
-                            title="Benchmark Ground Truth Label"
+                            title="Evaluating Ground Truth"
                           >
                             {c.human_label ?? '—'}
                           </span>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>—</span>
                         )}
                       </td>
 

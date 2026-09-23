@@ -390,34 +390,6 @@ def get_week6_results(include_history: bool = False):
     }
 
 
-@router.post("/api/evaluation/judges")
-@router.post("/api/week6/evaluate")
-def evaluate_week6(payload: Optional[Week6EvalPayload] = Body(default=None)):
-    """Runs deterministic assertions and Judge V1 / Judge V2 over custom or default test cases."""
-    v1_prompt_path = BASE_DIR / "week6" / "judge_v1.txt"
-    v2_prompt_path = BASE_DIR / "week6" / "judge_v2.txt"
-    cases_file = BASE_DIR / "week6" / "eval_cases_25.json"
-    labels_file = BASE_DIR / "week6" / "labels_25.json"
-
-    v1_template = v1_prompt_path.read_text(encoding="utf-8") if v1_prompt_path.exists() else ""
-    v2_template = v2_prompt_path.read_text(encoding="utf-8") if v2_prompt_path.exists() else ""
-
-    raw_benchmark_cases = []
-    if cases_file.exists():
-        try:
-            with open(cases_file, "r", encoding="utf-8") as f:
-                raw_benchmark_cases = json.load(f)
-        except Exception:
-            raw_benchmark_cases = []
-
-    labels = {}
-    if labels_file.exists():
-        try:
-            with open(labels_file, "r", encoding="utf-8") as f:
-                labels = json.load(f)
-        except Exception:
-            labels = {}
-
 def _prepare_cases_for_evaluation(cases_payload: Optional[list]) -> tuple[list[dict], dict[str, int], str, str]:
     """Prepares and resolves test cases against benchmark metadata with zero data leakage."""
     v1_prompt_path = BASE_DIR / "week6" / "judge_v1.txt"
@@ -511,6 +483,7 @@ def _prepare_cases_for_evaluation(cases_payload: Optional[list]) -> tuple[list[d
 
 
 @router.post("/api/evaluation/runs")
+@router.post("/api/week6/runs")
 def create_evaluation_run(payload: Optional[Week6EvalPayload] = Body(default=None)):
     """Starts a background evaluation run independent of the frontend component lifecycle."""
     cases_payload = payload.cases if payload else None
@@ -532,6 +505,7 @@ def create_evaluation_run(payload: Optional[Week6EvalPayload] = Body(default=Non
 
 
 @router.get("/api/evaluation/runs/active")
+@router.get("/api/week6/runs/active")
 def get_active_evaluation_run():
     """Returns the currently active running evaluation or the latest run state."""
     active_id = run_manager.get_active_run_id()
@@ -545,6 +519,7 @@ def get_active_evaluation_run():
 
 
 @router.get("/api/evaluation/runs/{run_id}")
+@router.get("/api/week6/runs/{run_id}")
 def get_evaluation_run(run_id: str):
     """Returns the current state and results for a specific evaluation run."""
     run = run_manager.get_run(run_id)
@@ -554,6 +529,7 @@ def get_evaluation_run(run_id: str):
 
 
 @router.post("/api/evaluation/runs/{run_id}/cancel")
+@router.post("/api/week6/runs/{run_id}/cancel")
 def cancel_evaluation_run(run_id: str):
     """Explicitly cancels an active background evaluation run upon user request."""
     success = run_manager.cancel_run(run_id)
