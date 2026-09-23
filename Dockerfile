@@ -18,7 +18,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application modules and assets
-COPY app.py qdrant_store.py trace_store.py ./
+COPY app.py ./
 COPY backend/ backend/
 COPY prompts/ prompts/
 COPY week6/ week6/
@@ -39,7 +39,7 @@ EXPOSE 5000
 ENV PORT=5000
 
 # FastAPI is ASGI: Gunicorn runs with uvicorn_worker.UvicornWorker ASGI worker
-CMD ["gunicorn", "app:app", \
+CMD ["gunicorn", "backend.main:app", \
      "-k", "uvicorn_worker.UvicornWorker", \
      "--bind", "0.0.0.0:5000", \
      "--workers", "2", \
