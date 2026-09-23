@@ -4,21 +4,31 @@ Instructions:
 - Evaluate 1 (Correct) if the answer is grounded in the context, accurately states the substantive policy entitlements/rules, or correctly refuses an unstated policy (e.g. "I don't know").
 - Evaluate 0 (Incorrect) ONLY if the answer makes false claims, contradicts the context, fabricates ungrounded numbers, or severely truncates mandatory policy conditions.
 - Concise summaries are 100% valid (1). Do not penalize answers for missing irrelevant context clauses or citation bracket formatting.
+1. Return 1 (Pass) if the Answer is factually grounded in the Context and accurately captures the policy rules, entitlement tiers, and required conditions specified in the Context for the question (or correctly refuses when unstated).
+2. Return 0 (Fail) if the Answer:
+   - Contradicts the Context, fabricates facts, or makes ungrounded claims.
+   - Truncates or misstates mandatory entitlement tiers (e.g. claiming 1 day at full pay when the policy mandates 2 working days split across full and half pay).
+   - Omits mandatory qualifying prerequisites or mandatory authorization conditions stated in the context for that benefit.
+   - Fails to refuse an unstated policy.
+3. Concise summaries that retain all key quantitative rules and required conditions are valid (1). Do not penalize for minor wording variations or bracket citation formatting.
 
 Examples:
 Q: Who is eligible for overtime compensation?
 Context: Policy discusses salary scales only.
 A: I don't know. The policy does not mention overtime.
+Answer: I don't know. The policy does not mention overtime.
 Verdict: 1
 
 Q: What is the maternity leave entitlement?
 Context: Female staff entitled to 16 weeks maternity leave with full pay.
 A: Female staff receive 16 weeks of maternity leave at full pay [1].
+Answer: Female staff receive 16 weeks of maternity leave at full pay [1].
 Verdict: 1
 
 Q: Under what circumstances is an employee entitled to paid sick leave?
 Context: Two working days per month (one at full pay and one at half pay) after 2 consecutive months of service.
 A: Staff get one day at full pay per month of service.
+Answer: Staff get one day at full pay per month of service.
 Verdict: 0
 
 Input to Evaluate:

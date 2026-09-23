@@ -98,7 +98,7 @@ def call_llm_judge_detailed(prompt: str, timeout: int = 180, retries: int = 1) -
             if res and res.strip():
                 latency_ms = (time.perf_counter() - t_start) * 1000
                 return res.strip(), "LLM", latency_ms
-    except Exception:
+    except Exception as exc:
         pass
 
     latency_ms = (time.perf_counter() - t_start) * 1000
@@ -206,7 +206,7 @@ def evaluate_case_with_judge_detailed(case: Dict[str, Any], prompt_template: str
         verdict = evaluate_case_deterministically(case, is_strict_section=is_v1)
         annotated_raw = f"FALLBACK_DETERMINISTIC (LLM Offline): Evaluated dynamically (verdict={verdict})"
         return verdict, annotated_raw, "FALLBACK", latency_ms, False
-    else:  # ERROR
+    else: # ERROR
         verdict = evaluate_case_deterministically(case, is_strict_section=is_v1)
         annotated_raw = f"ERROR_FALLBACK ({raw_output}): Evaluated dynamically (verdict={verdict})"
         return verdict, annotated_raw, "ERROR", latency_ms, False
