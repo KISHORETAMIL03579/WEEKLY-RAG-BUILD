@@ -15,6 +15,7 @@ from backend.evaluation.assertions import run_all_assertions
 from backend.evaluation.judge import (
     evaluate_case_deterministically,
     evaluate_case_with_judge,
+    evaluate_case_with_judge_detailed,
 )
 from backend.evaluation.retrieval_runner import (
     EVAL_PRESETS,
@@ -425,6 +426,8 @@ def evaluate_week6(payload: Optional[Week6EvalPayload] = Body(default=None)):
     results = []
     v1_agreed = 0
     v2_agreed = 0
+    eval_run_id = f"eval_{uuid.uuid4().hex[:12]}"
+    run_llm_active = bool(payload and payload.run_llm and v1_template and v2_template)
 
     for c in cases_to_eval:
         cid = c.get("case_id", "case_x")
@@ -435,17 +438,25 @@ def evaluate_week6(payload: Optional[Week6EvalPayload] = Body(default=None)):
         judge_v2_verdict = 1
         v1_raw = "OFFLINE_DETERMINISTIC: Evaluated via deterministic policy assertions."
         v2_raw = "OFFLINE_DETERMINISTIC: Evaluated via deterministic policy assertions."
+        v1_src = "DETERMINISTIC"
+        v2_src = "DETERMINISTIC"
+        v1_lat = 0.0
+        v2_lat = 0.0
+        v1_completed = False
+        v2_completed = False
 
-        if payload and payload.run_llm and v1_template and v2_template:
+        if run_llm_active:
             try:
-                v1_verdict, v1_raw = evaluate_case_with_judge(c, v1_template)
-                v2_verdict, v2_raw = evaluate_case_with_judge(c, v2_template)
+                v1_verdict, v1_raw, v1_src, v1_lat, v1_completed = evaluate_case_with_judge_detailed(c, v1_template)
+                v2_verdict, v2_raw, v2_src, v2_lat, v2_completed = evaluate_case_with_judge_detailed(c, v2_template)
                 judge_v1_verdict = v1_verdict
                 judge_v2_verdict = v2_verdict
             except Exception as e:
                 logger.warning("LLM Judge call failed for case %s: %s", cid, e)
                 judge_v1_verdict = evaluate_case_deterministically(c, is_strict_section=True)
                 judge_v2_verdict = evaluate_case_deterministically(c, is_strict_section=False)
+                v1_src = "ERROR"
+                v2_src = "ERROR"
         else:
             judge_v1_verdict = evaluate_case_deterministically(c, is_strict_section=True)
             judge_v2_verdict = evaluate_case_deterministically(c, is_strict_section=False)
@@ -469,14 +480,21 @@ def evaluate_week6(payload: Optional[Week6EvalPayload] = Body(default=None)):
 
         results.append({
             **c,
+            "evaluation_run_id": eval_run_id,
             "human_label": h_label,
             "assertions": assertions,
             "judge_v1_verdict": judge_v1_verdict,
             "judge_v1_agreed": is_v1_agreed,
             "judge_v1_raw": v1_raw,
+            "judge_v1_source": v1_src,
+            "judge_v1_latency_ms": round(v1_lat, 2),
+            "judge_v1_llm_completed": v1_completed,
             "judge_v2_verdict": judge_v2_verdict,
             "judge_v2_agreed": is_v2_agreed,
             "judge_v2_raw": v2_raw,
+            "judge_v2_source": v2_src,
+            "judge_v2_latency_ms": round(v2_lat, 2),
+            "judge_v2_llm_completed": v2_completed,
             "failure_category": fail_cat,
         })
 
@@ -485,6 +503,7 @@ def evaluate_week6(payload: Optional[Week6EvalPayload] = Body(default=None)):
     v2_pct = (v2_agreed / total * 100) if total else 0.0
 
     return {
+        "evaluation_run_id": eval_run_id,
         "total_cases": total,
         "judge_v1_agreement_pct": round(v1_pct, 2),
         "judge_v2_agreement_pct": round(v2_pct, 2),

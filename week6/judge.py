@@ -26,17 +26,10 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_CHAT_MODEL", "llama3.1:8b")
 _OLLAMA_AVAILABLE: Optional[bool] = None
 
 
-def check_ollama_health(timeout: float = 0.1) -> bool:
-    """Instant TCP circuit-breaker probe to verify if local Ollama daemon is active."""
-def check_ollama_health(timeout: float = 0.05) -> bool:
-    """Instant non-blocking TCP circuit-breaker probe to verify if local Ollama daemon is active."""
+def check_ollama_health(timeout: float = 0.2) -> bool:
+    """Instant non-blocking TCP probe to verify if local Ollama daemon is active."""
     global _OLLAMA_AVAILABLE
-    if _OLLAMA_AVAILABLE is not None:
-        return _OLLAMA_AVAILABLE
     try:
-        with socket.create_connection(("127.0.0.1", 11434), timeout=timeout):
-            _OLLAMA_AVAILABLE = True
-            return True
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(timeout)
         res = s.connect_ex(("127.0.0.1", 11434))
@@ -48,13 +41,14 @@ def check_ollama_health(timeout: float = 0.05) -> bool:
         return False
 
 
-def call_llm_judge(prompt: str, timeout: int = 4, retries: int = 1) -> str:
+def call_llm_judge_detailed(prompt: str, timeout: int = 180, retries: int = 1) -> Tuple[str, str, float]:
     """
-    Production-grade LLM caller for judge prompts.
-    Supports local Ollama daemon and configured backend chat services with instant circuit breaker & backoff.
+    Production-grade LLM caller returning (raw_output, source, latency_ms).
+    Source is explicitly one of 'LLM', 'FALLBACK', or 'ERROR'.
     """
-    global _OLLAMA_AVAILABLE
-    # 1. First probe local Ollama daemon if running
+    t_start = time.perf_counter()
+
+    # 1. First probe local Ollama daemon
     if check_ollama_health():
         ollama_endpoint = f"{OLLAMA_URL.rstrip('/')}/api/generate"
         payload = {
@@ -64,7 +58,8 @@ def call_llm_judge(prompt: str, timeout: int = 4, retries: int = 1) -> str:
             "options": {
                 "temperature": 0.0,
                 "top_p": 0.1,
-                "num_predict": 128
+                "num_predict": 16,
+                "stop": ["\n", "}", "```"]
             }
         }
         encoded_data = json.dumps(payload).encode("utf-8")
@@ -79,16 +74,15 @@ def call_llm_judge(prompt: str, timeout: int = 4, retries: int = 1) -> str:
                 with urllib.request.urlopen(req, timeout=timeout) as resp:
                     if resp.status == 200:
                         res_json = json.loads(resp.read().decode("utf-8"))
-                        return res_json.get("response", "").strip()
                         ans = res_json.get("response", "").strip()
-                        if ans:
-                            return ans
-            except Exception:
+                        latency_ms = (time.perf_counter() - t_start) * 1000
+                        return ans, "LLM", latency_ms
+            except Exception as exc:
                 if attempt < retries:
-                    time.sleep(0.2 * attempt)
+                    time.sleep(0.5 * attempt)
                     continue
-                _OLLAMA_AVAILABLE = False
-                break
+                latency_ms = (time.perf_counter() - t_start) * 1000
+                return f"ERROR: Ollama inference failed: {exc}", "ERROR", latency_ms
 
     # 2. Try configured non-Ollama backend chat service (e.g. xAI/Grok) if available
     try:
@@ -96,17 +90,25 @@ def call_llm_judge(prompt: str, timeout: int = 4, retries: int = 1) -> str:
         from backend.services.llm import chat_configured, chat_call
         if CHAT_BACKEND != "ollama" and chat_configured():
             res = chat_call(
-                system="You are an impartial and rigorous HR Policy evaluation judge. Return ONLY the single integer 1 or 0.",
+                system="You are an impartial and rigorous HR Policy evaluation judge. Return ONLY the single JSON object: {\"verdict\": 1} or {\"verdict\": 0}.",
                 user=prompt,
                 temperature=0.0,
-                max_tokens=64
+                max_tokens=16
             )
             if res and res.strip():
-                return res.strip()
+                latency_ms = (time.perf_counter() - t_start) * 1000
+                return res.strip(), "LLM", latency_ms
     except Exception:
         pass
 
-    return "OFFLINE_FALLBACK: LLM judge daemon not running; deterministic rule assertions active."
+    latency_ms = (time.perf_counter() - t_start) * 1000
+    return "OFFLINE_FALLBACK: LLM judge daemon not running; deterministic rule assertions active.", "FALLBACK", latency_ms
+
+
+def call_llm_judge(prompt: str, timeout: int = 180, retries: int = 1) -> str:
+    """Convenience string-only wrapper for backwards compatibility."""
+    raw, _, _ = call_llm_judge_detailed(prompt, timeout=timeout, retries=retries)
+    return raw
 
 
 def parse_judge_output(output_str: str) -> int:
@@ -179,26 +181,43 @@ def evaluate_case_deterministically(case: Dict[str, Any], is_strict_section: boo
     return 1
 
 
-def evaluate_case_with_judge(case: Dict[str, Any], prompt_template: str) -> Tuple[int, str]:
+def evaluate_case_with_judge_detailed(case: Dict[str, Any], prompt_template: str) -> Tuple[int, str, str, float, bool]:
     """
     Evaluates a single policy QA case using the specified judge prompt template.
-    Returns a tuple of (binary_verdict, raw_llm_response).
-    If LLM is offline or error/timeout occurs, gracefully evaluates deterministically.
+    Returns: (binary_verdict, raw_llm_response, source, latency_ms, llm_completed)
+    where source is 'LLM', 'FALLBACK', or 'ERROR'.
     """
     is_v1 = "v1" in prompt_template.lower() or "judge_v1" in prompt_template.lower()
     
     # Safe template substitution without breaking on literal JSON braces
+    # STRICT DATA INTEGRITY: ONLY question, retrieved_context, and answer are substituted.
+    # NO human labels, expected verdicts, or numeric targets are EVER passed into the prompt.
     formatted_prompt = prompt_template
     formatted_prompt = formatted_prompt.replace("{question}", str(case.get("question", "")).strip())
     formatted_prompt = formatted_prompt.replace("{context}", str(case.get("retrieved_context", "")).strip())
     formatted_prompt = formatted_prompt.replace("{answer}", str(case.get("answer", "")).strip())
 
-    raw_output = call_llm_judge(formatted_prompt)
-    if not raw_output or raw_output.startswith(("OFFLINE_FALLBACK", "ERROR", "TIMEOUT")):
-        verdict = evaluate_case_deterministically(case, is_strict_section=is_v1)
-        raw_output = f"DETERMINISTIC_ASSERTION: Evaluated dynamically (verdict={verdict})"
-    else:
+    raw_output, source, latency_ms = call_llm_judge_detailed(formatted_prompt)
+
+    if source == "LLM":
         verdict = parse_judge_output(raw_output)
+        return verdict, raw_output, "LLM", latency_ms, True
+    elif source == "FALLBACK":
+        verdict = evaluate_case_deterministically(case, is_strict_section=is_v1)
+        annotated_raw = f"FALLBACK_DETERMINISTIC (LLM Offline): Evaluated dynamically (verdict={verdict})"
+        return verdict, annotated_raw, "FALLBACK", latency_ms, False
+    else:  # ERROR
+        verdict = evaluate_case_deterministically(case, is_strict_section=is_v1)
+        annotated_raw = f"ERROR_FALLBACK ({raw_output}): Evaluated dynamically (verdict={verdict})"
+        return verdict, annotated_raw, "ERROR", latency_ms, False
+
+
+def evaluate_case_with_judge(case: Dict[str, Any], prompt_template: str) -> Tuple[int, str]:
+    """
+    Evaluates a single policy QA case using the specified judge prompt template.
+    Returns a tuple of (binary_verdict, raw_llm_response).
+    """
+    verdict, raw_output, _, _, _ = evaluate_case_with_judge_detailed(case, prompt_template)
     return verdict, raw_output
 
 
