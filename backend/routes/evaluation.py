@@ -601,21 +601,13 @@ def evaluate_week6(payload: Optional[Week6EvalPayload] = Body(default=None)):
             fail_reason = "Policy section cited in answer failed to resolve against handbook hierarchy."
             res_text = "Fix section reference resolver or verify handbook page numbering."
         elif h_label == 0:
-            if "truncat" in c.get("taxonomy_mode", "").lower():
-                fail_cat = "pipeline"
-                fail_type = "low_k_truncation"
-                fail_reason = "Retrieval budget truncated mandatory qualifying conditions from policy context."
-                res_text = "Increase retrieval depth K or implement parent-document context expansion."
-            elif "dispersal" in c.get("taxonomy_mode", "").lower():
-                fail_cat = "pipeline"
-                fail_type = "information_dispersal"
-                fail_reason = "Cross-section information dispersal caused generator to miss dispersed clause."
-                res_text = "Enable multi-query reciprocal rank fusion across dispersed document sections."
+            fail_cat = "llm_model"
+            fail_type = "generator_completeness_omission"
+            if is_v2_agreed:
+                fail_reason = "Generator omitted mandatory qualifying conditions present in retrieved context; Judge V2 correctly detected omission."
             else:
-                fail_cat = "llm_model"
-                fail_type = "generator_misinterpretation"
-                fail_reason = "Generator produced an ungrounded or incomplete interpretation."
-                res_text = "Refine prompt system instructions and structured citation constraints."
+                fail_reason = "Generator omitted mandatory qualifying conditions present in retrieved context; Judge V2 failed to detect omission (judge disagreement)."
+            res_text = "Investigate generation completeness for multi-clause policy answers."
         else:
             fail_cat = "llm_model"
             fail_type = "judge_disagreement"
