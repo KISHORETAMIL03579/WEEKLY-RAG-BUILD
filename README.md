@@ -8,48 +8,64 @@ Every model call in the pipeline — embeddings, image OCR, and chat/answer gene
 
 ## 🏛️ Clean Architecture Summary
 
-The application follows **Clean Architecture** and layered-architecture principles by separating HTTP/API concerns, application services, evaluation logic, domain-oriented schemas, and infrastructure/storage implementations:
+The repository follows **Clean Architecture** and layered-architecture principles, structured into four distinct functional categories:
 
-- **`backend/routes/`**: Handles REST API concerns, request validation, and HTTP serialization.
-- **`backend/services/`**: Contains application workflows, embedding/LLM integrations, hybrid search, RRF fusion, and background worker runners.
-- **`backend/evaluation/`**: Contains deterministic assertions, LLM-based judges, and retrieval benchmark runners.
-- **`backend/storage/`**: Isolates persistence, session management, durable trace storage, and vector-store infrastructure (`QdrantVectorStore`).
-- **`backend/schemas/`**: Pydantic models enforcing strict contract boundaries between layers.
-- **`week6/`**: Contains evaluation-specific benchmark datasets (`eval_cases_25.json`), human ground-truth labels (`labels_25.json`), and calibrated judge prompts (`judge_v1.txt`, `judge_v2.txt`), cleanly separating benchmark assets from production RAG code.
-- **Evaluation Lifecycle**: The Week 6 evaluation lifecycle is backend-managed through `EvaluationRunManager`, allowing long-running 25-case evaluations to continue independently of the React component lifecycle. The frontend observes the active evaluation run through its API client and seamlessly reconnects to an existing run after navigation or page refresh.
-- **Docker & Compose**: `Dockerfile` and `docker-compose.yml` reside at the repository root because the multi-stage production build and service orchestration use the complete repository as the build context, coordinating the application container, Qdrant vector database, and Ollama inference engine.
+### 1. Application Source Code
+- **`backend/`**: Authoritative FastAPI backend.
+  - **`backend/routes/`**: Handles REST API concerns, request validation, and HTTP serialization.
+  - **`backend/services/`**: Application workflows, embedding/LLM integrations, hybrid search, RRF fusion, and background worker runners (`EvaluationRunManager`).
+  - **`backend/evaluation/`**: Deterministic assertions, LLM-based judges, and retrieval benchmark runners.
+  - **`backend/schemas/`**: Pydantic models enforcing strict contract boundaries between layers.
+  - **`backend/storage/`**: Isolates persistence, session management, durable trace storage, and vector-store infrastructure (`QdrantVectorStore`).
+- **`frontend/`**: Modern React 18 + TypeScript + Vite single-page application.
+
+### 2. Testing & Evaluation
+- **`tests/`**: Automated test suite (`test_eval_lifecycle.py`, `test_eval_metrics.py`, `test_week6.py`) with 86 passing tests.
+- **`week6/`**: Benchmark datasets (`eval_cases_25.json`), human ground-truth labels (`labels_25.json`), and calibrated judge prompts (`judge_v1.txt`, `judge_v2.txt`), cleanly separating benchmark assets from production RAG code.
+- **`scripts/`**: Standalone evaluation runners, audit scripts, and diagnostic tools.
+
+### 3. Runtime & Storage (Ephemeral / Data)
+- **`traces/`**: Durable runtime execution trace logs (`traces.jsonl`).
+- **`uploads/`**: Uploaded document cache for PDF/TXT/DOCX files.
+- **`vectorstore/`**: Local disk vector index storage.
+
+### 4. Project & Tooling Configuration
+- **`Dockerfile` & `docker-compose.yml`**: Production container build and multi-service orchestration (app + Qdrant + Ollama).
+- **`requirements.txt`**: Pinned Python dependencies.
+- **`app.py`**: **Backward-compatible facade** — maintained as a migration entry point re-exporting `backend.main:app` for legacy test runners. All authoritative application logic resides exclusively in `backend/`.
 
 ```text
 WEEK-3-RAG/
 │
-├── backend/
-│   ├── main.py
-│   ├── config.py
-│   ├── middleware.py
-│   ├── routes/
-│   ├── services/
-│   ├── evaluation/
-│   ├── schemas/
-│   └── storage/
+├── backend/                         # 🏛️ Authoritative FastAPI backend
+│   ├── main.py                      # FastAPI application entry point
+│   ├── config.py                    # Environment and application configuration
+│   ├── middleware.py                # MaxBodySize & build middleware
+│   ├── routes/                      # REST API routes (/ask, /upload, /eval, /traces)
+│   ├── services/                    # Business logic (LLM, search, chunker, runner)
+│   ├── evaluation/                  # Assertions, metrics, judges
+│   ├── schemas/                     # Pydantic request/response schemas
+│   └── storage/                     # Qdrant, Trace, Session & Orphan stores
 │
-├── frontend/
-│   └── src/
-│       ├── components/
-│       ├── services/
-│       └── types/
+├── frontend/                        # ⚛️ React 18 + TypeScript + Vite UI
+│   └── src/                         # Components, pages, services, types
 │
-├── tests/
-├── week6/
-├── scripts/
-├── prompts/
-├── traces/
-├── uploads/
-├── vectorstore/
+├── tests/                           # 🧪 Automated test suite (86/86 passing)
+├── week6/                           # 📊 Week 6 evaluation benchmark assets
+├── scripts/                         # 🛠️ Diagnostic & audit scripts
+├── prompts/                         # 📝 Production RAG prompt templates
 │
-├── Dockerfile
-├── docker-compose.yml
-├── requirements.txt
-└── README.md
+├── traces/                          # 📊 Runtime trace logs (runtime data)
+├── uploads/                         # 📂 Local upload storage (runtime data)
+├── vectorstore/                     # 💾 Local vector persistence (runtime data)
+├── WEEKLY_RAG_TASK/                 # 📚 Course briefs & reference materials
+│
+├── app.py                           # 🔄 Backward-compatible root facade
+├── Dockerfile                       # 🐳 Production container build
+├── docker-compose.yml               # 🐳 Multi-service orchestration
+├── requirements.txt                 # 📦 Python package dependencies
+├── .env.example                     # ⚙️ Configuration template
+└── README.md                        # 📖 Project documentation
 ```
 
 ---
