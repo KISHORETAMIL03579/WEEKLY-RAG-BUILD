@@ -226,4 +226,3 @@ class QdrantVectorStore:
         view.chunks = [self.chunks[i] for i in matched]
         view.vectors = [self.vectors[i] for i in matched] if has_vectors else []
         return view
-

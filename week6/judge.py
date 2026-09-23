@@ -26,12 +26,17 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_CHAT_MODEL", "llama3.1:8b")
 _OLLAMA_AVAILABLE: Optional[bool] = None
 
 
+def check_ollama_health(timeout: float = 0.1) -> bool:
+    """Instant TCP circuit-breaker probe to verify if local Ollama daemon is active."""
 def check_ollama_health(timeout: float = 0.05) -> bool:
     """Instant non-blocking TCP circuit-breaker probe to verify if local Ollama daemon is active."""
     global _OLLAMA_AVAILABLE
     if _OLLAMA_AVAILABLE is not None:
         return _OLLAMA_AVAILABLE
     try:
+        with socket.create_connection(("127.0.0.1", 11434), timeout=timeout):
+            _OLLAMA_AVAILABLE = True
+            return True
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(timeout)
         res = s.connect_ex(("127.0.0.1", 11434))
@@ -74,6 +79,7 @@ def call_llm_judge(prompt: str, timeout: int = 4, retries: int = 1) -> str:
                 with urllib.request.urlopen(req, timeout=timeout) as resp:
                     if resp.status == 200:
                         res_json = json.loads(resp.read().decode("utf-8"))
+                        return res_json.get("response", "").strip()
                         ans = res_json.get("response", "").strip()
                         if ans:
                             return ans

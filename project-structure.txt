@@ -4,8 +4,10 @@
 .gitignore
 .vscode/settings.json
 app.py
+docker-compose.yaml
 docker-compose.yml
 Dockerfile
+eval_retrieval.py
 frontend/.gitignore
 frontend/index.html
 frontend/package.json
@@ -50,10 +52,12 @@ prompts/rewrite-v1.txt
 qdrant_store.py
 README.md
 requirements.txt
+sample_trace.py
 scripts/eval_retrieval.py
 scripts/fix-git.ps1
 scripts/sample_trace.py
 taxonomy.md
+test_eval_metrics.py
 tests/__init__.py
 tests/test_eval_metrics.py
 tests/test_hr_policy_25_questions.txt
@@ -75,3 +79,14 @@ week6/rag_findings.md
 week6/test_hr_policy_25_questions.txt
 week6/trace_eval_results.json
 WEEKLY_RAG_TASK/HRPolicy.pdf
+WEEKLY_RAG_TASK/test_angular.pdf
+WEEKLY_RAG_TASK/W5-Task-Set-C.md
+WEEKLY_RAG_TASK/W6-Task-Set-C.md
+WEEKLY_RAG_TASK/W7-Task-Set-C.md
+WEEKLY_RAG_TASK/Week-4-Debugging-Retrieval 1 1.docx
+WEEKLY_RAG_TASK/Week1-Module1-Foundations 1 1 1.docx
+WEEKLY_RAG_TASK/Week2-Module1-Prompting-Tool-Calling 2.docx
+WEEKLY_RAG_TASK/Week3_Module2_Retrieval_and_RAG.pdf
+WEEKLY_RAG_TASK/Week5_Module3_Error_Analysis_Task_Brief 1.docx
+WEEKLY_RAG_TASK/Week6_Module3_Evals_Task_Brief.docx
+WEEKLY_RAG_TASK/Week7_Module4_Agent_Loops_Task_Brief.docx

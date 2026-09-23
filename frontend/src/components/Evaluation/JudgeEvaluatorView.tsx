@@ -279,6 +279,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
       }
 
       setEvaluatingCaseId(null);
+      notify(`Evaluated all ${total} test cases with Judge V1 and Judge V2! (100% Completed)`, 'success');
       notify(`Evaluated all ${total} test cases with Live LLM Judge! (100% Completed)`, 'success');
     } catch (e: unknown) {
       const err = e as Error;

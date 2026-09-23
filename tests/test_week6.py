@@ -6,6 +6,7 @@ import json
 import unittest
 import pathlib
 
+sys.path.insert(0, str(pathlib.Path(__file__).parent))
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
@@ -34,6 +35,8 @@ class TestWeek6Evaluation(unittest.TestCase):
     """Automated test suite verifying the complete Week 6 Task Set C specification."""
 
     def setUp(self):
+        self.cases_path = "week6/eval_cases_25.json"
+        self.labels_path = "week6/labels_25.json"
         self.cases_path = str(REPO_ROOT / "week6" / "eval_cases_25.json")
         self.labels_path = str(REPO_ROOT / "week6" / "labels_25.json")
 

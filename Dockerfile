@@ -18,10 +18,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application modules and assets
-COPY app.py qdrant_store.py eval_retrieval.py trace_store.py sample_trace.py ./
+COPY app.py qdrant_store.py trace_store.py ./
 COPY backend/ backend/
 COPY prompts/ prompts/
 COPY week6/ week6/
+COPY scripts/ scripts/
+COPY tests/ tests/
 
 # Copy compiled React frontend assets from builder stage
 COPY --from=frontend-builder /build/frontend/dist ./frontend/dist
