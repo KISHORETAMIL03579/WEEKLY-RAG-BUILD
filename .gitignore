@@ -47,6 +47,7 @@ __pycache__/
 *.log
 server.log
 server.err.log
+scratch/
 
 # Node & Frontend build artifacts
 node_modules/
