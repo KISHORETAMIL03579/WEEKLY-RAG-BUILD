@@ -1236,7 +1236,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                 <th style={{ padding: '12px 14px', width: '100px' }}>Case ID</th>
                 <th style={{ padding: '12px 14px', width: '220px' }}>Question</th>
                 <th style={{ padding: '12px 14px', width: '220px' }}>Assistant Answer</th>
-                <th style={{ padding: '12px 14px', textAlign: 'center', width: '90px' }}>Human Label</th>
+                <th style={{ padding: '12px 14px', textAlign: 'center', width: '100px' }}>Ground Truth</th>
                 <th style={{ padding: '12px 14px', textAlign: 'center', width: '105px' }}>Judge V1</th>
                 <th style={{ padding: '12px 14px', textAlign: 'center', width: '105px' }}>Judge V2</th>
                 <th style={{ padding: '12px 14px', width: '130px' }}>Assertions</th>
@@ -1375,22 +1375,43 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                         </div>
                       </td>
 
-                      {/* Human Ground Truth */}
+                      {/* Ground Truth */}
                       <td style={{ padding: '12px 14px', verticalAlign: 'top', textAlign: 'center' }}>
-                        <span
-                          style={{
-                            display: 'inline-block',
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            background: c.human_label === 1 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                            color: c.human_label === 1 ? '#34d399' : '#f87171',
-                            border: `1px solid ${c.human_label === 1 ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
-                          }}
-                        >
-                          {c.human_label === 1 ? '1 (Pass)' : '0 (Fail)'}
-                        </span>
+                        {isCompleted ? (
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              background: c.human_label === 1 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                              color: c.human_label === 1 ? '#34d399' : '#f87171',
+                              border: `1px solid ${c.human_label === 1 ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                              fontFamily: 'ui-monospace, monospace',
+                            }}
+                            title={`Benchmark Ground Truth Label: ${c.human_label === 1 ? '1 (Expected Pass)' : '0 (Expected Fail)'}`}
+                          >
+                            {c.human_label ?? '—'}
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              background: 'rgba(255, 255, 255, 0.05)',
+                              color: 'var(--text-muted)',
+                              border: '1px solid rgba(255, 255, 255, 0.1)',
+                              fontFamily: 'ui-monospace, monospace',
+                            }}
+                            title="Benchmark Ground Truth Label"
+                          >
+                            {c.human_label ?? '—'}
+                          </span>
+                        )}
                       </td>
 
                       {/* Judge V1 */}
@@ -1412,7 +1433,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                             <span className="spinner" style={{ width: '10px', height: '10px' }}></span>
                             Running
                           </span>
-                        ) : isCompleted ? (
+                        ) : isCompleted && c.judge_v1_verdict !== null && c.judge_v1_verdict !== undefined ? (
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
                             <span
                               style={{
@@ -1423,16 +1444,17 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                                 fontWeight: 700,
                                 background: c.judge_v1_verdict === 1 ? 'rgba(59, 130, 246, 0.2)' : 'rgba(239, 68, 68, 0.2)',
                                 color: c.judge_v1_verdict === 1 ? '#60a5fa' : '#f87171',
+                                fontFamily: 'ui-monospace, monospace',
                               }}
                             >
-                              {c.judge_v1_verdict === 1 ? '1 (Pass)' : '0 (Fail)'}
+                              {c.judge_v1_verdict}
                             </span>
-                            <span style={{ fontSize: '0.65rem', color: isV1Agreed ? '#10b981' : '#f59e0b' }}>
-                              {isV1Agreed ? '✓ Agreed' : '⚠ Disagreed'}
+                            <span style={{ fontSize: '0.65rem', fontWeight: 600, color: isV1Agreed ? '#10b981' : '#f59e0b' }}>
+                              {isV1Agreed ? '✓ Agree' : '⚠ Disagree'}
                             </span>
                           </div>
                         ) : (
-                          <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>— (Pending)</span>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Pending</span>
                         )}
                       </td>
 
@@ -1455,7 +1477,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                             <span className="spinner" style={{ width: '10px', height: '10px' }}></span>
                             Running
                           </span>
-                        ) : isCompleted ? (
+                        ) : isCompleted && c.judge_v2_verdict !== null && c.judge_v2_verdict !== undefined ? (
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
                             <span
                               style={{
@@ -1466,16 +1488,17 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                                 fontWeight: 700,
                                 background: c.judge_v2_verdict === 1 ? 'rgba(59, 130, 246, 0.2)' : 'rgba(239, 68, 68, 0.2)',
                                 color: c.judge_v2_verdict === 1 ? '#60a5fa' : '#f87171',
+                                fontFamily: 'ui-monospace, monospace',
                               }}
                             >
-                              {c.judge_v2_verdict === 1 ? '1 (Pass)' : '0 (Fail)'}
+                              {c.judge_v2_verdict}
                             </span>
-                            <span style={{ fontSize: '0.65rem', color: isV2Agreed ? '#10b981' : '#f59e0b' }}>
-                              {isV2Agreed ? '✓ Agreed' : '⚠ Disagreed'}
+                            <span style={{ fontSize: '0.65rem', fontWeight: 600, color: isV2Agreed ? '#10b981' : '#f59e0b' }}>
+                              {isV2Agreed ? '✓ Agree' : '⚠ Disagree'}
                             </span>
                           </div>
                         ) : (
-                          <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>— (Pending)</span>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Pending</span>
                         )}
                       </td>
 
@@ -1498,8 +1521,6 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                               {c.assertions.out_of_jurisdiction_refusal ? '✓' : '✗'} Refusal Guard
                             </span>
                           </div>
-                        ) : isCompleted ? (
-                          <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Deterministic OK</span>
                         ) : (
                           <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>—</span>
                         )}
@@ -1787,12 +1808,12 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                   border: '1px solid var(--border)',
                 }}
               >
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Human Ground Truth</div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Ground Truth</div>
                 <div style={{ fontSize: '1.1rem', fontWeight: 700, color: selectedCase.human_label === 1 ? '#34d399' : '#f87171' }}>
-                  {selectedCase.human_label === 1 ? '1 (Pass)' : '0 (Fail)'}
+                  {selectedCase.human_label ?? '—'}
                 </div>
                 <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  {selectedCase.human_label === 1 ? 'Valid grounded answer' : 'Contains error/omission'}
+                  {selectedCase.human_label === 1 ? 'Expected Pass (1)' : 'Expected Fail (0)'}
                 </div>
               </div>
               <div
@@ -1816,11 +1837,9 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                         : 'var(--text-muted)',
                   }}
                 >
-                  {selectedCase.judge_v1_verdict === 1
-                    ? '1 (Pass)'
-                    : selectedCase.judge_v1_verdict === 0
-                    ? '0 (Fail)'
-                    : '— (Pending)'}
+                  {selectedCase.judge_v1_verdict !== null && selectedCase.judge_v1_verdict !== undefined
+                    ? `${selectedCase.judge_v1_verdict} (${selectedCase.judge_v1_verdict === selectedCase.human_label ? 'Agree' : 'Disagree'})`
+                    : 'Pending'}
                 </div>
                 <div
                   style={{
@@ -1863,11 +1882,9 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                         : 'var(--text-muted)',
                   }}
                 >
-                  {selectedCase.judge_v2_verdict === 1
-                    ? '1 (Pass)'
-                    : selectedCase.judge_v2_verdict === 0
-                    ? '0 (Fail)'
-                    : '— (Pending)'}
+                  {selectedCase.judge_v2_verdict !== null && selectedCase.judge_v2_verdict !== undefined
+                    ? `${selectedCase.judge_v2_verdict} (${selectedCase.judge_v2_verdict === selectedCase.human_label ? 'Agree' : 'Disagree'})`
+                    : 'Pending'}
                 </div>
                 <div
                   style={{
