@@ -29,6 +29,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
   const [cases, setCases] = useState<JudgeCaseResult[]>([]);
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [isStarting, setIsStarting] = useState<boolean>(false);
   const [evalProgress, setEvalProgress] = useState<EvaluationProgress | null>(null);
   const [evaluatingCaseId, setEvaluatingCaseId] = useState<string | null>(null);
   const [filterMode, setFilterMode] = useState<string>('all');
@@ -303,7 +304,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
       return;
     }
     stopPolling();
-    updateLoadingState(true);
+    setIsStarting(true);
     setEvalProgress(null);
     setEvaluatingCaseId(null);
 
@@ -312,6 +313,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
       sessionStorage.setItem('active_evaluation_run_id', runState.evaluation_run_id);
       setCurrentRunId(runState.evaluation_run_id);
       setCases(runState.cases || runState.results || []);
+      updateLoadingState(true);
       startPolling(runState.evaluation_run_id);
       notify(
         `🚀 Started background evaluation run "${runState.evaluation_run_id}" (${runState.total_cases} cases, engine: ${evalEngine})!`,
@@ -320,6 +322,8 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
     } catch (e) {
       updateLoadingState(false);
       notify('Failed to start evaluation run: ' + (e as Error).message, 'error');
+    } finally {
+      setIsStarting(false);
     }
   };
 
@@ -755,10 +759,28 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                 🛑 Cancel
               </button>
             </div>
+          ) : isStarting ? (
+            <button
+              type="button"
+              disabled
+              className="btn-primary"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                minWidth: '180px',
+                justifyContent: 'center',
+                opacity: 0.85,
+              }}
+            >
+              <span className="spinner" style={{ width: '14px', height: '14px' }}></span>
+              <span>Starting Run...</span>
+            </button>
           ) : (
             <button
               type="button"
               onClick={handleRunEvaluation}
+              disabled={cases.length === 0}
               className="btn-primary"
               style={{
                 display: 'flex',

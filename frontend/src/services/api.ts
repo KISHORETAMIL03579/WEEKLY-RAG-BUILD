@@ -174,28 +174,10 @@ export const api = {
       if (fallbackRes && fallbackRes.ok) {
         return handleResponse<EvaluationRunStateResponse>(fallbackRes);
       }
+    }
 
-      // Synchronous evaluate fallback if backend background runner is unavailable
-      if (!res || res.status === 404) {
-        const syncData = await this.evaluateJudges(cases, runLlm, signal);
-        const results = syncData.results || [];
-        return {
-          evaluation_run_id: syncData.evaluation_run_id || `eval_${Date.now()}`,
-          status: 'COMPLETED',
-          eval_engine: runLlm ? 'llm' : 'deterministic',
-          total_cases: syncData.total_cases || results.length,
-          completed_cases: syncData.total_cases || results.length,
-          judge_v1_agreement_pct: syncData.judge_v1_agreement_pct ?? 0,
-          judge_v2_agreement_pct: syncData.judge_v2_agreement_pct ?? 0,
-          v1_agreements: syncData.v1_agreements ?? 0,
-          v2_agreements: syncData.v2_agreements ?? 0,
-          created_at: Date.now() / 1000,
-          updated_at: Date.now() / 1000,
-          elapsed_seconds: 0.1,
-          cases: results,
-          results,
-        };
-      }
+    if (!res) {
+      throw new Error('Failed to connect to backend evaluation service');
     }
 
     return handleResponse<EvaluationRunStateResponse>(res);

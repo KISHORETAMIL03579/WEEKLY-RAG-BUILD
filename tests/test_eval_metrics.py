@@ -1459,12 +1459,20 @@ class TestFastAPIMigration(unittest.TestCase):
         dropped path during the migration must fail here, not in the browser."""
         from app import app
 
+        all_routes = []
+        for route in app.routes:
+            if hasattr(route, "routes") and route.routes:
+                all_routes.extend(route.routes)
+            elif hasattr(route, "original_router") and hasattr(route.original_router, "routes"):
+                all_routes.extend(route.original_router.routes)
+            else:
+                all_routes.append(route)
+
         registered = {
-            (path, method)
-            for route in app.routes
-            for path in [getattr(route, "path", None)]
+            (getattr(route, "path", None), method)
+            for route in all_routes
             for method in (getattr(route, "methods", None) or set())
-            if path
+            if getattr(route, "path", None)
         }
         expected = [
             ("/", "GET"), ("/upload", "POST"), ("/upload-cancel", "POST"),
