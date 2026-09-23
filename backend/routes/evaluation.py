@@ -21,6 +21,7 @@ from backend.evaluation.retrieval_runner import (
     EVAL_PRESETS,
     run_eval_preset,
 )
+from backend.services.evaluation_runner import run_manager
 from backend.schemas.evaluation import (
     EvalRunPayload,
     JudgeCasePayload,
@@ -417,70 +418,23 @@ def evaluate_week6(payload: Optional[Week6EvalPayload] = Body(default=None)):
         except Exception:
             labels = {}
 
-    cases_to_eval = []
-    if payload and payload.cases:
-        for idx, c in enumerate(payload.cases):
-            cid = c.case_id or f"custom_{idx + 1}"
-            bm = find_matching_benchmark(cid, c.question, c.answer, raw_benchmark_cases)
-            resolved_cid = bm.get("case_id", cid)
+def _prepare_cases_for_evaluation(cases_payload: Optional[list]) -> tuple[list[dict], dict[str, int], str, str]:
+    """Prepares and resolves test cases against benchmark metadata with zero data leakage."""
+    v1_prompt_path = BASE_DIR / "week6" / "judge_v1.txt"
+    v2_prompt_path = BASE_DIR / "week6" / "judge_v2.txt"
+    cases_file = BASE_DIR / "week6" / "eval_cases_25.json"
+    labels_file = BASE_DIR / "week6" / "labels_25.json"
 
-            ctx = c.retrieved_context or bm.get("retrieved_context", "")
-            exp_num = c.expected_numeric if c.expected_numeric is not None else bm.get("expected_numeric")
-            is_ooj = c.out_of_jurisdiction if c.out_of_jurisdiction is not None else bm.get("out_of_jurisdiction", False)
+    v1_template = v1_prompt_path.read_text(encoding="utf-8") if v1_prompt_path.exists() else ""
+    v2_template = v2_prompt_path.read_text(encoding="utf-8") if v2_prompt_path.exists() else ""
 
-            if c.human_label is not None:
-                h_lbl = c.human_label
-            elif resolved_cid in labels:
-                h_lbl = labels[resolved_cid]
-            elif "human_label" in bm:
-                h_lbl = bm["human_label"]
-            elif bm.get("regression", False) or resolved_cid in ("case_01", "case_03"):
-                h_lbl = 0
-            else:
-                h_lbl = 1
-
-            mode_val = c.taxonomy_mode
-            if not mode_val or mode_val in ("Custom Query", "Uploaded TXT QA", "Imported Case"):
-                mode_val = bm.get("taxonomy_mode", c.taxonomy_mode or "HR Policy")
-
-            cases_to_eval.append({
-                "case_id": c.case_id or f"custom_{idx + 1}",
-                "trace_id": c.trace_id or "",
-                "case_id": resolved_cid,
-                "trace_id": c.trace_id or bm.get("trace_id", f"trace_{resolved_cid}"),
-                "question": c.question,
-                "answer": c.answer,
-                "retrieved_context": c.retrieved_context or "",
-                "handbook_version": c.handbook_version or "2018",
-                "section_info": c.section_info or "",
-                "taxonomy_mode": c.taxonomy_mode or "Custom Query",
-                "human_label": c.human_label if c.human_label is not None else 1,
-                "expected_numeric": c.expected_numeric,
-                "out_of_jurisdiction": c.out_of_jurisdiction,
-                "failure_category": c.failure_category or "pass",
-                "failure_type": c.failure_type or "",
-                "failure_reason": c.failure_reason or "",
-                "resolution": c.resolution or "",
-                "retrieved_context": ctx,
-                "handbook_version": c.handbook_version or bm.get("handbook_version", "2018"),
-                "section_info": c.section_info or bm.get("section_info", ""),
-                "taxonomy_mode": mode_val,
-                "human_label": h_lbl,
-                "expected_numeric": exp_num,
-                "out_of_jurisdiction": is_ooj,
-                "failure_category": c.failure_category or bm.get("failure_category", "pass"),
-                "failure_type": c.failure_type or bm.get("failure_type", ""),
-                "failure_reason": c.failure_reason or bm.get("failure_reason", ""),
-                "resolution": c.resolution or bm.get("resolution", ""),
-            })
-    else:
-        if cases_file.exists():
-            try:
-                with open(cases_file, "r", encoding="utf-8") as f:
-                    cases_to_eval = json.load(f)
-            except Exception:
-                cases_to_eval = []
-        cases_to_eval = raw_benchmark_cases
+    raw_benchmark_cases = []
+    if cases_file.exists():
+        try:
+            with open(cases_file, "r", encoding="utf-8") as f:
+                raw_benchmark_cases = json.load(f)
+        except Exception:
+            raw_benchmark_cases = []
 
     labels = {}
     if labels_file.exists():
@@ -490,21 +444,146 @@ def evaluate_week6(payload: Optional[Week6EvalPayload] = Body(default=None)):
         except Exception:
             labels = {}
 
+    cases_to_eval = []
+    if cases_payload:
+        for idx, c in enumerate(cases_payload):
+            if hasattr(c, "model_dump"):
+                c_dict = c.model_dump()
+            elif isinstance(c, dict):
+                c_dict = c
+            else:
+                c_dict = getattr(c, "__dict__", {})
+
+            cid = c_dict.get("case_id") or f"custom_{idx + 1}"
+            bm = find_matching_benchmark(cid, c_dict.get("question", ""), c_dict.get("answer", ""), raw_benchmark_cases)
+            resolved_cid = bm.get("case_id", cid)
+
+            ctx = c_dict.get("retrieved_context") or bm.get("retrieved_context", "")
+            exp_num = c_dict.get("expected_numeric") if c_dict.get("expected_numeric") is not None else bm.get("expected_numeric")
+            is_ooj = c_dict.get("out_of_jurisdiction") if c_dict.get("out_of_jurisdiction") is not None else bm.get("out_of_jurisdiction", False)
+
+            if c_dict.get("human_label") is not None:
+                h_lbl = c_dict["human_label"]
+            elif resolved_cid in labels:
+                h_lbl = labels[resolved_cid]
+            elif "human_label" in bm:
+                h_lbl = bm["human_label"]
+            elif bm.get("regression", False) or resolved_cid in ("case_01", "case_03"):
+                h_lbl = 0
+            else:
+                h_lbl = 1
+
+            mode_val = c_dict.get("taxonomy_mode")
+            if not mode_val or mode_val in ("Custom Query", "Uploaded TXT QA", "Imported Case"):
+                mode_val = bm.get("taxonomy_mode", "HR Policy")
+
+            cases_to_eval.append({
+                "case_id": resolved_cid,
+                "trace_id": c_dict.get("trace_id") or bm.get("trace_id", f"trace_{resolved_cid}"),
+                "question": c_dict.get("question", ""),
+                "answer": c_dict.get("answer", ""),
+                "retrieved_context": ctx,
+                "handbook_version": c_dict.get("handbook_version") or bm.get("handbook_version", "2018"),
+                "section_info": c_dict.get("section_info") or bm.get("section_info", ""),
+                "taxonomy_mode": mode_val,
+                "human_label": h_lbl,
+                "expected_numeric": exp_num,
+                "out_of_jurisdiction": is_ooj,
+            })
+    else:
+        for c in raw_benchmark_cases:
+            cid = c.get("case_id")
+            cases_to_eval.append({
+                "case_id": cid,
+                "trace_id": c.get("trace_id", f"trace_{cid}"),
+                "question": c.get("question", ""),
+                "answer": c.get("answer", ""),
+                "retrieved_context": c.get("retrieved_context", ""),
+                "handbook_version": c.get("handbook_version", "2018"),
+                "section_info": c.get("section_info", ""),
+                "taxonomy_mode": c.get("taxonomy_mode", "HR Policy"),
+                "human_label": labels.get(cid, c.get("human_label", 1)),
+                "expected_numeric": c.get("expected_numeric"),
+                "out_of_jurisdiction": c.get("out_of_jurisdiction", False),
+            })
+
+    return cases_to_eval, labels, v1_template, v2_template
+
+
+@router.post("/api/evaluation/runs")
+def create_evaluation_run(payload: Optional[Week6EvalPayload] = Body(default=None)):
+    """Starts a background evaluation run independent of the frontend component lifecycle."""
+    cases_payload = payload.cases if payload else None
+    eval_engine = "llm" if (payload and payload.run_llm) else "deterministic"
+
+    cases_to_eval, labels, v1_template, v2_template = _prepare_cases_for_evaluation(cases_payload)
+    if not cases_to_eval:
+        return JSONResponse({"error": "No cases available to evaluate"}, status_code=400)
+
+    run_state = run_manager.start_run(
+        cases=cases_to_eval,
+        eval_engine=eval_engine,
+        v1_template=v1_template,
+        v2_template=v2_template,
+        labels=labels,
+    )
+
+    return run_state.to_dict()
+
+
+@router.get("/api/evaluation/runs/active")
+def get_active_evaluation_run():
+    """Returns the currently active running evaluation or the latest run state."""
+    active_id = run_manager.get_active_run_id()
+    if not active_id:
+        return {"active_run_id": None, "run": None}
+    run = run_manager.get_run(active_id)
+    return {
+        "active_run_id": active_id,
+        "run": run.to_dict() if run else None,
+    }
+
+
+@router.get("/api/evaluation/runs/{run_id}")
+def get_evaluation_run(run_id: str):
+    """Returns the current state and results for a specific evaluation run."""
+    run = run_manager.get_run(run_id)
+    if not run:
+        return JSONResponse({"error": f"Evaluation run '{run_id}' not found"}, status_code=404)
+    return run.to_dict()
+
+
+@router.post("/api/evaluation/runs/{run_id}/cancel")
+def cancel_evaluation_run(run_id: str):
+    """Explicitly cancels an active background evaluation run upon user request."""
+    success = run_manager.cancel_run(run_id)
+    if not success:
+        return JSONResponse({"error": f"Evaluation run '{run_id}' not found"}, status_code=404)
+    return {"ok": True, "evaluation_run_id": run_id, "status": "CANCELLED"}
+
+
+@router.post("/api/evaluation/judges")
+@router.post("/api/week6/evaluate")
+def evaluate_week6(payload: Optional[Week6EvalPayload] = Body(default=None)):
+    """Synchronous judge evaluation endpoint returning clean and dynamic failure metadata."""
+    cases_payload = payload.cases if payload else None
+    run_llm_active = bool(payload and payload.run_llm)
+
+    cases_to_eval, labels, v1_template, v2_template = _prepare_cases_for_evaluation(cases_payload)
+    eval_run_id = f"eval_{uuid.uuid4().hex[:12]}"
     results = []
     v1_agreed = 0
     v2_agreed = 0
-    eval_run_id = f"eval_{uuid.uuid4().hex[:12]}"
-    run_llm_active = bool(payload and payload.run_llm and v1_template and v2_template)
 
     for c in cases_to_eval:
         cid = c.get("case_id", "case_x")
         h_label = labels.get(cid, c.get("human_label", 1))
         assertions = run_all_assertions(c)
 
-        judge_v1_verdict = 1
-        judge_v2_verdict = 1
-        v1_raw = "OFFLINE_DETERMINISTIC: Evaluated via deterministic policy assertions."
-        v2_raw = "OFFLINE_DETERMINISTIC: Evaluated via deterministic policy assertions."
+        v1_verdict = 1
+        v2_verdict = 1
+        v1_raw = "OFFLINE_DETERMINISTIC"
+        v2_raw = "OFFLINE_DETERMINISTIC"
         v1_src = "DETERMINISTIC"
         v2_src = "DETERMINISTIC"
         v1_lat = 0.0
@@ -512,38 +591,60 @@ def evaluate_week6(payload: Optional[Week6EvalPayload] = Body(default=None)):
         v1_completed = False
         v2_completed = False
 
-        if run_llm_active:
+        if run_llm_active and v1_template and v2_template:
             try:
                 v1_verdict, v1_raw, v1_src, v1_lat, v1_completed = evaluate_case_with_judge_detailed(c, v1_template)
                 v2_verdict, v2_raw, v2_src, v2_lat, v2_completed = evaluate_case_with_judge_detailed(c, v2_template)
-                judge_v1_verdict = v1_verdict
-                judge_v2_verdict = v2_verdict
             except Exception as e:
                 logger.warning("LLM Judge call failed for case %s: %s", cid, e)
-                judge_v1_verdict = evaluate_case_deterministically(c, is_strict_section=True)
-                judge_v2_verdict = evaluate_case_deterministically(c, is_strict_section=False)
+                v1_verdict = evaluate_case_deterministically(c, is_strict_section=True)
+                v2_verdict = evaluate_case_deterministically(c, is_strict_section=False)
                 v1_src = "ERROR"
                 v2_src = "ERROR"
         else:
             judge_v1_verdict = evaluate_case_deterministically(c, is_strict_section=True)
             judge_v2_verdict = evaluate_case_deterministically(c, is_strict_section=False)
 
-        is_v1_agreed = (judge_v1_verdict == h_label)
-        is_v2_agreed = (judge_v2_verdict == h_label)
+        is_v1_agreed = (v1_verdict == h_label)
+        is_v2_agreed = (v2_verdict == h_label)
 
         if is_v1_agreed:
             v1_agreed += 1
         if is_v2_agreed:
             v2_agreed += 1
 
-        fail_cat = c.get("failure_category")
-        if not fail_cat or fail_cat == "pass":
-            if not assertions.get("policy_section_reference_resolves"):
-                fail_cat = "code_issue"
-            elif h_label == 0 or judge_v1_verdict == 0 or judge_v2_verdict == 0:
-                fail_cat = "pipeline" if ("truncat" in c.get("taxonomy_mode", "").lower() or "dispersal" in c.get("taxonomy_mode", "").lower()) else "llm_model"
+        # Dynamic, non-contradictory failure metadata calculation
+        if is_v2_agreed and h_label == 1:
+            fail_cat = "pass"
+            fail_type = ""
+            fail_reason = ""
+            res_text = ""
+        elif not assertions.get("policy_section_reference_resolves"):
+            fail_cat = "code_issue"
+            fail_type = "unresolvable_section_reference"
+            fail_reason = "Policy section cited in answer failed to resolve against handbook hierarchy."
+            res_text = "Fix section reference resolver or verify handbook page numbering."
+        elif h_label == 0:
+            if "truncat" in c.get("taxonomy_mode", "").lower():
+                fail_cat = "pipeline"
+                fail_type = "low_k_truncation"
+                fail_reason = "Retrieval budget truncated mandatory qualifying conditions from policy context."
+                res_text = "Increase retrieval depth K or implement parent-document context expansion."
+            elif "dispersal" in c.get("taxonomy_mode", "").lower():
+                fail_cat = "pipeline"
+                fail_type = "information_dispersal"
+                fail_reason = "Cross-section information dispersal caused generator to miss dispersed clause."
+                res_text = "Enable multi-query reciprocal rank fusion across dispersed document sections."
             else:
-                fail_cat = "pass"
+                fail_cat = "llm_model"
+                fail_type = "generator_misinterpretation"
+                fail_reason = "Generator produced an ungrounded or incomplete interpretation."
+                res_text = "Refine prompt system instructions and structured citation constraints."
+        else:
+            fail_cat = "llm_model"
+            fail_type = "judge_disagreement"
+            fail_reason = "Judge rejected answer despite human ground truth agreement."
+            res_text = "Calibrate judge rubric with balanced multi-clause criteria."
 
         results.append({
             **c,
@@ -551,13 +652,13 @@ def evaluate_week6(payload: Optional[Week6EvalPayload] = Body(default=None)):
             "evaluation_run_id": eval_run_id,
             "human_label": h_label,
             "assertions": assertions,
-            "judge_v1_verdict": judge_v1_verdict,
+            "judge_v1_verdict": v1_verdict,
             "judge_v1_agreed": is_v1_agreed,
             "judge_v1_raw": v1_raw,
             "judge_v1_source": v1_src,
             "judge_v1_latency_ms": round(v1_lat, 2),
             "judge_v1_llm_completed": v1_completed,
-            "judge_v2_verdict": judge_v2_verdict,
+            "judge_v2_verdict": v2_verdict,
             "judge_v2_agreed": is_v2_agreed,
             "judge_v2_raw": v2_raw,
             "judge_v2_source": v2_src,
@@ -567,6 +668,9 @@ def evaluate_week6(payload: Optional[Week6EvalPayload] = Body(default=None)):
             "latency_ms": round(v2_lat, 2),
             "llm_completed": v2_completed,
             "failure_category": fail_cat,
+            "failure_type": fail_type,
+            "failure_reason": fail_reason,
+            "resolution": res_text,
         })
 
     total = len(results)

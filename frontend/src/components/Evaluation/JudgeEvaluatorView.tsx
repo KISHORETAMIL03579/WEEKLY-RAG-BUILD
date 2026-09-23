@@ -47,9 +47,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
   const [customHumanLabel, setCustomHumanLabel] = useState<number>(1);
   const [customMode, setCustomMode] = useState<string>('Low-K Multi-Clause Truncation');
 
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startTimeRef = useRef<number>(0);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const notify = (msg: string, type: 'info' | 'success' | 'error' = 'info') => {
     if (onNotify) {
@@ -66,6 +64,68 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
     }
   };
 
+  const stopPolling = () => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  };
+
+  const pollRun = async (runId: string) => {
+    try {
+      const run = await api.getEvaluationRun(runId);
+      if (!run) return;
+
+      setCases(run.cases || run.results || []);
+      setCurrentRunId(run.evaluation_run_id);
+      setEvaluatingCaseId(run.current_case_id || null);
+
+      const pct = run.total_cases > 0 ? Math.round((run.completed_cases / run.total_cases) * 100) : 0;
+      const remainingItems = Math.max(0, run.total_cases - run.completed_cases);
+      const avgPerItem = run.completed_cases > 0 ? run.elapsed_seconds / run.completed_cases : (run.eval_engine === 'deterministic' ? 0.05 : 38);
+      const estRemaining = Math.max(0, Math.round(remainingItems * avgPerItem));
+
+      setEvalProgress({
+        current: run.completed_cases,
+        total: run.total_cases,
+        pct,
+        currentCaseId: run.current_case_id || '',
+        currentQuestion: run.current_question || '',
+        elapsedSeconds: Math.round(run.elapsed_seconds),
+        estRemainingSeconds: estRemaining,
+        activeCaseId: run.current_case_id || null,
+        completedSuccess: run.status === 'COMPLETED',
+      });
+
+      if (run.status === 'COMPLETED') {
+        stopPolling();
+        updateLoadingState(false);
+        setEvaluatingCaseId(null);
+        notify(`✅ Completed evaluation run ${run.evaluation_run_id} (${run.total_cases}/${run.total_cases} cases)! Judge V1: ${run.judge_v1_agreement_pct}%, Judge V2: ${run.judge_v2_agreement_pct}%`, 'success');
+      } else if (run.status === 'CANCELLED') {
+        stopPolling();
+        updateLoadingState(false);
+        setEvaluatingCaseId(null);
+        notify(`Evaluation run ${run.evaluation_run_id} was cancelled.`, 'info');
+      } else if (run.status === 'ERROR') {
+        stopPolling();
+        updateLoadingState(false);
+        setEvaluatingCaseId(null);
+        notify(`Evaluation run failed: ${run.error_message || 'Unknown error'}`, 'error');
+      }
+    } catch (e) {
+      console.error('Error polling evaluation run:', e);
+    }
+  };
+
+  const startPolling = (runId: string) => {
+    stopPolling();
+    pollRun(runId);
+    pollIntervalRef.current = setInterval(() => {
+      pollRun(runId);
+    }, 1500);
+  };
+
   // Close modals on Escape key & cleanup timers
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -77,15 +137,72 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      if (progressTimerRef.current) {
-        clearInterval(progressTimerRef.current);
-        progressTimerRef.current = null;
-      }
     };
   }, [selectedCase, showAddModal]);
 
+  // Reconnect to active or existing run on component mount
+  useEffect(() => {
+    let isMounted = true;
+
+    const checkExistingRun = async () => {
+      const savedRunId = sessionStorage.getItem('active_evaluation_run_id');
+      if (savedRunId) {
+        try {
+          const run = await api.getEvaluationRun(savedRunId);
+          if (run && isMounted) {
+            setCases(run.cases || run.results || []);
+            setCurrentRunId(run.evaluation_run_id);
+            if (run.status === 'RUNNING') {
+              updateLoadingState(true);
+              startPolling(run.evaluation_run_id);
+            } else {
+              const pct = run.total_cases > 0 ? Math.round((run.completed_cases / run.total_cases) * 100) : 100;
+              setEvalProgress({
+                current: run.completed_cases,
+                total: run.total_cases,
+                pct,
+                currentCaseId: '',
+                currentQuestion: '',
+                elapsedSeconds: Math.round(run.elapsed_seconds),
+                estRemainingSeconds: 0,
+                activeCaseId: null,
+                completedSuccess: run.status === 'COMPLETED',
+              });
+            }
+            return;
+          }
+        } catch (e) {
+          console.warn('Saved run not found on server:', e);
+        }
+      }
+
+      // Check if there is an active running evaluation on backend
+      try {
+        const active = await api.getActiveEvaluationRun();
+        if (active && active.active_run_id && active.run && active.run.status === 'RUNNING' && isMounted) {
+          sessionStorage.setItem('active_evaluation_run_id', active.active_run_id);
+          setCases(active.run.cases || active.run.results || []);
+          setCurrentRunId(active.active_run_id);
+          updateLoadingState(true);
+          startPolling(active.active_run_id);
+        }
+      } catch (e) {
+        // No active run, clean initial state
+      }
+    };
+
+    checkExistingRun();
+
+    return () => {
+      isMounted = false;
+      stopPolling();
+    };
+  }, []);
+
   // Load clean 25 benchmark cases without precomputed evaluation results
   const handleLoadBenchmark = async () => {
+    stopPolling();
+    sessionStorage.removeItem('active_evaluation_run_id');
     updateLoadingState(true);
     setSearchQuery('');
     setFilterMode('all');
@@ -133,6 +250,8 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
 
   // Clear all cases in the table
   const handleClearTable = () => {
+    stopPolling();
+    sessionStorage.removeItem('active_evaluation_run_id');
     setCases([]);
     setCurrentRunId(null);
     setSearchQuery('');
@@ -158,219 +277,49 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
   };
 
   // Cancel in-flight evaluation
-  const handleCancelEvaluation = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-      if (progressTimerRef.current) {
-        clearInterval(progressTimerRef.current);
-        progressTimerRef.current = null;
+  const handleCancelEvaluation = async () => {
+    if (currentRunId) {
+      try {
+        await api.cancelEvaluationRun(currentRunId);
+      } catch (e) {
+        console.error('Failed to cancel evaluation run on server:', e);
       }
-      updateLoadingState(false);
-      setEvaluatingCaseId(null);
-      notify(
-        evalProgress
-          ? `Evaluation stopped by user at Case ${evalProgress.current} of ${evalProgress.total} (${evalProgress.pct}%).`
-          : 'Judge evaluation cancelled by user.',
-        'info'
-      );
     }
+    stopPolling();
+    updateLoadingState(false);
+    setEvaluatingCaseId(null);
+    notify(
+      evalProgress
+        ? `Evaluation stopped by user at Case ${evalProgress.current} of ${evalProgress.total} (${evalProgress.pct}%).`
+        : 'Judge evaluation cancelled by user.',
+      'info'
+    );
   };
 
-  // Run evaluation incrementally on cases so user sees live progress percentage and table updates
+  // Run evaluation in the background independent of page lifecycle
   const handleRunEvaluation = async () => {
     if (cases.length === 0) {
       notify('Please load or import test cases before running evaluation.', 'error');
       return;
     }
+    stopPolling();
     updateLoadingState(true);
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    const total = cases.length;
-    const startTime = Date.now();
-    startTimeRef.current = startTime;
-    const runId = `eval_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-    setCurrentRunId(runId);
-
-    // Explicitly reset all cases to PENDING and clear previous verdicts
-    const pendingCases: JudgeCaseResult[] = cases.map((c) => ({
-      ...c,
-      status: 'PENDING' as const,
-      evaluation_run_id: runId,
-      judge_v1_verdict: null,
-      judge_v1_agreed: null,
-      judge_v1_raw: null,
-      judge_v1_source: null,
-      judge_v1_latency_ms: null,
-      judge_v1_llm_completed: null,
-      judge_v2_verdict: null,
-      judge_v2_agreed: null,
-      judge_v2_raw: null,
-      judge_v2_source: null,
-      judge_v2_latency_ms: null,
-      judge_v2_llm_completed: null,
-      source: null,
-      latency_ms: null,
-      llm_completed: null,
-      assertions: null,
-      failure_category: null,
-      failure_type: null,
-      failure_reason: null,
-      resolution: null,
-    }));
-    setCases(pendingCases);
-
-    setEvalProgress({
-      current: 0,
-      total,
-      pct: 0,
-      currentCaseId: cases[0]?.case_id || '',
-      currentQuestion: cases[0]?.question || '',
-      elapsedSeconds: 0,
-      estRemainingSeconds: evalEngine === 'deterministic' ? 1 : Math.round(total * 38),
-      activeCaseId: cases[0]?.case_id || null,
-      completedSuccess: false,
-    });
-
-    if (progressTimerRef.current) clearInterval(progressTimerRef.current);
-    progressTimerRef.current = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
-      setEvalProgress((prev) => {
-        if (!prev) return null;
-        const remainingItems = prev.total - prev.current;
-        const avgPerItem = prev.current > 0 ? elapsed / prev.current : (evalEngine === 'deterministic' ? 0.05 : 38);
-        const estRemaining = Math.max(0, Math.round(remainingItems * avgPerItem));
-        return {
-          ...prev,
-          elapsedSeconds: elapsed,
-          estRemainingSeconds: estRemaining,
-        };
-      });
-    }, 1000);
+    setEvalProgress(null);
+    setEvaluatingCaseId(null);
 
     try {
-      if (evalEngine === 'deterministic') {
-        // Fast deterministic batch evaluation
-        const data = await api.evaluateJudges(pendingCases, false, controller.signal);
-        const rawResults = data.results || [];
-        const evaluatedList: JudgeCaseResult[] = rawResults.map((r, idx) => ({
-          ...(pendingCases[idx] || {}),
-          ...r,
-          status: 'COMPLETED' as const,
-          evaluation_run_id: runId,
-          source: 'DETERMINISTIC' as const,
-        }));
-        setCases(evaluatedList);
-
-        if (progressTimerRef.current) {
-          clearInterval(progressTimerRef.current);
-          progressTimerRef.current = null;
-        }
-        const elapsed = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
-        setEvalProgress({
-          current: total,
-          total,
-          pct: 100,
-          currentCaseId: cases[total - 1]?.case_id || '',
-          currentQuestion: cases[total - 1]?.question || '',
-          elapsedSeconds: elapsed,
-          estRemainingSeconds: 0,
-          activeCaseId: null,
-          completedSuccess: true,
-        });
-        setEvaluatingCaseId(null);
-        notify(`⚡ Evaluated all ${total} test cases with exact deterministic rule assertions!`, 'success');
-        return;
-      }
-
-      // Live LLM Engine: evaluate sequentially case-by-case
-      for (let i = 0; i < total; i++) {
-        if (controller.signal.aborted) break;
-
-        const currentCase = pendingCases[i];
-        setEvaluatingCaseId(currentCase.case_id);
-
-        // Mark current case as RUNNING in state while future cases remain PENDING
-        setCases((prev) =>
-          prev.map((c, idx) => {
-            if (idx === i) {
-              return { ...c, status: 'RUNNING' as const };
-            }
-            return c;
-          })
-        );
-
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        const currentPct = Math.round((i / total) * 100);
-        const remainingItems = total - i;
-        const avgPerItem = i > 0 ? elapsed / i : 38;
-        const estRemaining = Math.max(0, Math.round(remainingItems * avgPerItem));
-
-        setEvalProgress({
-          current: i,
-          total,
-          pct: currentPct,
-          currentCaseId: currentCase.case_id,
-          currentQuestion: currentCase.question,
-          elapsedSeconds: elapsed,
-          estRemainingSeconds: estRemaining,
-          activeCaseId: currentCase.case_id,
-          completedSuccess: false,
-        });
-
-        const data = await api.evaluateJudges([currentCase], true, controller.signal);
-        const evaluatedRaw = data.results && data.results[0] ? data.results[0] : currentCase;
-        const evaluated: JudgeCaseResult = {
-          ...currentCase,
-          ...evaluatedRaw,
-          status: 'COMPLETED' as const,
-          evaluation_run_id: runId,
-          source: (evaluatedRaw.source || (evaluatedRaw.judge_v2_source as any) || 'LLM') as any,
-          llm_completed: evaluatedRaw.llm_completed !== undefined ? evaluatedRaw.llm_completed : true,
-          latency_ms: evaluatedRaw.latency_ms || evaluatedRaw.judge_v2_latency_ms || 0,
-        };
-
-        setCases((prevCases) =>
-          prevCases.map((c, idx) => (idx === i || c.case_id === currentCase.case_id ? evaluated : c))
-        );
-
-        const completedCount = i + 1;
-        const nextPct = Math.round((completedCount / total) * 100);
-        const newElapsed = Math.floor((Date.now() - startTime) / 1000);
-        const newRemaining = total - completedCount;
-        const newEstRemaining = Math.max(0, Math.round(newRemaining * (newElapsed / completedCount)));
-
-        setEvalProgress({
-          current: completedCount,
-          total,
-          pct: nextPct,
-          currentCaseId: currentCase.case_id,
-          currentQuestion: currentCase.question,
-          elapsedSeconds: newElapsed,
-          estRemainingSeconds: newEstRemaining,
-          activeCaseId: completedCount < total ? pendingCases[completedCount]?.case_id || null : null,
-          completedSuccess: completedCount === total,
-        });
-      }
-
-      setEvaluatingCaseId(null);
-      notify(`Evaluated all ${total} test cases with Live LLM Judge! (100% Completed)`, 'success');
-    } catch (e: unknown) {
-      const err = e as Error;
-      if (err.name !== 'AbortError') {
-        notify('Evaluation failed: ' + err.message, 'error');
-      }
-    } finally {
-      if (progressTimerRef.current) {
-        clearInterval(progressTimerRef.current);
-        progressTimerRef.current = null;
-      }
-      if (abortControllerRef.current === controller) {
-        abortControllerRef.current = null;
-        updateLoadingState(false);
-        setEvaluatingCaseId(null);
-      }
+      const runState = await api.startEvaluationRun(cases, evalEngine === 'llm');
+      sessionStorage.setItem('active_evaluation_run_id', runState.evaluation_run_id);
+      setCurrentRunId(runState.evaluation_run_id);
+      setCases(runState.cases || runState.results || []);
+      startPolling(runState.evaluation_run_id);
+      notify(
+        `🚀 Started background evaluation run "${runState.evaluation_run_id}" (${runState.total_cases} cases, engine: ${evalEngine})!`,
+        'info'
+      );
+    } catch (e) {
+      updateLoadingState(false);
+      notify('Failed to start evaluation run: ' + (e as Error).message, 'error');
     }
   };
 

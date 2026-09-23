@@ -13,6 +13,8 @@ import {
   ParseQaResponse,
   JudgeEvalResponse,
   JudgeCaseResult,
+  EvaluationRunStateResponse,
+  ActiveEvaluationRunResponse,
   Week6EvalResponse,
   Week6CaseResult,
 } from '../types/evaluation';
@@ -146,6 +148,38 @@ export const api = {
     }
     const res = await fetch(`${API_BASE}/orphans`, { headers, signal });
     return handleResponse(res);
+  },
+
+  async startEvaluationRun(
+    cases?: JudgeCaseResult[],
+    runLlm: boolean = true,
+    signal?: AbortSignal
+  ): Promise<EvaluationRunStateResponse> {
+    const res = await fetch(`${API_BASE}/api/evaluation/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cases, run_llm: runLlm }),
+      signal,
+    });
+    return handleResponse<EvaluationRunStateResponse>(res);
+  },
+
+  async getActiveEvaluationRun(signal?: AbortSignal): Promise<ActiveEvaluationRunResponse> {
+    const res = await fetch(`${API_BASE}/api/evaluation/runs/active`, { signal });
+    return handleResponse<ActiveEvaluationRunResponse>(res);
+  },
+
+  async getEvaluationRun(runId: string, signal?: AbortSignal): Promise<EvaluationRunStateResponse> {
+    const res = await fetch(`${API_BASE}/api/evaluation/runs/${encodeURIComponent(runId)}`, { signal });
+    return handleResponse<EvaluationRunStateResponse>(res);
+  },
+
+  async cancelEvaluationRun(runId: string, signal?: AbortSignal): Promise<{ ok: boolean; status: string }> {
+    const res = await fetch(`${API_BASE}/api/evaluation/runs/${encodeURIComponent(runId)}/cancel`, {
+      method: 'POST',
+      signal,
+    });
+    return handleResponse<{ ok: boolean; status: string }>(res);
   },
 
   async getBenchmarkCases(signal?: AbortSignal): Promise<JudgeEvalResponse> {

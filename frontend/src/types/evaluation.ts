@@ -128,6 +128,31 @@ export interface JudgeEvalResponse {
   results: JudgeCaseResult[];
 }
 
+export interface EvaluationRunStateResponse {
+  evaluation_run_id: string;
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'CANCELLED' | 'ERROR';
+  eval_engine: 'deterministic' | 'llm';
+  total_cases: number;
+  completed_cases: number;
+  current_case_id?: string | null;
+  current_question?: string | null;
+  created_at: number;
+  updated_at: number;
+  elapsed_seconds: number;
+  v1_agreements?: number;
+  v2_agreements?: number;
+  judge_v1_agreement_pct?: number | null;
+  judge_v2_agreement_pct?: number | null;
+  error_message?: string | null;
+  cases: JudgeCaseResult[];
+  results: JudgeCaseResult[];
+}
+
+export interface ActiveEvaluationRunResponse {
+  active_run_id: string | null;
+  run: EvaluationRunStateResponse | null;
+}
+
 export interface JudgeEvalPayload {
   cases?: JudgeCaseResult[];
   run_llm?: boolean;
