@@ -56,7 +56,7 @@ def redact_deep(value: Any) -> Any:
 # ─────────────────────────────────────────────────────────────────────────────
 #  Durable Prompt version registry
 # ─────────────────────────────────────────────────────────────────────────────
-QA_PROMPT_VERSION = "qa-answer-v1"
+QA_PROMPT_VERSION = "qa-answer-v2"
 RERANK_PROMPT_VERSION = "rerank-v1"
 REWRITE_PROMPT_VERSION = "rewrite-v1"
 
