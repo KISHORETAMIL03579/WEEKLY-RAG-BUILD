@@ -3,13 +3,21 @@ import { EvalQuestionInput, EvalRunResponse } from '../types/evaluation';
 import { FormView } from '../components/Evaluation/FormView';
 import { ResultsView } from '../components/Evaluation/ResultsView';
 import { JudgeEvaluatorView } from '../components/Evaluation/JudgeEvaluatorView';
+import { PolicyAssistantView } from '../components/Evaluation/PolicyAssistantView';
 import { ToastContainer, ToastItem } from '../components/common/ToastContainer';
 import { PRESETS } from '../components/Evaluation/KeyTakeaways';
 import { api } from '../services/api';
 import { generateId } from '../utils/helpers';
 
 export const EvaluationPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'judge' | 'retrieval'>('judge');
+  const [activeTab, setActiveTab] = useState<'policy' | 'judge' | 'retrieval'>(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      const tab = p.get('tab');
+      if (tab === 'judge' || tab === 'retrieval') return tab;
+    }
+    return 'policy';
+  });
   const [isJudgeEvaluating, setIsJudgeEvaluating] = useState<boolean>(false);
 
   // Retrieval Benchmark State
@@ -256,6 +264,27 @@ export const EvaluationPage: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
             type="button"
+            onClick={() => setActiveTab('policy')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '6px',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              border: activeTab === 'policy' ? '1px solid var(--accent)' : '1px solid var(--border)',
+              background: activeTab === 'policy' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+              color: activeTab === 'policy' ? '#60a5fa' : 'var(--text-muted)',
+              transition: 'all 0.15s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <span>👔 Policy Assistant (Agent vs Workflow)</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('judge')}
             style={{
               padding: '6px 14px',
@@ -345,9 +374,14 @@ export const EvaluationPage: React.FC = () => {
         </div>
       </header>
 
-      {/* MAIN CONTENT WITH PERSISTENT DUAL-TAB DOM MOUNTING */}
+      {/* MAIN CONTENT WITH PERSISTENT MULTI-TAB DOM MOUNTING */}
       <main style={{ maxWidth: '1200px', width: '100%', margin: '0 auto', padding: '28px 20px 50px 20px', flex: 1 }}>
-        {/* TAB 1: JUDGE EVALUATOR */}
+        {/* TAB 1: POLICY ASSISTANT */}
+        <div style={{ display: activeTab === 'policy' ? 'block' : 'none' }}>
+          <PolicyAssistantView onNotify={showToast} />
+        </div>
+
+        {/* TAB 2: JUDGE EVALUATOR */}
         <div style={{ display: activeTab === 'judge' ? 'block' : 'none' }}>
           <JudgeEvaluatorView
             onNotify={showToast}
@@ -355,7 +389,7 @@ export const EvaluationPage: React.FC = () => {
           />
         </div>
 
-        {/* TAB 2: RETRIEVAL BENCHMARK */}
+        {/* TAB 3: RETRIEVAL BENCHMARK */}
         <div style={{ display: activeTab === 'retrieval' ? 'block' : 'none', maxWidth: '1000px', margin: '0 auto' }}>
           {view === 'form' ? (
             <FormView

@@ -45,7 +45,24 @@ export const Topbar: React.FC<TopbarProps> = ({
       <div className="topbar-spacer"></div>
 
       <a
-        href="/eval"
+        href="/eval?tab=policy"
+        className="eval-btn"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          fontWeight: 600,
+          background: 'rgba(16, 185, 129, 0.15)',
+          borderColor: '#10b981',
+          color: '#10b981',
+          marginRight: '6px',
+        }}
+      >
+        👔 HR Policy Assistant ↗
+      </a>
+
+      <a
+        href="/eval?tab=judge"
         className="eval-btn"
         style={{
           display: 'flex',
