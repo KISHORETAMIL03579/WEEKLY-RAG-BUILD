@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# scripts/run_week7_workflow.py — Single-Command Runner for Week 7 Fixed Workflow
+# scripts/run_week7_workflow.py — Single-Command Runner for Fixed Policy Workflow (Week 7 Benchmark)
 import json
 import os
 import sys
@@ -10,7 +10,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from backend.services.week7_workflow import run_workflow_case
+from backend.services.policy_workflow import run_workflow_case
 
 
 def main():
@@ -23,7 +23,7 @@ def main():
         cases = json.load(f)
 
     print(f"============================================================")
-    print(f"   RUNNING WEEK 7 HR WORKFLOW (FIXED 3-STEP - 10 CASES)")
+    print(f"   RUNNING HR POLICY WORKFLOW (FIXED 3-STEP - 10 CASES)")
     print(f"============================================================\n")
 
     results = []

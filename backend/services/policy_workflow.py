@@ -1,14 +1,14 @@
-# backend/services/week7_workflow.py — Fixed 3-Step Deterministic HR Workflow
+# backend/services/policy_workflow.py — Production Fixed 3-Step Deterministic HR Workflow
 from __future__ import annotations
 
 import time
 from typing import Any, Dict, List, Optional
 
-from backend.schemas.week7 import (
+from backend.schemas.policy import (
+    PolicyOutputContract,
     TOKEN_COST_PROXY_RATE,
-    Week7OutputContract,
 )
-from backend.services.week7_tools import (
+from backend.services.policy_tools import (
     execute_tool_call,
     get_employee_record,
     get_jurisdiction_rules,
@@ -21,7 +21,7 @@ def run_workflow_case(
     employee_id: str,
     question: str,
     deterministic_pass_criteria: Optional[List[str]] = None,
-) -> Week7OutputContract:
+) -> PolicyOutputContract:
     """
     Execute the Fixed 3-Step Deterministic Workflow on a single employee entitlement question.
     Hard-coded path: (1) Fetch Employee -> (2) Branch on Attributes -> (3) Fetch Handbook Rule -> (4) Synthesize.
@@ -159,7 +159,7 @@ def run_workflow_case(
     else:
         passed = bool(entitlement_value)
 
-    return Week7OutputContract(
+    return PolicyOutputContract(
         case_id=case_id,
         employee_id=employee_id,
         question=question,

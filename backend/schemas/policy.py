@@ -1,4 +1,4 @@
-# backend/schemas/week7.py — Data Contracts, Enums, and Budget Definitions for Week 7 Race
+# backend/schemas/policy.py — Data Contracts, Enums, and Budget Definitions for Policy Agent & Workflow
 from __future__ import annotations
 
 from enum import Enum
@@ -61,7 +61,7 @@ class ToolCallRecord(BaseModel):
     latency_ms: float = 0.0
 
 
-class Week7OutputContract(BaseModel):
+class PolicyOutputContract(BaseModel):
     case_id: str
     employee_id: str
     question: str
@@ -78,6 +78,10 @@ class Week7OutputContract(BaseModel):
     cost_usd: float = 0.0
     latency_ms: float = 0.0
     termination_reason: str = "SUCCESS"  # "SUCCESS" | "BUDGET_ITERATIONS" | "BUDGET_TOKENS" | "BUDGET_COST" | "BUDGET_WALL_CLOCK" | "ERROR"
+
+
+# Alias for backward compatibility if referenced
+Week7OutputContract = PolicyOutputContract
 
 
 class BenchmarkCase(BaseModel):

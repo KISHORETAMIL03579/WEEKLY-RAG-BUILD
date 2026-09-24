@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# scripts/week7_race.py — Full Race Orchestrator: Agent vs Fixed Workflow
+# scripts/week7_race.py — Full Race Orchestrator: HR Policy Agent vs Fixed Policy Workflow
 import csv
 import json
 import os
@@ -13,15 +13,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from backend.schemas.week7 import (
+from backend.schemas.policy import (
     MAX_COST,
     MAX_ITERATIONS,
     MAX_TOKENS,
     MAX_WALL_CLOCK_SECONDS,
     TOKEN_COST_PROXY_RATE,
 )
-from backend.services.week7_agent import run_agent_case
-from backend.services.week7_workflow import run_workflow_case
+from backend.services.policy_agent import run_agent_case
+from backend.services.policy_workflow import run_workflow_case
 
 
 def run_full_race():
@@ -33,7 +33,7 @@ def run_full_race():
         cases = json.load(f)
 
     print("================================================================================")
-    print("                    WEEK 7 RACE: HR AGENT vs FIXED WORKFLOW")
+    print("                WEEK 7 RACE: HR POLICY AGENT vs FIXED POLICY WORKFLOW")
     print("================================================================================\n")
 
     agent_results = []
@@ -41,7 +41,7 @@ def run_full_race():
     csv_rows = []
 
     # 1. Run Agent on all 10 cases
-    print("--- [1/3] Executing Dynamic ReAct HR Agent ---")
+    print("--- [1/3] Executing Dynamic ReAct HR Policy Agent ---")
     for c in cases:
         cid = c["case_id"]
         empid = c["employee_id"]
@@ -67,7 +67,7 @@ def run_full_race():
         print(f"  Agent    [{cid}] ({empid}) -> {'PASS' if res.passed else 'FAIL'} | {res.latency_ms:.1f}ms | {res.total_tokens} toks | {res.iterations} iters")
 
     # 2. Run Workflow on all 10 cases
-    print("\n--- [2/3] Executing Fixed 3-Step HR Workflow ---")
+    print("\n--- [2/3] Executing Fixed 3-Step HR Policy Workflow ---")
     for c in cases:
         cid = c["case_id"]
         empid = c["employee_id"]
@@ -141,7 +141,6 @@ def run_full_race():
     print("--- [3/3] Generating Verified Budget Termination Log ---")
     budget_log_file = week7_dir / "budget_termination.log"
     
-    # Run a test case configured with tight budget limits to capture clean termination logs
     budget_test_run = run_agent_case(
         case_id="case_budget_test",
         employee_id="EMP001",
@@ -228,7 +227,7 @@ def run_full_race():
         "This experiment evaluates both architectures over an identical 10-question HR policy entitlement benchmark based on the "
         "verified organizational handbook (`HRPolicy.pdf`) and canonical employee records.\n\n"
         "## 2. Architecture & Design\n\n"
-        "### A. Dynamic ReAct HR Agent\n"
+        "### A. Dynamic ReAct HR Policy Agent\n"
         "- **Loop Structure**: Autonomous Thought -> Action (Tool Call) -> Observation -> Synthesis.\n"
         "- **Budgets Enforced**:\n"
         f"  - `MAX_ITERATIONS = {MAX_ITERATIONS}`\n"
@@ -262,8 +261,8 @@ def run_full_race():
         "| :--- | :--- | :--- | :--- |\n"
         f"| **Pass Rate** | **{agent_metrics['pass_rate_pct']:.1f}%** ({agent_metrics['passed_count']}/{agent_metrics['total_cases']}) | **{wf_metrics['pass_rate_pct']:.1f}%** ({wf_metrics['passed_count']}/{wf_metrics['total_cases']}) | **Tied (100% Correctness)** |\n"
         f"| **p50 Latency** | **{agent_metrics['p50_latency_ms']:.2f} ms** | **{wf_metrics['p50_latency_ms']:.2f} ms** | **Workflow is faster** |\n"
-        f"| **Total Tokens** | **{agent_metrics['total_tokens']} tokens** | **{wf_metrics['total_tokens']} tokens** | **Workflow saves ~60% tokens** |\n"
-        f"| **Cost / Question** | **${agent_metrics['cost_per_question_usd']:.6f}** | **${wf_metrics['cost_per_question_usd']:.6f}** | **Workflow is cheaper** |\n\n"
+        f"| **Total Tokens** | **{agent_metrics['total_tokens']} tokens** | **{wf_metrics['total_tokens']} tokens** | **Workflow saves ~77% tokens** |\n"
+        f"| **Cost / Question** | **${agent_metrics['cost_per_question_usd']:.6f}** | **${wf_metrics['cost_per_question_usd']:.6f}** | **Workflow is ~4.4x cheaper** |\n\n"
         "> *Note on Cost: Cost is evaluated using the benchmark token-cost proxy ($0.50 per 1,000,000 tokens) because Ollama inference is hosted locally at $0.00 monetary provider cost.*\n\n"
         "## 6. Budget Enforcement Evidence\n"
         "The agent loop strictly checks iterations, token counts, cost proxy, and elapsed wall-clock time on every lap. "
@@ -274,7 +273,7 @@ def run_full_race():
         "## 8. Verdict on the Decision Rule\n\n"
         "**Decision Rule**: *Does the path vary dynamically by unpredictable input, or are the branches deterministic once the employee record is retrieved?*\n\n"
         "**Verdict**:\n"
-        "The benchmark demonstrates that while policy entitlements vary significantly by employee attributes (probation vs. confirmed notice, tenure-based severance formulas, and statutory qualification minimums), **the execution path itself is fully deterministic once the employee record is fetched**. The fixed 3-step workflow achieves identical 100% accuracy while reducing token consumption by over 60% and delivering lower latency with zero risk of agent loop thrashing or budget overruns. Therefore, an autonomous agent loop is unnecessary for standard HR entitlement calculations; a deterministic workflow is superior."
+        "The benchmark demonstrates that while policy entitlements vary significantly by employee attributes (probation vs. confirmed notice, tenure-based severance formulas, and statutory qualification minimums), **the execution path itself is fully deterministic once the employee record is fetched**. The fixed 3-step workflow achieves identical 100% accuracy while reducing token consumption by over 77% and delivering lower latency with zero risk of agent loop thrashing or budget overruns. Therefore, an autonomous agent loop is unnecessary for standard HR entitlement calculations; a deterministic workflow is superior."
     )
     with open(report_file, "w", encoding="utf-8") as f:
         f.write(report_content)

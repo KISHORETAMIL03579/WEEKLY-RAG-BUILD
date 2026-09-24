@@ -1,10 +1,10 @@
-# backend/services/week7_tools.py — Canonical Tools for Week 7 Agent & Fixed Workflow
+# backend/services/policy_tools.py — Production HR Policy Tools for Agent & Fixed Workflow
 from __future__ import annotations
 
 import math
 from typing import Any, Dict, List, Optional
 
-from backend.schemas.week7 import (
+from backend.schemas.policy import (
     EmployeeRecord,
     JurisdictionEnum,
     PolicyCategoryEnum,
@@ -399,7 +399,7 @@ def get_jurisdiction_rules(
 # Tool Declarations (Metadata for Agent & LLM Function Calling)
 # ---------------------------------------------------------------------------
 
-WEEK7_TOOL_DEFINITIONS: List[Dict[str, Any]] = [
+POLICY_TOOL_DEFINITIONS: List[Dict[str, Any]] = [
     {
         "name": "get_employee_record",
         "description": (
@@ -467,6 +467,9 @@ WEEK7_TOOL_DEFINITIONS: List[Dict[str, Any]] = [
         },
     },
 ]
+
+# Alias for backward compatibility
+WEEK7_TOOL_DEFINITIONS = POLICY_TOOL_DEFINITIONS
 
 
 def execute_tool_call(tool_name: str, arguments: Dict[str, Any]) -> Any:

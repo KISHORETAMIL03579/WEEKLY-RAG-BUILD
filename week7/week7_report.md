@@ -5,7 +5,7 @@ Organizations frequently deploy LLM-based autonomous agent loops (ReAct) for mul
 
 ## 2. Architecture & Design
 
-### A. Dynamic ReAct HR Agent
+### A. Dynamic ReAct HR Policy Agent
 - **Loop Structure**: Autonomous Thought -> Action (Tool Call) -> Observation -> Synthesis.
 - **Budgets Enforced**:
   - `MAX_ITERATIONS = 5`
@@ -45,8 +45,8 @@ All 10 benchmark cases are verified against verbatim clauses from `HRPolicy.pdf`
 | :--- | :--- | :--- | :--- |
 | **Pass Rate** | **100.0%** (10/10) | **100.0%** (10/10) | **Tied (100% Correctness)** |
 | **p50 Latency** | **0.00 ms** | **0.00 ms** | **Workflow is faster** |
-| **Total Tokens** | **32160 tokens** | **7305 tokens** | **Workflow saves ~60% tokens** |
-| **Cost / Question** | **$0.001608** | **$0.000366** | **Workflow is cheaper** |
+| **Total Tokens** | **32160 tokens** | **7305 tokens** | **Workflow saves ~77% tokens** |
+| **Cost / Question** | **$0.001608** | **$0.000366** | **Workflow is ~4.4x cheaper** |
 
 > *Note on Cost: Cost is evaluated using the benchmark token-cost proxy ($0.50 per 1,000,000 tokens) because Ollama inference is hosted locally at $0.00 monetary provider cost.*
 
@@ -62,4 +62,4 @@ The agent loop strictly checks iterations, token counts, cost proxy, and elapsed
 **Decision Rule**: *Does the path vary dynamically by unpredictable input, or are the branches deterministic once the employee record is retrieved?*
 
 **Verdict**:
-The benchmark demonstrates that while policy entitlements vary significantly by employee attributes (probation vs. confirmed notice, tenure-based severance formulas, and statutory qualification minimums), **the execution path itself is fully deterministic once the employee record is fetched**. The fixed 3-step workflow achieves identical 100% accuracy while reducing token consumption by over 60% and delivering lower latency with zero risk of agent loop thrashing or budget overruns. Therefore, an autonomous agent loop is unnecessary for standard HR entitlement calculations; a deterministic workflow is superior.
+The benchmark demonstrates that while policy entitlements vary significantly by employee attributes (probation vs. confirmed notice, tenure-based severance formulas, and statutory qualification minimums), **the execution path itself is fully deterministic once the employee record is fetched**. The fixed 3-step workflow achieves identical 100% accuracy while reducing token consumption by over 77% and delivering lower latency with zero risk of agent loop thrashing or budget overruns. Therefore, an autonomous agent loop is unnecessary for standard HR entitlement calculations; a deterministic workflow is superior.

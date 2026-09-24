@@ -1,4 +1,4 @@
-# tests/test_week7.py — Comprehensive Unit & Integration Tests for Week 7
+# tests/test_week7.py — Comprehensive Unit & Integration Tests for Week 7 (Testing Production Policy Modules)
 from __future__ import annotations
 
 import csv
@@ -7,7 +7,7 @@ import os
 import unittest
 from pathlib import Path
 
-from backend.schemas.week7 import (
+from backend.schemas.policy import (
     EmployeeRecord,
     JurisdictionEnum,
     MAX_COST,
@@ -15,25 +15,25 @@ from backend.schemas.week7 import (
     MAX_TOKENS,
     MAX_WALL_CLOCK_SECONDS,
     PolicyCategoryEnum,
+    PolicyOutputContract,
     TOKEN_COST_PROXY_RATE,
-    Week7OutputContract,
 )
-from backend.services.week7_agent import run_agent_case
-from backend.services.week7_tools import (
+from backend.services.policy_agent import run_agent_case
+from backend.services.policy_tools import (
     CANONICAL_EMPLOYEES,
-    WEEK7_TOOL_DEFINITIONS,
+    POLICY_TOOL_DEFINITIONS,
     execute_tool_call,
     get_employee_record,
     get_jurisdiction_rules,
     search_handbook,
 )
-from backend.services.week7_workflow import run_workflow_case
+from backend.services.policy_workflow import run_workflow_case
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 class TestWeek7SchemasAndTools(unittest.TestCase):
-    """Test Week 7 schemas, enums, canonical data, and tool execution."""
+    """Test production policy schemas, enums, canonical data, and tool execution."""
 
     def test_jurisdiction_enum_values(self):
         expected_jurisdictions = {"Kenya", "Ireland", "Cote d'Ivoire", "Rwanda", "Global"}
@@ -82,20 +82,20 @@ class TestWeek7SchemasAndTools(unittest.TestCase):
         self.assertIn("24 working days", rules["statutory_guideline"])
 
     def test_tool_definitions_and_no_overlap(self):
-        self.assertEqual(len(WEEK7_TOOL_DEFINITIONS), 3)
-        tool_names = [t["name"] for t in WEEK7_TOOL_DEFINITIONS]
+        self.assertEqual(len(POLICY_TOOL_DEFINITIONS), 3)
+        tool_names = [t["name"] for t in POLICY_TOOL_DEFINITIONS]
         self.assertEqual(tool_names, ["get_employee_record", "search_handbook", "get_jurisdiction_rules"])
 
         # Verify parameter isolation
-        emp_params = WEEK7_TOOL_DEFINITIONS[0]["parameters"]["properties"]
+        emp_params = POLICY_TOOL_DEFINITIONS[0]["parameters"]["properties"]
         self.assertIn("employee_id", emp_params)
         self.assertNotIn("query", emp_params)
 
-        hb_params = WEEK7_TOOL_DEFINITIONS[1]["parameters"]["properties"]
+        hb_params = POLICY_TOOL_DEFINITIONS[1]["parameters"]["properties"]
         self.assertIn("query", hb_params)
         self.assertNotIn("employee_id", hb_params)
 
-        jur_params = WEEK7_TOOL_DEFINITIONS[2]["parameters"]["properties"]
+        jur_params = POLICY_TOOL_DEFINITIONS[2]["parameters"]["properties"]
         self.assertIn("jurisdiction", jur_params)
         self.assertIn("policy_category", jur_params)
         self.assertIn("enum", jur_params["jurisdiction"])

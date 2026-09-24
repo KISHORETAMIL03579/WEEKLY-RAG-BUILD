@@ -1,4 +1,4 @@
-# backend/services/week7_agent.py — Dynamic ReAct Agent with 4 Strict Budgets
+# backend/services/policy_agent.py — Dynamic ReAct HR Policy Agent with 4 Strict Budgets
 from __future__ import annotations
 
 import json
@@ -6,15 +6,15 @@ import time
 from typing import Any, Dict, List, Optional
 
 from backend.config import logger
-from backend.schemas.week7 import (
+from backend.schemas.policy import (
     MAX_COST,
     MAX_ITERATIONS,
     MAX_TOKENS,
     MAX_WALL_CLOCK_SECONDS,
+    PolicyOutputContract,
     TOKEN_COST_PROXY_RATE,
-    Week7OutputContract,
 )
-from backend.services.week7_tools import (
+from backend.services.policy_tools import (
     execute_tool_call,
     get_employee_record,
     get_jurisdiction_rules,
@@ -32,7 +32,7 @@ def run_agent_case(
     max_cost: float = MAX_COST,
     max_wall_clock: float = MAX_WALL_CLOCK_SECONDS,
     force_budget_trap: Optional[str] = None,  # "iterations" | "tokens" | "cost" | "wall_clock"
-) -> Week7OutputContract:
+) -> PolicyOutputContract:
     """
     Execute the ReAct HR Agent on a single employee entitlement question.
     Enforces all 4 budgets (iterations, tokens, cost, wall-clock) dynamically.
@@ -225,7 +225,7 @@ def run_agent_case(
         else:
             passed = bool(entitlement_value)
 
-    return Week7OutputContract(
+    return PolicyOutputContract(
         case_id=case_id,
         employee_id=employee_id,
         question=question,

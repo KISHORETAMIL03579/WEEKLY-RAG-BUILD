@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# scripts/run_week7_agent.py — Single-Command Runner for Week 7 ReAct Agent
+# scripts/run_week7_agent.py — Single-Command Runner for Policy ReAct Agent (Week 7 Benchmark)
 import json
 import os
 import sys
@@ -10,7 +10,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from backend.services.week7_agent import run_agent_case
+from backend.services.policy_agent import run_agent_case
 
 
 def main():
@@ -23,7 +23,7 @@ def main():
         cases = json.load(f)
 
     print(f"============================================================")
-    print(f"   RUNNING WEEK 7 HR AGENT (DYNAMIC REACT LOOP - 10 CASES)")
+    print(f"   RUNNING HR POLICY AGENT (DYNAMIC REACT LOOP - 10 CASES)")
     print(f"============================================================\n")
 
     results = []
