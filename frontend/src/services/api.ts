@@ -275,48 +275,4 @@ export const api = {
   async evaluateWeek6(cases?: Week6CaseResult[], runLlm: boolean = true, signal?: AbortSignal): Promise<Week6EvalResponse> {
     return this.evaluateJudges(cases, runLlm, signal);
   },
-
-  // HR Policy Assistant API endpoints
-  async getPolicyCases(signal?: AbortSignal): Promise<any[]> {
-    const res = await fetch(`${API_BASE}/api/policy/cases`, { signal });
-    return handleResponse<any[]>(res);
-  },
-
-  async getCanonicalEmployees(signal?: AbortSignal): Promise<any[]> {
-    const res = await fetch(`${API_BASE}/api/policy/employees`, { signal });
-    return handleResponse<any[]>(res);
-  },
-
-  async runPolicyAgent(payload: { employee_id: string; question: string; case_id?: string }, signal?: AbortSignal): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/policy/agent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal,
-    });
-    return handleResponse<any>(res);
-  },
-
-  async runPolicyWorkflow(payload: { employee_id: string; question: string; case_id?: string }, signal?: AbortSignal): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/policy/workflow`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal,
-    });
-    return handleResponse<any>(res);
-  },
-
-  async runPolicyBenchmark(signal?: AbortSignal): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/policy/benchmark`, {
-      method: 'POST',
-      signal,
-    });
-    return handleResponse<any>(res);
-  },
-
-  async getLatestBenchmarkResults(signal?: AbortSignal): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/policy/benchmark/latest`, { signal });
-    return handleResponse<any>(res);
-  },
 };

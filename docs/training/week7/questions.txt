@@ -1,0 +1,105 @@
+# ==============================================================================
+# WEEK 7 / POLICY EXECUTION BENCHMARK: 10 HR POLICY TEST QUESTIONS & SPECIFICATIONS
+# Document: 2018 GESCI Human Resource Policy & Procedures Manual (HRPolicy.pdf)
+# System: HR Policy Assistant (ReAct Agent vs Deterministic Workflow)
+# ==============================================================================
+
+# --- Case 01 [Standard Annual Leave Entitlement & Monthly Accrual] ---
+Case ID: case_01
+Employee ID: EMP001
+Employee Details: Sarah Mwangi | Senior Program Officer | Operations | Nairobi, Kenya | Tenure: 18 months | Status: Confirmed | Basic Salary: $3,500/month
+Question: What is the standard annual leave entitlement and monthly accrual rate for EMP001?
+Source Policy Section: Section 5.2.1
+Expected Entitlement / Answer: 24 working days per annum, accruing at 2 days per month.
+Tenure / Status Dependency: Standard full-time confirmed staff (tenure 18 months).
+Deterministic Pass Criteria: ["24", "2 days", "month"]
+
+# --- Case 02 [Annual Leave Carryover Limit & Year-End Cap] ---
+Case ID: case_02
+Employee ID: EMP002
+Employee Details: Brian O'Connor | Finance Specialist | Finance | Dublin, Ireland | Tenure: 24 months | Status: Confirmed | Basic Salary: $4,200/month
+Question: How many unused annual leave days can EMP002 carry forward into the next calendar year without special CEO consent?
+Source Policy Section: Section 5.2.7
+Expected Entitlement / Answer: Maximum of 5 days (must be taken by June 30th of the following year).
+Tenure / Status Dependency: Global annual leave carry forward rule under Section 5.2.7 (not 10 days separation commutation).
+Deterministic Pass Criteria: ["5 days", "5"]
+
+# --- Case 03 [Probationary Resignation Written Notice] ---
+Case ID: case_03
+Employee ID: EMP003
+Employee Details: David Omondi | Junior Field Assistant | Field Services | Nairobi, Kenya | Tenure: 4 months | Status: Probation | Basic Salary: $1,800/month
+Question: How much written notice must EMP003 provide if they decide to resign while on probation?
+Source Policy Section: Section 10.1 & Section 3.6.4
+Expected Entitlement / Answer: 1 week (7 days) written notice.
+Tenure / Status Dependency: Branching on Probation status (tenure 4 months < 6 months): 1 week notice vs 4 weeks for confirmed staff.
+Deterministic Pass Criteria: ["1 week", "7 days", "probation"]
+
+# --- Case 04 [Confirmed Staff Resignation Written Notice] ---
+Case ID: case_04
+Employee ID: EMP004
+Employee Details: Grace Wanjiru | Regional Director | Executive | Nairobi, Kenya | Tenure: 36 months | Status: Confirmed | Basic Salary: $6,000/month
+Question: How much written notice must EMP004 provide if resigning as a confirmed staff member?
+Source Policy Section: Section 10.1
+Expected Entitlement / Answer: 4 weeks written notice.
+Tenure / Status Dependency: Branching on Confirmed status (tenure 36 months >= 6 months): 4 weeks written notice.
+Deterministic Pass Criteria: ["4 weeks"]
+
+# --- Case 05 [Paid Sick Leave Service Threshold & Probationary Ineligibility] ---
+Case ID: case_05
+Employee ID: EMP005
+Employee Details: Kevin Ndirangu | Logistics Coordinator | Logistics | Nairobi, Kenya | Tenure: 1 month | Status: Probation | Basic Salary: $2,200/month
+Question: Is EMP005 eligible for paid sick leave after 1 month of service, and what is the minimum qualifying service threshold?
+Source Policy Section: Section 5.3.2
+Expected Entitlement / Answer: Not eligible; paid sick leave requires a minimum threshold of at least 2 consecutive months of service.
+Tenure / Status Dependency: Branching on Minimum Service threshold (tenure 1 month < 2 consecutive months): Ineligible.
+Deterministic Pass Criteria: ["ineligible", "2 consecutive months"]
+
+# --- Case 06 [Paid Sick Leave Accrual Rate & Minimum Entitlement] ---
+Case ID: case_06
+Employee ID: EMP006
+Employee Details: Amina Kone | Human Resources Officer | People & Culture | Abidjan, Cote d'Ivoire | Tenure: 14 months | Status: Confirmed | Basic Salary: $2,800/month
+Question: What is the sick leave accrual rate and the minimum paid sick leave entitlement for EMP006?
+Source Policy Section: Section 5.3.2
+Expected Entitlement / Answer: Rate of 2 working days per month (1 day full pay / 1 day half pay), with a minimum of 7 days full pay and 7 days half pay (maximum 3 months full / 3 months half).
+Tenure / Status Dependency: Confirmed tenure >= 2 months (tenure 14 months).
+Deterministic Pass Criteria: ["2 working days", "full pay", "half pay", "7 days"]
+
+# --- Case 07 [Redundancy Severance & Notice Calculation (4 Years Service)] ---
+Case ID: case_07
+Employee ID: EMP007
+Employee Details: Peter Mugisha | Country Representative | Country Operations | Kigali, Rwanda | Tenure: 48 months | Status: Confirmed | Basic Salary: $5,000/month | Separation Reason: Redundancy
+Question: What severance payment and notice period is EMP007 entitled to upon separation due to redundancy with 4 completed years of service?
+Source Policy Section: Section 10.5.1
+Expected Entitlement / Answer: 1 month written notice (or pay in lieu) plus severance pay of 60 days' pay (15 days' basic pay for each of the 4 completed years of service).
+Tenure / Status Dependency: Calculation branching on Separation Reason (Redundancy) & Completed Years of Service (4 years * 15 days = 60 days pay).
+Deterministic Pass Criteria: ["1 month", "15 days", "60 days"]
+
+# --- Case 08 [Unsatisfactory Performance Separation Severance Exclusion] ---
+Case ID: case_08
+Employee ID: EMP008
+Employee Details: Faith Chebet | Associate Researcher | Policy & Research | Nairobi, Kenya | Tenure: 12 months | Status: Confirmed | Basic Salary: $2,500/month | Separation Reason: Unsatisfactory Performance
+Question: What severance pay is EMP008 entitled to upon termination for unsatisfactory performance?
+Source Policy Section: Section 10.5.2
+Expected Entitlement / Answer: 0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay).
+Tenure / Status Dependency: Branching on Separation Reason (Unsatisfactory Performance vs Redundancy = 0 severance).
+Deterministic Pass Criteria: ["not entitled to severance", "0 severance"]
+
+# --- Case 09 [Pension Allowance Probationary Restriction] ---
+Case ID: case_09
+Employee ID: EMP009
+Employee Details: Emmanuel Gasana | IT Support Engineer | Information Technology | Kigali, Rwanda | Tenure: 4 months | Status: Probation | Basic Salary: $2,000/month
+Question: Is EMP009 currently eligible to receive the 10% pension contribution allowance while on probation?
+Source Policy Section: Section 4.4.1
+Expected Entitlement / Answer: Ineligible during probation; pension contribution allowance (10% of basic salary) is only provided once probation is successfully completed.
+Tenure / Status Dependency: Branching on Probation status (tenure 4 months < 6 months = Ineligible).
+Deterministic Pass Criteria: ["ineligible", "10%", "probation"]
+
+# --- Case 10 [Separation Accrued Leave Commutation Cap] ---
+Case ID: case_10
+Employee ID: EMP010
+Employee Details: Linda Akinyi | Senior Legal Counsel | Legal & Compliance | Nairobi, Kenya | Tenure: 30 months | Status: Confirmed | Basic Salary: $5,500/month | Separation Reason: Resignation
+Question: How many days of accrued unused annual leave can EMP010 commute to cash upon separation from service?
+Source Policy Section: Section 10.7
+Expected Entitlement / Answer: Maximum of 10 working days on gross salary alone.
+Tenure / Status Dependency: Separation commutation cap under Section 10.7.
+Deterministic Pass Criteria: ["10 working days"]
