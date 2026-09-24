@@ -11,6 +11,7 @@ from fastapi import APIRouter, Body, File, UploadFile
 from fastapi.responses import JSONResponse
 
 from backend.config import BASE_DIR, get_app_symbol, logger
+from backend.errors import BadRequestError, NotFoundError
 from backend.evaluation.assertions import run_all_assertions
 from backend.evaluation.judge import (
     evaluate_case_deterministically,
@@ -99,7 +100,7 @@ def parse_qa_pairs(text: str) -> list[dict]:
 def eval_parse_qa_pdf(file: Optional[UploadFile] = File(default=None)):
     """Accepts an uploaded PDF, TXT, MD, or JSON file containing Q:/A: formatted pairs."""
     if not file or not file.filename:
-        return JSONResponse({"error": "No file uploaded"}, status_code=400)
+        raise BadRequestError("No file uploaded")
 
     filename_lower = file.filename.lower()
     if filename_lower.endswith(".pdf"):
@@ -108,9 +109,9 @@ def eval_parse_qa_pdf(file: Optional[UploadFile] = File(default=None)):
             save_upload_to(file, tmp_path)
             pages = extract_pdf_pages(str(tmp_path))
             if not pages:
-                return JSONResponse({
-                    "error": "Could not extract any text from that PDF — it may be corrupt, encrypted, or a scanned image without a text layer"
-                }, status_code=400)
+                raise BadRequestError(
+                    "Could not extract any text from that PDF — it may be corrupt, encrypted, or a scanned image without a text layer"
+                )
             full_text = "\n".join(p["text"] for p in pages)
         finally:
             tmp_path.unlink(missing_ok=True)
@@ -118,7 +119,7 @@ def eval_parse_qa_pdf(file: Optional[UploadFile] = File(default=None)):
         try:
             full_text = file.file.read().decode("utf-8", errors="replace")
         except Exception:
-            return JSONResponse({"error": "Could not read that file as text"}, status_code=400)
+            raise BadRequestError("Could not read that file as text")
     elif filename_lower.endswith(".json"):
         try:
             raw_bytes = file.file.read()
@@ -141,17 +142,19 @@ def eval_parse_qa_pdf(file: Optional[UploadFile] = File(default=None)):
                             pairs.append({"question": str(q).strip(), "expected": str(a).strip() or "HR Policy"})
             if pairs:
                 return {"ok": True, "pairs": pairs}
-            return JSONResponse({"error": "No valid question/expected pairs found in JSON"}, status_code=400)
+            raise BadRequestError("No valid question/expected pairs found in JSON")
         except Exception as exc:
-            return JSONResponse({"error": f"Invalid JSON format: {exc}"}, status_code=400)
+            if isinstance(exc, BadRequestError):
+                raise
+            raise BadRequestError(f"Invalid JSON format: {exc}")
     else:
-        return JSONResponse({"error": "Only PDF, TXT, MD, or JSON files are supported here"}, status_code=400)
+        raise BadRequestError("Only PDF, TXT, MD, or JSON files are supported here")
 
     pairs = parse_qa_pairs(full_text)
     if not pairs:
-        return JSONResponse({
-            "error": 'No "Q:"/"A:" pairs found. Expected format: "Q: your question" on one line, "A: expected answer" on the next, blank line between pairs.'
-        }, status_code=400)
+        raise BadRequestError(
+            'No "Q:"/"A:" pairs found. Expected format: "Q: your question" on one line, "A: expected answer" on the next, blank line between pairs.'
+        )
     return {"ok": True, "pairs": pairs}
 
 
@@ -509,7 +512,7 @@ def create_evaluation_run(payload: Optional[Week6EvalPayload] = Body(default=Non
 
     cases_to_eval, labels, v1_template, v2_template = _prepare_cases_for_evaluation(cases_payload)
     if not cases_to_eval:
-        return JSONResponse({"error": "No cases available to evaluate"}, status_code=400)
+        raise BadRequestError("No cases available to evaluate")
 
     run_state = run_manager.start_run(
         cases=cases_to_eval,
@@ -545,7 +548,7 @@ def get_evaluation_run(run_id: str):
     """Returns the current state and results for a specific evaluation run."""
     run = run_manager.get_run(run_id)
     if not run:
-        return JSONResponse({"error": f"Evaluation run '{run_id}' not found"}, status_code=404)
+        raise NotFoundError(f"Evaluation run '{run_id}' not found")
     return run.to_dict()
 
 
@@ -555,7 +558,7 @@ def cancel_evaluation_run(run_id: str):
     """Explicitly cancels an active background evaluation run upon user request."""
     success = run_manager.cancel_run(run_id)
     if not success:
-        return JSONResponse({"error": f"Evaluation run '{run_id}' not found"}, status_code=404)
+        raise NotFoundError(f"Evaluation run '{run_id}' not found")
     return {"ok": True, "evaluation_run_id": run_id, "status": "CANCELLED"}
 
 

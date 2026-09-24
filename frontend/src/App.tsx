@@ -17,7 +17,7 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  if (currentPath === '/eval') {
+  if (currentPath === '/eval' || currentPath.startsWith('/eval/')) {
     return <EvaluationPage />;
   }
 

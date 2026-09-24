@@ -10,15 +10,37 @@ import { api } from '../services/api';
 import { generateId } from '../utils/helpers';
 
 export const EvaluationPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'policy' | 'judge' | 'retrieval'>(() => {
+  const getInitialTab = (): 'policy' | 'judge' | 'retrieval' => {
     if (typeof window !== 'undefined') {
+      const pathname = window.location.pathname.toLowerCase();
+      if (pathname.includes('/eval/judge')) return 'judge';
+      if (pathname.includes('/eval/retrieval')) return 'retrieval';
+      if (pathname.includes('/eval/policy')) return 'policy';
+
       const p = new URLSearchParams(window.location.search);
       const tab = p.get('tab');
-      if (tab === 'judge' || tab === 'retrieval') return tab;
+      if (tab === 'judge' || tab === 'retrieval' || tab === 'policy') return tab;
     }
     return 'policy';
-  });
+  };
+
+  const [activeTab, setActiveTabState] = useState<'policy' | 'judge' | 'retrieval'>(getInitialTab);
   const [isJudgeEvaluating, setIsJudgeEvaluating] = useState<boolean>(false);
+
+  const setActiveTab = (tab: 'policy' | 'judge' | 'retrieval') => {
+    setActiveTabState(tab);
+    if (typeof window !== 'undefined' && window.history) {
+      window.history.pushState(null, '', `/eval/${tab}`);
+    }
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setActiveTabState(getInitialTab());
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Retrieval Benchmark State
   const [questions, setQuestions] = useState<EvalQuestionInput[]>([

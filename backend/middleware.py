@@ -2,6 +2,7 @@
 import os
 import sys
 import subprocess
+import uuid
 from pathlib import Path
 from typing import Any
 from starlette.datastructures import Headers
@@ -89,6 +90,46 @@ class MaxBodySizeMiddleware:
                 await _too_large_response()(scope, receive, send)
 
 
+class RequestCorrelationMiddleware:
+    """
+    ASGI middleware ensuring every HTTP request has a unique correlation request_id (req_...).
+    - Reads incoming 'X-Request-ID' header or generates a new one.
+    - Sets request.state.request_id.
+    - Adds 'X-Request-ID' header to all outgoing responses.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = Headers(scope=scope)
+        request_id = headers.get("x-request-id") or f"req_{uuid.uuid4().hex[:12]}"
+
+        if "state" not in scope:
+            scope["state"] = {}
+        scope["state"]["request_id"] = request_id
+
+        async def send_with_request_id(message: Any) -> None:
+            if message["type"] == "http.response.start":
+                res_headers = list(message.get("headers", []))
+                has_req_id = False
+                for i, (k, v) in enumerate(res_headers):
+                    if k.lower() == b"x-request-id":
+                        res_headers[i] = (k, request_id.encode("latin-1"))
+                        has_req_id = True
+                        break
+                if not has_req_id:
+                    res_headers.append((b"x-request-id", request_id.encode("latin-1")))
+                message["headers"] = res_headers
+            await send(message)
+
+        await self.app(scope, receive, send_with_request_id)
+
+
 def ensure_frontend_built(force: bool = False) -> bool:
     """
     Ensures that the React 18 + TypeScript + Vite production build exists.
@@ -151,7 +192,7 @@ def ensure_frontend_built(force: bool = False) -> bool:
 
 
 def register_middleware(app: FastAPI) -> None:
-    """Registers standard application middleware (SessionMiddleware, MaxBodySizeMiddleware)."""
+    """Registers standard application middleware (RequestCorrelationMiddleware, SessionMiddleware, MaxBodySizeMiddleware)."""
     # Note: Starlette executes middleware in reverse addition order
     app.add_middleware(MaxBodySizeMiddleware, max_body_size=MAX_CONTENT_LENGTH)
     app.add_middleware(
@@ -161,3 +202,4 @@ def register_middleware(app: FastAPI) -> None:
         https_only=SESSION_COOKIE_SECURE,
         same_site="lax",
     )
+    app.add_middleware(RequestCorrelationMiddleware)

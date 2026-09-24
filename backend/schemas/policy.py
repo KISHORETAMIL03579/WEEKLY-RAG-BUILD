@@ -43,6 +43,9 @@ class PolicyQueryRequest(BaseModel):
     employee_id: str = Field(..., description="Unique Employee ID, e.g. EMP001")
     question: str = Field(..., description="The policy entitlement or rule query")
     case_id: Optional[str] = Field(None, description="Optional benchmark case ID")
+    top_k: Optional[int] = Field(5, description="Top K retrieval count")
+    temperature: Optional[float] = Field(0.3, description="LLM sampling temperature")
+    model: Optional[str] = Field("llama3.1:8b", description="Model name")
 
 class PolicyOutputContract(BaseModel):
     case_id: str
@@ -61,6 +64,9 @@ class PolicyOutputContract(BaseModel):
     cost_usd: float = 0.0
     latency_ms: float = 0.0
     termination_reason: str = "SUCCESS"
+    top_k: Optional[int] = None
+    temperature: Optional[float] = None
+    model: Optional[str] = None
 
 class BenchmarkCase(BaseModel):
     case_id: str

@@ -5,7 +5,8 @@ import csv
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from backend.config import BASE_DIR, logger
@@ -16,10 +17,18 @@ from backend.schemas.policy import (
     PolicyQueryRequest,
 )
 from backend.services.policy_agent import run_agent_case
+from backend.services.policy_benchmark_runner import PolicyBenchmarkRunManager, PolicyBenchmarkRunState
 from backend.services.policy_tools import CANONICAL_EMPLOYEES
 from backend.services.policy_workflow import run_workflow_case
 
 router = APIRouter(prefix="/api/policy", tags=["policy"])
+
+
+class PolicyBenchmarkStartRequest(BaseModel):
+    top_k: int = Field(default=5, ge=1, le=20)
+    temperature: float = Field(default=0.3, ge=0.0, le=1.0)
+    model: Optional[str] = "llama3.1:8b"
+    background: bool = Field(default=False)
 
 
 def _load_benchmark_cases() -> List[Dict[str, Any]]:
@@ -55,10 +64,19 @@ def execute_policy_agent(payload: PolicyQueryRequest):
     Enforces the 4 strict budgets (iterations, tokens, cost, wall-clock).
     """
     try:
+        top_k_val = getattr(payload, "top_k", 5) or 5
+        temp_val = getattr(payload, "temperature", 0.3)
+        if temp_val is None:
+            temp_val = 0.3
+        model_val = getattr(payload, "model", "llama3.1:8b") or "llama3.1:8b"
+
         result = run_agent_case(
             case_id=payload.case_id or "custom_agent_case",
             employee_id=payload.employee_id,
             question=payload.question,
+            top_k=top_k_val,
+            temperature=temp_val,
+            model=model_val,
         )
         return result
     except Exception as e:
@@ -72,10 +90,12 @@ def execute_policy_workflow(payload: PolicyQueryRequest):
     Execute the Fixed 3-Step Deterministic HR Policy Workflow on an employee entitlement question.
     """
     try:
+        top_k_val = getattr(payload, "top_k", 5) or 5
         result = run_workflow_case(
             case_id=payload.case_id or "custom_wf_case",
             employee_id=payload.employee_id,
             question=payload.question,
+            top_k=top_k_val,
         )
         return result
     except Exception as e:
@@ -84,61 +104,86 @@ def execute_policy_workflow(payload: PolicyQueryRequest):
 
 
 @router.post("/benchmark")
-def run_benchmark_comparison():
+def start_or_run_benchmark(payload: Optional[PolicyBenchmarkStartRequest] = None):
     """
-    Execute the full 10-case benchmark comparison between Policy Agent and Policy Workflow.
-    Returns scorecard metrics (pass rate, p50 latency, token totals, cost) and detailed rows.
+    Execute or start the 10-case policy benchmark comparison.
+    If payload.background is True, starts a background thread and returns run_id immediately.
+    Otherwise runs synchronously and returns completed summary and case records.
     """
     cases = _load_benchmark_cases()
     if not cases:
         raise HTTPException(status_code=404, detail="Benchmark cases not found at benchmarks/policy_execution/cases.json")
 
-    agent_results: List[PolicyOutputContract] = []
-    workflow_results: List[PolicyOutputContract] = []
+    req = payload or PolicyBenchmarkStartRequest()
+    manager = PolicyBenchmarkRunManager.get_instance()
 
-    for c in cases:
-        cid = c.get("case_id", "")
-        empid = c.get("employee_id", "")
-        q = c.get("question", "")
-        crit = c.get("deterministic_pass_criteria", [])
+    if req.background:
+        run_state = manager.start_benchmark(
+            cases=cases,
+            top_k=req.top_k,
+            temperature=req.temperature,
+            model=req.model,
+        )
+        return JSONResponse(content=run_state.to_dict())
 
-        # Run Agent
-        a_res = run_agent_case(cid, empid, q, deterministic_pass_criteria=crit)
-        agent_results.append(a_res)
-
-        # Run Workflow
-        w_res = run_workflow_case(cid, empid, q, deterministic_pass_criteria=crit)
-        workflow_results.append(w_res)
-
-    def _summarize(results: List[PolicyOutputContract]) -> Dict[str, Any]:
-        n = len(results)
-        passed = sum(1 for r in results if r.passed)
-        lats = sorted([r.latency_ms for r in results])
-        p50 = lats[n // 2] if n else 0.0
-        tot_tok = sum(r.total_tokens for r in results)
-        tot_cost = sum(r.cost_usd for r in results)
-        cost_per_q = tot_cost / n if n else 0.0
-        return {
-            "pass_rate_pct": round((passed / n) * 100, 1) if n else 0.0,
-            "passed_count": passed,
-            "total_cases": n,
-            "p50_latency_ms": round(p50, 3),
-            "total_tokens": tot_tok,
-            "cost_per_question_usd": round(cost_per_q, 6),
-        }
-
-    summary = {
-        "agent": _summarize(agent_results),
-        "workflow": _summarize(workflow_results),
-    }
-
-    return JSONResponse(
-        content={
-            "summary": summary,
-            "agent_results": [r.model_dump() for r in agent_results],
-            "workflow_results": [r.model_dump() for r in workflow_results],
-        }
+    # Synchronous execution
+    run_state = PolicyBenchmarkRunState(
+        run_id=f"bench_sync_{Path('.').resolve().name}",
+        cases=cases,
+        top_k=req.top_k,
+        temperature=req.temperature,
+        model=req.model,
     )
+    manager._execute_benchmark_worker(run_state, cases)
+    return JSONResponse(content=run_state.to_dict())
+
+
+@router.post("/benchmark/start")
+def start_benchmark_background(payload: Optional[PolicyBenchmarkStartRequest] = None):
+    """Explicit endpoint to start an asynchronous background benchmark run."""
+    cases = _load_benchmark_cases()
+    if not cases:
+        raise HTTPException(status_code=404, detail="Benchmark cases not found at benchmarks/policy_execution/cases.json")
+
+    req = payload or PolicyBenchmarkStartRequest(background=True)
+    manager = PolicyBenchmarkRunManager.get_instance()
+    run_state = manager.start_benchmark(
+        cases=cases,
+        top_k=req.top_k,
+        temperature=req.temperature,
+        model=req.model,
+    )
+    return JSONResponse(content=run_state.to_dict())
+
+
+@router.get("/benchmark/runs/active")
+def get_active_benchmark_run():
+    """Retrieve the currently running policy benchmark state, if any."""
+    manager = PolicyBenchmarkRunManager.get_instance()
+    active_run = manager.get_active_run()
+    if active_run:
+        return JSONResponse(content={"active": True, "run": active_run.to_dict()})
+    return JSONResponse(content={"active": False, "run": None})
+
+
+@router.get("/benchmark/runs/{run_id}")
+def get_benchmark_run_status(run_id: str):
+    """Poll live execution status and case-by-case progress for a specific benchmark run."""
+    manager = PolicyBenchmarkRunManager.get_instance()
+    run_state = manager.get_run(run_id)
+    if not run_state:
+        raise HTTPException(status_code=404, detail=f"Benchmark run {run_id} not found")
+    return JSONResponse(content=run_state.to_dict())
+
+
+@router.post("/benchmark/runs/{run_id}/cancel")
+def cancel_benchmark_run(run_id: str):
+    """Cancel an in-flight benchmark run."""
+    manager = PolicyBenchmarkRunManager.get_instance()
+    success = manager.cancel_run(run_id)
+    if not success:
+        raise HTTPException(status_code=400, detail=f"Could not cancel benchmark run {run_id}")
+    return JSONResponse(content={"cancelled": True, "run_id": run_id})
 
 
 @router.get("/benchmark/latest")

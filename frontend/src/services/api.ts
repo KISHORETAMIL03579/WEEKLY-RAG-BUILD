@@ -290,7 +290,7 @@ export const api = {
     return handleResponse<any[]>(res);
   },
 
-  async runPolicyAgent(payload: { employee_id: string; question: string; case_id?: string }, signal?: AbortSignal): Promise<any> {
+  async runPolicyAgent(payload: { employee_id: string; question: string; case_id?: string; top_k?: number; temperature?: number; model?: string }, signal?: AbortSignal): Promise<any> {
     const res = await fetch(`${API_BASE}/api/policy/agent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -300,7 +300,7 @@ export const api = {
     return handleResponse<any>(res);
   },
 
-  async runPolicyWorkflow(payload: { employee_id: string; question: string; case_id?: string }, signal?: AbortSignal): Promise<any> {
+  async runPolicyWorkflow(payload: { employee_id: string; question: string; case_id?: string; top_k?: number }, signal?: AbortSignal): Promise<any> {
     const res = await fetch(`${API_BASE}/api/policy/workflow`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -310,8 +310,38 @@ export const api = {
     return handleResponse<any>(res);
   },
 
+  async startPolicyBenchmark(payload?: { top_k?: number; temperature?: number; model?: string }, signal?: AbortSignal): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/policy/benchmark/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...(payload || {}), background: true }),
+      signal,
+    });
+    return handleResponse<any>(res);
+  },
+
   async runPolicyBenchmark(signal?: AbortSignal): Promise<any> {
     const res = await fetch(`${API_BASE}/api/policy/benchmark`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+      signal,
+    });
+    return handleResponse<any>(res);
+  },
+
+  async getPolicyBenchmarkRun(runId: string, signal?: AbortSignal): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/policy/benchmark/runs/${runId}`, { signal });
+    return handleResponse<any>(res);
+  },
+
+  async getActivePolicyBenchmarkRun(signal?: AbortSignal): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/policy/benchmark/runs/active`, { signal });
+    return handleResponse<any>(res);
+  },
+
+  async cancelPolicyBenchmarkRun(runId: string, signal?: AbortSignal): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/policy/benchmark/runs/${runId}/cancel`, {
       method: 'POST',
       signal,
     });

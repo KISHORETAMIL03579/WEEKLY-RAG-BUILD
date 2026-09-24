@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from backend.schemas.policy import (
     PolicyOutputContract,
@@ -22,6 +22,7 @@ def run_workflow_case(
     question: str,
     deterministic_pass_criteria: Optional[List[str]] = None,
     top_k: int = 5,
+    on_stage: Optional[Callable[[str], None]] = None,
 ) -> PolicyOutputContract:
     """
     Execute the Fixed 3-Step Deterministic Workflow on a single employee entitlement question.
@@ -35,6 +36,8 @@ def run_workflow_case(
     # -----------------------------------------------------------------------
     # Step 1: Fetch Employee Record (Deterministic)
     # -----------------------------------------------------------------------
+    if on_stage:
+        on_stage("Step 1: Employee lookup")
     t0 = time.perf_counter()
     emp_record = execute_tool_call("get_employee_record", {"employee_id": employee_id})
     t_ms = (time.perf_counter() - t0) * 1000
@@ -54,6 +57,8 @@ def run_workflow_case(
     # -----------------------------------------------------------------------
     # Step 2: Determine Policy Query Branch from Employee Data & Intent
     # -----------------------------------------------------------------------
+    if on_stage:
+        on_stage("Step 2: Policy rule match")
     q_lower = question.lower()
     if "annual leave" in q_lower or "carry" in q_lower:
         search_query = "annual leave entitlement carry forward Section 5.2"
@@ -84,6 +89,8 @@ def run_workflow_case(
         "latency_ms": round(max(0.01, t_ms), 3),
     })
 
+    if on_stage:
+        on_stage("Step 3: Deterministic calculation")
     emp_name = emp_record.get("name", employee_id) if emp_record else employee_id
 
     # Deterministic rule synthesis

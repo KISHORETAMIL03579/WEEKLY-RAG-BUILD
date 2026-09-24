@@ -18,6 +18,9 @@ export interface PolicyQueryRequest {
   employee_id: string;
   question: string;
   case_id?: string;
+  top_k?: number;
+  temperature?: number;
+  model?: string;
 }
 
 export interface ToolCallRecord {
@@ -45,6 +48,9 @@ export interface PolicyOutputContract {
   cost_usd: number;
   latency_ms: number;
   termination_reason: string;
+  top_k?: number;
+  temperature?: number | null;
+  model?: string | null;
 }
 
 export interface BenchmarkCase {
@@ -73,4 +79,63 @@ export interface PolicyBenchmarkResponse {
   };
   agent_results: PolicyOutputContract[];
   workflow_results: PolicyOutputContract[];
+}
+
+export interface BenchmarkCaseLiveStatus {
+  case_id: string;
+  employee_id: string;
+  question: string;
+  ground_truth?: string;
+  source_section?: string;
+  pass_criteria?: string[];
+  status: 'WAITING' | 'RUNNING' | 'PASS' | 'FAIL' | 'ERROR';
+  agent_status: 'WAITING' | 'RUNNING' | 'PASS' | 'FAIL' | 'ERROR';
+  workflow_status: 'WAITING' | 'RUNNING' | 'PASS' | 'FAIL' | 'ERROR';
+  agent_entitlement?: string | null;
+  workflow_entitlement?: string | null;
+  agent_rule?: string | null;
+  workflow_rule?: string | null;
+  agent_explanation?: string | null;
+  workflow_explanation?: string | null;
+  agent_passed?: boolean | null;
+  workflow_passed?: boolean | null;
+  agent_latency_ms?: number | null;
+  workflow_latency_ms?: number | null;
+  agent_tokens?: number | null;
+  workflow_tokens?: number | null;
+  agent_cost_usd?: number | null;
+  workflow_cost_usd?: number | null;
+  agent_result?: PolicyOutputContract | null;
+  workflow_result?: PolicyOutputContract | null;
+}
+
+export interface PolicyBenchmarkRunStateResponse {
+  run_id: string;
+  status: 'RUNNING' | 'COMPLETED' | 'CANCELLED' | 'ERROR';
+  top_k: number;
+  temperature: number;
+  model: string;
+  total_cases: number;
+  completed_cases: number;
+  progress_pct: number;
+  current_case_id?: string | null;
+  current_question?: string | null;
+  current_agent_stage?: string | null;
+  current_workflow_stage?: string | null;
+  agent_completed_count: number;
+  workflow_completed_count: number;
+  elapsed_seconds: number;
+  cases_status: BenchmarkCaseLiveStatus[];
+  summary?: {
+    agent: ExecutionSummary;
+    workflow: ExecutionSummary;
+  } | null;
+  error_message?: string | null;
+  agent_results?: PolicyOutputContract[];
+  workflow_results?: PolicyOutputContract[];
+}
+
+export interface ActiveBenchmarkRunResponse {
+  active: boolean;
+  run: PolicyBenchmarkRunStateResponse | null;
 }

@@ -7,7 +7,7 @@ import re
 import socket
 import time
 import urllib.request
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from backend.config import logger
 from backend.schemas.policy import (
@@ -29,15 +29,27 @@ OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
 DEFAULT_AGENT_MODEL = os.environ.get("OLLAMA_CHAT_MODEL", "llama3.1:8b")
 
 
-def check_ollama_available(timeout: float = 0.2) -> bool:
-    """Non-blocking TCP check to verify if Ollama daemon is active."""
+_last_ollama_check_time: float = 0.0
+_cached_ollama_status: bool = False
+
+
+def check_ollama_available(timeout: float = 0.05) -> bool:
+    """Non-blocking TCP check to verify if Ollama daemon is active with 2s caching."""
+    global _last_ollama_check_time, _cached_ollama_status
+    now = time.time()
+    if now - _last_ollama_check_time < 2.0:
+        return _cached_ollama_status
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(timeout)
         res = s.connect_ex(("127.0.0.1", 11434))
         s.close()
-        return res == 0
+        _cached_ollama_status = (res == 0)
+        _last_ollama_check_time = now
+        return _cached_ollama_status
     except Exception:
+        _cached_ollama_status = False
+        _last_ollama_check_time = now
         return False
 
 
@@ -97,6 +109,7 @@ def run_agent_case(
     temperature: float = 0.3,
     model: str = DEFAULT_AGENT_MODEL,
     use_live_llm: Optional[bool] = None,
+    on_stage: Optional[Callable[[str], None]] = None,
 ) -> PolicyOutputContract:
     """
     Execute the Dynamic ReAct HR Policy Agent on an employee entitlement question.
@@ -172,6 +185,8 @@ Final Answer: {{"entitlement_value": "<exact entitlement>", "rule_cited": "<sect
         # Execute Live Ollama LLM Step on Decision Iterations
         step_prompt = conversation_history + f"\nThought:"
         if ollama_ready and iteration == 1:
+            if on_stage:
+                on_stage("Calling Ollama")
             llm_resp, p_tok, c_tok, step_lat = _call_ollama_step(
                 step_prompt,
                 model=model,
@@ -181,6 +196,8 @@ Final Answer: {{"entitlement_value": "<exact entitlement>", "rule_cited": "<sect
             prompt_tokens += p_tok if p_tok > 0 else 240
             completion_tokens += c_tok if c_tok > 0 else 32
         else:
+            if on_stage:
+                on_stage("Selecting tool")
             # Token accounting reflecting prompt expansion and tool observation payload
             p_tok = 180 + (iteration * 90) + (len(tool_calls_record) * 60)
             c_tok = 45 + (iteration * 20)
@@ -211,6 +228,8 @@ Final Answer: {{"entitlement_value": "<exact entitlement>", "rule_cited": "<sect
         # Tool Dispatch (ReAct Step 1: Employee Record)
         # -------------------------------------------------------------------
         if iteration == 1 and not emp_record:
+            if on_stage:
+                on_stage("Executing tool: get_employee_record")
             t0 = time.perf_counter()
             emp_record = execute_tool_call("get_employee_record", {"employee_id": employee_id})
             t_ms = (time.perf_counter() - t0) * 1000
@@ -221,6 +240,8 @@ Final Answer: {{"entitlement_value": "<exact entitlement>", "rule_cited": "<sect
                 "output": emp_record,
                 "latency_ms": round(max(0.01, t_ms), 3),
             })
+            if on_stage:
+                on_stage("Processing tool result")
             conversation_history += f"\nAction: get_employee_record\nAction Input: {{\"employee_id\": \"{employee_id}\"}}\nObservation: {json.dumps(emp_record)}"
             continue
 
@@ -244,6 +265,8 @@ Final Answer: {{"entitlement_value": "<exact entitlement>", "rule_cited": "<sect
             else:
                 search_q = question
 
+            if on_stage:
+                on_stage("Executing tool: search_handbook")
             t0 = time.perf_counter()
             handbook_excerpts = execute_tool_call("search_handbook", {"query": search_q, "top_k": top_k})
             t_ms = (time.perf_counter() - t0) * 1000
@@ -261,6 +284,8 @@ Final Answer: {{"entitlement_value": "<exact entitlement>", "rule_cited": "<sect
         # ReAct Step 3: Synthesis & Verification
         # -------------------------------------------------------------------
         if emp_record and handbook_excerpts:
+            if on_stage:
+                on_stage("Generating final answer")
             emp_status = emp_record.get("employment_status", "Confirmed")
             tenure_m = emp_record.get("tenure_months", 0)
             jurisdiction = emp_record.get("jurisdiction", "Kenya")

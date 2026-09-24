@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import os
 from fastapi import FastAPI, Request
-from fastapi.encoders import jsonable_encoder
-from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware import Middleware
@@ -23,7 +21,12 @@ from backend.config import (
     SESSION_COOKIE_SECURE,
     logger,
 )
-from backend.middleware import MaxBodySizeMiddleware, ensure_frontend_built
+from backend.errors import register_exception_handlers
+from backend.middleware import (
+    MaxBodySizeMiddleware,
+    RequestCorrelationMiddleware,
+    ensure_frontend_built,
+)
 from backend.routes.chat import router as chat_router
 from backend.routes.documents import router as documents_router
 from backend.routes.evaluation import router as evaluation_router
@@ -33,7 +36,7 @@ from backend.routes.traces import router as traces_router
 from backend.services.embeddings import embeddings_configured
 from backend.services.llm import chat_configured
 from backend.storage.orphan_store import load_orphaned_docs
-from backend.storage.session_manager import NoActiveSessionError, SessionId
+from backend.storage.session_manager import SessionId
 
 
 def create_app() -> FastAPI:
@@ -55,6 +58,7 @@ def create_app() -> FastAPI:
                 same_site="lax",
                 https_only=SESSION_COOKIE_SECURE,
             ),
+            Middleware(RequestCorrelationMiddleware),
         ],
     )
 
@@ -63,21 +67,8 @@ def create_app() -> FastAPI:
     if assets_dir.exists():
         app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
 
-    # Exception Handlers
-    @app.exception_handler(NoActiveSessionError)
-    async def _no_active_session_handler(request: Request, exc: NoActiveSessionError) -> JSONResponse:
-        return JSONResponse({"error": "No active session"}, status_code=400)
-
-    @app.exception_handler(RequestValidationError)
-    async def _validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-        problems = "; ".join(
-            f"{'.'.join(str(p) for p in err.get('loc', ())[1:]) or 'body'}: {err.get('msg', 'invalid')}"
-            for err in exc.errors()
-        )
-        return JSONResponse(
-            {"error": f"Invalid request: {problems}", "detail": jsonable_encoder(exc.errors())},
-            status_code=422,
-        )
+    # Standardized application exception handlers
+    register_exception_handlers(app)
 
     # Core Page Routes
     @app.get("/", include_in_schema=False)
@@ -109,7 +100,6 @@ def create_app() -> FastAPI:
     # Register all modular routers
     for r in (chat_router, ingestion_router, documents_router, traces_router, evaluation_router, policy_router):
         app.include_router(r)
-
 
     # Startup event to load orphans
     @app.on_event("startup")
