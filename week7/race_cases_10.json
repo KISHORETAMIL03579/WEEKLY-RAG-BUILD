@@ -1,0 +1,92 @@
+[
+  {
+    "case_id": "case_01",
+    "employee_id": "EMP001",
+    "question": "What is the standard annual leave entitlement and monthly accrual rate for EMP001?",
+    "source_section": "Section 5.2.1",
+    "expected_value": "24 working days per annum, accruing at 2 days per month.",
+    "tenure_dependency": "Standard full-time confirmed staff (tenure 18 months).",
+    "deterministic_pass_criteria": ["24", "2 days", "month"]
+  },
+  {
+    "case_id": "case_02",
+    "employee_id": "EMP002",
+    "question": "How many unused annual leave days can EMP002 carry forward into the next calendar year without special CEO consent?",
+    "source_section": "Section 5.2.7",
+    "expected_value": "Maximum of 5 days (must be taken by June 30th of the following year).",
+    "tenure_dependency": "Global annual leave carry forward rule under Section 5.2.7 (not 10 days separation commutation).",
+    "deterministic_pass_criteria": ["5 days", "5"]
+  },
+  {
+    "case_id": "case_03",
+    "employee_id": "EMP003",
+    "question": "How much written notice must EMP003 provide if they decide to resign while on probation?",
+    "source_section": "Section 10.1 & Section 3.6.4",
+    "expected_value": "1 week (7 days) written notice.",
+    "tenure_dependency": "Branching on Probation status (tenure 4 months < 6 months): 1 week notice vs 4 weeks for confirmed staff.",
+    "deterministic_pass_criteria": ["1 week", "7 days", "probation"]
+  },
+  {
+    "case_id": "case_04",
+    "employee_id": "EMP004",
+    "question": "How much written notice must EMP004 provide if resigning as a confirmed staff member?",
+    "source_section": "Section 10.1",
+    "expected_value": "4 weeks written notice.",
+    "tenure_dependency": "Branching on Confirmed status (tenure 36 months >= 6 months): 4 weeks written notice.",
+    "deterministic_pass_criteria": ["4 weeks"]
+  },
+  {
+    "case_id": "case_05",
+    "employee_id": "EMP005",
+    "question": "Is EMP005 eligible for paid sick leave after 1 month of service, and what is the minimum qualifying service threshold?",
+    "source_section": "Section 5.3.2",
+    "expected_value": "Not eligible; paid sick leave requires a minimum threshold of at least 2 consecutive months of service.",
+    "tenure_dependency": "Branching on Minimum Service threshold (tenure 1 month < 2 consecutive months): Ineligible.",
+    "deterministic_pass_criteria": ["ineligible", "2 consecutive months"]
+  },
+  {
+    "case_id": "case_06",
+    "employee_id": "EMP006",
+    "question": "What is the sick leave accrual rate and the minimum paid sick leave entitlement for EMP006?",
+    "source_section": "Section 5.3.2",
+    "expected_value": "Rate of 2 working days per month (1 day full pay / 1 day half pay), with a minimum of 7 days full pay and 7 days half pay (maximum 3 months full / 3 months half).",
+    "tenure_dependency": "Confirmed tenure >= 2 months (tenure 14 months).",
+    "deterministic_pass_criteria": ["2 working days", "full pay", "half pay", "7 days"]
+  },
+  {
+    "case_id": "case_07",
+    "employee_id": "EMP007",
+    "question": "What severance payment and notice period is EMP007 entitled to upon separation due to redundancy with 4 completed years of service?",
+    "source_section": "Section 10.5.1",
+    "expected_value": "1 month written notice (or pay in lieu) plus severance pay of 60 days' pay (15 days' pay for each of the 4 completed years of service).",
+    "tenure_dependency": "Calculation branching on Separation Reason (Redundancy) & Completed Years of Service (4 years * 15 days = 60 days pay).",
+    "deterministic_pass_criteria": ["1 month", "15 days", "60 days"]
+  },
+  {
+    "case_id": "case_08",
+    "employee_id": "EMP008",
+    "question": "What severance pay is EMP008 entitled to upon termination for unsatisfactory performance?",
+    "source_section": "Section 10.5.2",
+    "expected_value": "0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay).",
+    "tenure_dependency": "Branching on Separation Reason (Unsatisfactory Performance vs Redundancy = 0 severance).",
+    "deterministic_pass_criteria": ["not entitled to severance", "0 severance"]
+  },
+  {
+    "case_id": "case_09",
+    "employee_id": "EMP009",
+    "question": "Is EMP009 currently eligible to receive the 10% pension contribution allowance while on probation?",
+    "source_section": "Section 4.4.1",
+    "expected_value": "Ineligible during probation; pension contribution allowance (10% of basic salary) is only provided once probation is successfully completed.",
+    "tenure_dependency": "Branching on Probation status (tenure 4 months < 6 months = Ineligible).",
+    "deterministic_pass_criteria": ["ineligible", "10%", "probation"]
+  },
+  {
+    "case_id": "case_10",
+    "employee_id": "EMP010",
+    "question": "How many days of accrued unused annual leave can EMP010 commute to cash upon separation from service?",
+    "source_section": "Section 10.7",
+    "expected_value": "Maximum of 10 working days on gross salary alone.",
+    "tenure_dependency": "Separation commutation cap under Section 10.7.",
+    "deterministic_pass_criteria": ["10 working days"]
+  }
+]
