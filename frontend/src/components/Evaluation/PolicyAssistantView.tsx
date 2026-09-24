@@ -51,6 +51,92 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({ onNoti
     setQueryText(c.question);
   };
 
+  const handleImportCases = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = (event.target?.result as string) || '';
+        const fileName = file.name.toLowerCase();
+
+        if (fileName.endsWith('.json')) {
+          const parsed = JSON.parse(text);
+          const rawList = Array.isArray(parsed) ? parsed : (parsed.cases || parsed.items || []);
+          if (!rawList.length) {
+            onNotify('No valid case objects found in JSON file.', 'error');
+            return;
+          }
+          const imported: BenchmarkCase[] = rawList.map((item: any, idx: number) => ({
+            case_id: item.case_id || `import_case_${idx + 1}`,
+            employee_id: item.employee_id || 'EMP001',
+            question: item.question || item.q || '',
+            source_section: item.source_section || item.section || 'General Policy',
+            expected_value: item.expected_value || item.expected || item.answer || '',
+            tenure_dependency: item.tenure_dependency || '',
+            deterministic_pass_criteria: Array.isArray(item.deterministic_pass_criteria)
+              ? item.deterministic_pass_criteria
+              : (item.pass_criteria || []),
+          }));
+          setCases(imported);
+          if (imported.length > 0) handleSelectCase(imported[0]);
+          onNotify(`Successfully imported ${imported.length} policy cases from ${file.name}!`, 'success');
+        } else {
+          // Parse .txt or .md formatted specifications
+          const imported: BenchmarkCase[] = [];
+          const blocks = text.split(/(?:^|\n)(?=#+\s*---*\s*Case|\bCase\s*ID\s*:)/i);
+
+          for (let i = 0; i < blocks.length; i++) {
+            const blk = blocks[i].trim();
+            if (!blk) continue;
+
+            const cidMatch = blk.match(/Case\s*ID\s*:\s*([^\r\n]+)/i);
+            const empMatch = blk.match(/Employee\s*ID\s*:\s*([^\r\n]+)/i);
+            const qMatch = blk.match(/Question\s*:\s*([^\r\n]+)/i) || blk.match(/^Q\s*:\s*([^\r\n]+)/im);
+            const secMatch = blk.match(/Source\s*Policy\s*Section\s*:\s*([^\r\n]+)/i);
+            const ansMatch = blk.match(/Expected\s*(?:Entitlement\s*\/\s*Answer|Value)?\s*:\s*([^\r\n]+)/i) || blk.match(/^A\s*:\s*([^\r\n]+)/im);
+            const critMatch = blk.match(/Deterministic\s*Pass\s*Criteria\s*:\s*(\[[^\]]+\])/i);
+
+            const question = qMatch ? qMatch[1].trim() : '';
+            if (!question) continue;
+
+            let passCriteria: string[] = [];
+            if (critMatch) {
+              try {
+                passCriteria = JSON.parse(critMatch[1]);
+              } catch {
+                passCriteria = [];
+              }
+            }
+
+            imported.push({
+              case_id: cidMatch ? cidMatch[1].trim() : `custom_${imported.length + 1}`,
+              employee_id: empMatch ? empMatch[1].trim() : 'EMP001',
+              question,
+              source_section: secMatch ? secMatch[1].trim() : 'General Policy',
+              expected_value: ansMatch ? ansMatch[1].trim() : '',
+              tenure_dependency: '',
+              deterministic_pass_criteria: passCriteria,
+            });
+          }
+
+          if (imported.length > 0) {
+            setCases(imported);
+            handleSelectCase(imported[0]);
+            onNotify(`Successfully parsed and loaded ${imported.length} questions from ${file.name}!`, 'success');
+          } else {
+            onNotify('Could not find formatted questions in text file. Expected "Question: ..." or "Q: ...".', 'error');
+          }
+        }
+      } catch (err: any) {
+        onNotify('Error parsing file: ' + err.message, 'error');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   const handleRunSingle = async (mode: 'both' | 'agent' | 'workflow') => {
     if (!selectedEmpId || !queryText.trim()) {
       onNotify('Please enter employee ID and query', 'error');
@@ -203,7 +289,27 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({ onNoti
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {/* CASES LIST */}
           <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '10px', padding: '16px' }}>
-            <h4 style={{ margin: '0 0 12px 0', fontSize: '0.9rem', color: '#fff' }}>📋 Verified Benchmark Cases</h4>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h4 style={{ margin: 0, fontSize: '0.9rem', color: '#fff' }}>📋 Benchmark Cases ({cases.length})</h4>
+              <div>
+                <input
+                  type="file"
+                  id="policy-cases-upload"
+                  accept=".json,.txt,.md"
+                  style={{ display: 'none' }}
+                  onChange={handleImportCases}
+                />
+                <button
+                  type="button"
+                  onClick={() => document.getElementById('policy-cases-upload')?.click()}
+                  className="btn-secondary"
+                  style={{ fontSize: '0.72rem', padding: '3px 8px' }}
+                  title="Import benchmark questions from .json or .txt"
+                >
+                  📁 Import
+                </button>
+              </div>
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '320px', overflowY: 'auto' }}>
               {cases.map((c) => (
                 <button

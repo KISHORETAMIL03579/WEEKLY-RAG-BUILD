@@ -44,10 +44,16 @@ router = APIRouter(tags=["evaluation"])
 
 
 def parse_qa_pairs(text: str) -> list[dict]:
-    """Parses "Q: ...\nA: ..." blocks out of raw text into {question, expected} pairs, filtering comments and headers."""
+    """Parses Question / Expected Answer pairs out of raw text, filtering comments, metadata keys, and headers."""
     pairs = []
     current_q, current_a = None, None
     mode = None
+
+    # Metadata keys to ignore when parsing question/answer blocks
+    ignored_prefix_pattern = re.compile(
+        r"^(?:case\s*id|employee\s*(?:id|details)?|source\s*(?:policy\s*)?section|tenure\s*(?:\/|\s*)status|deterministic\s*pass\s*criteria)\s*[:\-.]",
+        re.IGNORECASE
+    )
 
     def flush():
         nonlocal current_q, current_a, mode
@@ -63,8 +69,14 @@ def parse_qa_pairs(text: str) -> list[dict]:
         # Ignore comment lines and section dividers
         if line.startswith(("#", "//", "/*", "*/", "---", "===")) or re.match(r"^[=\-_*]{3,}$", line):
             continue
-        q_match = re.match(r"^q(?:uestion)?\s*[:\-.]\s*(.*)", line, re.IGNORECASE)
-        a_match = re.match(r"^a(?:nswer)?\s*[:\-.]\s*(.*)", line, re.IGNORECASE)
+
+        q_match = re.match(r"^(?:q(?:uestion)?|query)\s*[:\-.]\s*(.*)", line, re.IGNORECASE)
+        a_match = re.match(
+            r"^(?:a(?:nswer)?|expected(?:\s*(?:entitlement\s*\/\s*answer|entitlement|value|answer))?)\s*[:\-.]\s*(.*)",
+            line,
+            re.IGNORECASE
+        )
+
         if q_match:
             flush()
             current_q = q_match.group(1).strip()
@@ -72,6 +84,9 @@ def parse_qa_pairs(text: str) -> list[dict]:
         elif a_match:
             current_a = a_match.group(1).strip()
             mode = "a"
+        elif ignored_prefix_pattern.match(line):
+            # Known metadata field — don't append to question or answer
+            continue
         elif mode == "q" and current_q is not None:
             current_q += " " + line
         elif mode == "a" and current_a is not None:
