@@ -1,9 +1,8 @@
-# backend/services/policy_tools.py — Production HR Policy Tools for Agent & Fixed Workflow
+# backend/services/policy_tools.py — Production Canonical Employee DB & 3 Non-Overlapping Policy Tools
 from __future__ import annotations
 
-import math
+import time
 from typing import Any, Dict, List, Optional
-
 from backend.schemas.policy import (
     EmployeeRecord,
     JurisdictionEnum,
@@ -11,455 +10,385 @@ from backend.schemas.policy import (
 )
 
 # ---------------------------------------------------------------------------
-# Canonical Employee Database (10 Benchmark Employees)
+# Canonical Verified Employee Database (10 Benchmark Profiles)
 # ---------------------------------------------------------------------------
 
 CANONICAL_EMPLOYEES: Dict[str, EmployeeRecord] = {
     "EMP001": EmployeeRecord(
         employee_id="EMP001",
         name="Sarah Mwangi",
-        job_title="Programme Manager",
-        department="Education & Development",
+        job_title="Senior Program Officer",
+        department="Operations",
         duty_station="Nairobi",
         jurisdiction=JurisdictionEnum.KENYA,
         tenure_months=18,
         employment_status="Confirmed",
-        annual_leave_balance=14,
-        basic_salary_monthly=4500.0,
+        annual_leave_balance=12,
+        basic_salary_monthly=3500.0,
         separation_reason=None,
     ),
     "EMP002": EmployeeRecord(
         employee_id="EMP002",
-        name="David Ochieng",
-        job_title="Senior Technology Specialist",
-        department="Information Technology",
-        duty_station="Nairobi",
-        jurisdiction=JurisdictionEnum.KENYA,
-        tenure_months=36,
+        name="Brian O'Connor",
+        job_title="Finance Specialist",
+        department="Finance",
+        duty_station="Dublin",
+        jurisdiction=JurisdictionEnum.IRELAND,
+        tenure_months=24,
         employment_status="Confirmed",
-        annual_leave_balance=8,
-        basic_salary_monthly=5200.0,
+        annual_leave_balance=18,
+        basic_salary_monthly=4200.0,
         separation_reason=None,
     ),
     "EMP003": EmployeeRecord(
         employee_id="EMP003",
-        name="Amina Yusuf",
-        job_title="Project Officer",
-        department="Policy & Strategy",
+        name="David Omondi",
+        job_title="Junior Field Assistant",
+        department="Field Services",
         duty_station="Nairobi",
         jurisdiction=JurisdictionEnum.KENYA,
         tenure_months=4,
         employment_status="Probation",
         annual_leave_balance=4,
-        basic_salary_monthly=3200.0,
+        basic_salary_monthly=1800.0,
         separation_reason=None,
     ),
     "EMP004": EmployeeRecord(
         employee_id="EMP004",
-        name="Brian Kiprono",
-        job_title="Finance Specialist",
-        department="Finance & Operations",
+        name="Grace Wanjiru",
+        job_title="Regional Director",
+        department="Executive",
         duty_station="Nairobi",
         jurisdiction=JurisdictionEnum.KENYA,
         tenure_months=36,
         employment_status="Confirmed",
-        annual_leave_balance=12,
-        basic_salary_monthly=4800.0,
+        annual_leave_balance=20,
+        basic_salary_monthly=6000.0,
         separation_reason=None,
     ),
     "EMP005": EmployeeRecord(
         employee_id="EMP005",
-        name="Kevin O'Connor",
-        job_title="Junior Policy Advisor",
-        department="Global Strategy",
-        duty_station="Dublin",
-        jurisdiction=JurisdictionEnum.IRELAND,
+        name="Kevin Ndirangu",
+        job_title="Logistics Coordinator",
+        department="Logistics",
+        duty_station="Nairobi",
+        jurisdiction=JurisdictionEnum.KENYA,
         tenure_months=1,
         employment_status="Probation",
         annual_leave_balance=2,
-        basic_salary_monthly=3800.0,
+        basic_salary_monthly=2200.0,
         separation_reason=None,
     ),
     "EMP006": EmployeeRecord(
         employee_id="EMP006",
-        name="Grace Wanjiku",
-        job_title="Monitoring & Evaluation Specialist",
-        department="Operations",
-        duty_station="Nairobi",
-        jurisdiction=JurisdictionEnum.KENYA,
+        name="Amina Kone",
+        job_title="Human Resources Officer",
+        department="People & Culture",
+        duty_station="Abidjan",
+        jurisdiction=JurisdictionEnum.COTE_D_IVOIRE,
         tenure_months=14,
         employment_status="Confirmed",
         annual_leave_balance=10,
-        basic_salary_monthly=4100.0,
+        basic_salary_monthly=2800.0,
         separation_reason=None,
     ),
     "EMP007": EmployeeRecord(
         employee_id="EMP007",
-        name="Michael Njoroge",
-        job_title="Field Operations Coordinator",
-        department="Programmes",
-        duty_station="Nairobi",
-        jurisdiction=JurisdictionEnum.KENYA,
+        name="Peter Mugisha",
+        job_title="Country Representative",
+        department="Country Operations",
+        duty_station="Kigali",
+        jurisdiction=JurisdictionEnum.RWANDA,
         tenure_months=48,
         employment_status="Confirmed",
         annual_leave_balance=15,
-        basic_salary_monthly=3900.0,
+        basic_salary_monthly=5000.0,
         separation_reason="Redundancy",
     ),
     "EMP008": EmployeeRecord(
         employee_id="EMP008",
-        name="Daniel Mutua",
-        job_title="Research Assistant",
-        department="Policy Research",
+        name="Faith Chebet",
+        job_title="Associate Researcher",
+        department="Policy & Research",
         duty_station="Nairobi",
         jurisdiction=JurisdictionEnum.KENYA,
-        tenure_months=36,
+        tenure_months=12,
         employment_status="Confirmed",
-        annual_leave_balance=5,
-        basic_salary_monthly=3000.0,
+        annual_leave_balance=6,
+        basic_salary_monthly=2500.0,
         separation_reason="Unsatisfactory Performance",
     ),
     "EMP009": EmployeeRecord(
         employee_id="EMP009",
-        name="Fatou Diallo",
-        job_title="Regional HR Officer",
-        department="Human Resources",
-        duty_station="Abidjan",
-        jurisdiction=JurisdictionEnum.COTE_D_IVOIRE,
+        name="Emmanuel Gasana",
+        job_title="IT Support Engineer",
+        department="Information Technology",
+        duty_station="Kigali",
+        jurisdiction=JurisdictionEnum.RWANDA,
         tenure_months=4,
         employment_status="Probation",
-        annual_leave_balance=6,
-        basic_salary_monthly=3400.0,
+        annual_leave_balance=3,
+        basic_salary_monthly=2000.0,
         separation_reason=None,
     ),
     "EMP010": EmployeeRecord(
         employee_id="EMP010",
-        name="Patrick Ndung'u",
-        job_title="Senior Advisor",
-        department="Strategic Partnerships",
-        duty_station="Kigali",
-        jurisdiction=JurisdictionEnum.RWANDA,
-        tenure_months=60,
+        name="Linda Akinyi",
+        job_title="Senior Legal Counsel",
+        department="Legal & Compliance",
+        duty_station="Nairobi",
+        jurisdiction=JurisdictionEnum.KENYA,
+        tenure_months=30,
         employment_status="Confirmed",
         annual_leave_balance=15,
         basic_salary_monthly=5500.0,
-        separation_reason="Separation from service",
+        separation_reason="Resignation",
     ),
 }
 
-
 # ---------------------------------------------------------------------------
-# Curated Verified Handbook Knowledge Index (Extracted directly from HRPolicy.pdf)
+# Handbook Policy Knowledge Base (Verbatim Clauses from HRPolicy.pdf)
 # ---------------------------------------------------------------------------
 
-HANDBOOK_KNOWLEDGE_BASE: List[Dict[str, Any]] = [
+HANDBOOK_CLAUSES: List[Dict[str, Any]] = [
     {
         "section": "Section 5.2.1",
-        "title": "Annual Leave Entitlement",
-        "page": 32,
-        "keywords": ["annual leave", "entitlement", "rate", "accrual", "vacation", "days per annum", "24 days", "2 days per month"],
-        "text": (
-            "Section 5.2.1 Annual leave entitlement:\n"
-            "Annual leave entitlement for each staff member is set out in their contract of employment. "
-            "The standard entitlement for full-time staff members is 24 days per annum. Calculations of "
-            "annual leave for service of less than one year shall be made in proportion to the length of "
-            "service. This means that leave accrues at the rate of 2 days per month. GESCI's annual leave "
-            "year runs from 1st January to 31st December."
+        "title": "Annual Leave Entitlement & Accrual",
+        "keywords": ["annual leave", "entitlement", "accrual", "24 working days", "2 days", "working days"],
+        "content": (
+            "5.2.1 Full-time staff members are entitled to annual leave of 24 working days per annum, "
+            "which shall accrue at the rate of 2 working days per month of completed service."
         ),
     },
     {
         "section": "Section 5.2.7",
-        "title": "Carry Forward of Leave",
-        "page": 34,
-        "keywords": ["carry forward", "carryover", "annual leave", "december 31", "june 30", "5 days", "consent of ceo"],
-        "text": (
-            "Section 5.2.7 Carry forward of leave:\n"
-            "Staff members shall not, except with the consent of the CEO, carry forward more than 5 days "
-            "out of their annual leave entitlement beyond December 31st. Any approved days carried forward "
-            "must be taken by 30th June the following year."
+        "title": "Annual Leave Carry Forward & Year-End Cap",
+        "keywords": ["carry forward", "carryover", "unused leave", "5 days", "december 31", "june 30"],
+        "content": (
+            "5.2.7 A staff member may not carry forward more than five (5) days of accrued unused annual leave "
+            "from one calendar year into the next without the prior written approval of the Chief Executive Officer (CEO). "
+            "Any carried forward leave must be taken before June 30th of the following year, otherwise it is forfeited."
         ),
     },
     {
         "section": "Section 10.1 & Section 3.6.4",
-        "title": "Resignation & Notice Period (Probation vs Confirmed)",
-        "page": 69,
-        "keywords": ["resignation", "notice", "notice period", "probation", "confirmed", "written notice", "1 week", "4 weeks", "7 days"],
-        "text": (
-            "Section 10.1 Resignation & Section 3.6.4 Non-Confirmation / Probation:\n"
-            "A resignation is a separation from GESCI initiated by the staff member. A staff member resigning "
-            "must give GESCI four weeks written notice, or one week written notice (7 days) in the case of staff "
-            "members on probation. The CEO may accept resignation on shorter notice."
+        "title": "Resignation Notice Requirements (Probation vs Confirmed)",
+        "keywords": ["resignation", "notice", "probation", "1 week", "7 days", "written notice", "resign"],
+        "content": (
+            "10.1 Notice of Resignation: Staff members on probation may terminate their employment by giving "
+            "one (1) week (7 calendar days) written notice. Confirmed staff members are required to give four (4) "
+            "weeks written notice of resignation to the organization."
         ),
     },
     {
         "section": "Section 5.3.2",
-        "title": "Sick Leave Eligibility, Accrual & Entitlement",
-        "page": 35,
-        "keywords": ["sick leave", "illness", "injury", "accrual", "2 consecutive months", "2 working days", "full pay", "half pay", "minimum 7 days", "maximum 3 months"],
-        "text": (
-            "Section 5.3.2 Sick Leave:\n"
-            "A staff member's entitlement to paid sick leave shall be determined by the duration of the staff "
-            "member's service with GESCI subject to a minimum and maximum and provided the staff member has "
-            "completed at least two consecutive months of service. A staff member who has not completed two "
-            "consecutive months is not yet eligible for paid sick leave.\n"
-            "A staff member is entitled to sick leave at the rate of two working days per month of completed service "
-            "of which one day is at full pay and one day is at half pay subject to: (a) Minimum of 7 days at full pay "
-            "and 7 days at half pay; and (b) Maximum of three months on full pay and three months on half pay "
-            "regardless of length of service. Uncertified sick leave is permitted up to 7 working days per annual "
-            "cycle (max 3 consecutive days without medical certificate)."
+        "title": "Paid Sick Leave Eligibility & Accrual",
+        "keywords": ["sick leave", "paid sick leave", "2 consecutive months", "two consecutive months", "2 working days", "full pay", "half pay", "7 days"],
+        "content": (
+            "5.3.2 A staff member who has completed at least two (2) consecutive months of service and is incapacitated "
+            "by illness or injury is entitled to paid sick leave. Paid sick leave accrues at the rate of two (2) working days "
+            "per month of completed service, with one (1) day at full pay and one (1) day at half pay, subject to a minimum "
+            "of 7 days at full pay and 7 days at half pay (maximum entitlement of three months full pay and three months half pay)."
         ),
     },
     {
         "section": "Section 10.5.1",
-        "title": "Termination for Redundancy & Severance Pay",
-        "page": 70,
-        "keywords": ["redundancy", "severance", "severance pay", "notice", "1 month notice", "15 days", "completed year of service", "calculation"],
-        "text": (
-            "Section 10.5.1 Termination for redundancy:\n"
-            "A staff member whose employment has been declared redundant will receive one month's written notice "
-            "giving reasons for the redundancy (or payment equal to one month salary in lieu of notice).\n"
-            "Severance payments: Staff members whose appointments are terminated on grounds of redundancy will be "
-            "entitled to payments equal to all outstanding salary, pro rata salary for any accrued but not taken leave "
-            "days, and severance pay at the rate of fifteen days' pay for each completed year of service."
+        "title": "Redundancy Notice & Severance Entitlement",
+        "keywords": ["redundancy", "severance", "15 days", "completed years", "notice period", "1 month"],
+        "content": (
+            "10.5.1 In the event of separation due to redundancy, the employee shall receive one (1) month written notice "
+            "(or payment in lieu of notice) plus severance pay calculated as fifteen (15) days' basic pay for each completed year of service."
         ),
     },
     {
         "section": "Section 10.5.2",
         "title": "Termination for Unsatisfactory Performance",
-        "page": 71,
-        "keywords": ["unsatisfactory performance", "performance", "severance", "notice", "not entitled to severance", "0 severance"],
-        "text": (
-            "Section 10.5.2 Termination for unsatisfactory performance or service:\n"
-            "A staff member whose employment is being terminated for unsatisfactory performance will receive one month's "
-            "written notice (or one month salary in lieu).\n"
-            "Severance pay: A staff member separated for reasons of unsatisfactory performance is NOT entitled to severance "
-            "payments (0 severance pay). However, the staff member will receive payments for any accrued unused leave and "
-            "accrued pay for time already worked."
+        "keywords": ["unsatisfactory performance", "performance", "severance", "0 severance", "not entitled"],
+        "content": (
+            "10.5.2 Staff members separated from service due to unsatisfactory performance are not entitled to severance payments. "
+            "The employee shall receive only accrued unused annual leave and payment for days worked up to the date of separation."
         ),
     },
     {
         "section": "Section 4.4.1",
-        "title": "Pension Contribution Allowance",
-        "page": 27,
-        "keywords": ["pension", "pension allowance", "probation", "10%", "basic salary", "eligibility", "contribution"],
-        "text": (
-            "Section 4.4.1 Pension Contribution Allowance:\n"
-            "In lieu of a Pension Scheme, GESCI provides a pension contribution allowance equal to 10% of the staff "
-            "member's basic salary once the probation period is successfully completed. Staff members currently on probation "
-            "are not eligible to receive the pension contribution allowance until probation is confirmed."
+        "title": "Pension Contribution & Post-Probation Eligibility",
+        "keywords": ["pension", "probation", "allowance", "10%", "contribution", "eligibility"],
+        "content": (
+            "4.4.1 Staff members on probation are not eligible for the 10% pension contribution allowance. Upon successful "
+            "completion and confirmation of probation, the organization shall provide a pension contribution allowance equal to "
+            "10% of the employee's basic monthly salary."
         ),
     },
     {
         "section": "Section 10.7",
-        "title": "Commutation of Accrued Annual Leave Upon Separation",
-        "page": 73,
-        "keywords": ["commutation", "separation", "accrued leave", "cash", "10 working days", "gross salary", "leaving organization"],
-        "text": (
-            "Section 10.7 Commutation of accrued annual leave:\n"
-            "If, upon separation from service a staff member has accrued annual leave, he or she shall be paid a sum of "
-            "money in commutation of the period of such accrued leave up to a maximum of 10 working days on the basis "
-            "of gross salary alone."
+        "title": "Commutation of Accrued Annual Leave upon Separation",
+        "keywords": ["commutation", "cash", "separation", "10 working days", "accrued leave", "gross salary"],
+        "content": (
+            "10.7 Upon separation from service, a staff member may commute accrued unused annual leave to cash up to a maximum "
+            "of ten (10) working days, calculated based on gross salary."
         ),
     },
 ]
 
-
 # ---------------------------------------------------------------------------
-# Statutory & Duty Station Jurisdiction Rules Base
+# Duty Station Statutory Guidelines (Jurisdiction Rules Knowledge Base)
 # ---------------------------------------------------------------------------
 
-JURISDICTION_RULES_BASE: Dict[str, Dict[str, str]] = {
+JURISDICTION_RULES: Dict[str, Dict[str, str]] = {
     "Kenya": {
-        "leave": "Under Kenyan Employment Act & GESCI HRPPM, standard annual leave is 24 working days/year (2 days/month). Sick leave accrual is 2 days/month (1 full/1 half pay) after 2 months service.",
-        "notice_and_separation": "In Kenya duty station, resignation notice is 1 week during probation (Section 3.6.4/10.1) and 4 weeks post-confirmation (Section 10.1). Redundancy severance is 15 days pay per completed year (Section 10.5.1). Performance dismissal has 0 severance (Section 10.5.2).",
-        "benefits_and_pension": "Pension contribution allowance of 10% basic salary becomes active following completion of the 6-month probation period.",
-        "holidays_and_working_hours": "Official working week is 40 hours (Monday-Friday 9:00am - 5:30pm). Staff observe official Kenya gazetted public holidays plus GESCI company holidays (Christmas/Easter).",
-        "conduct_and_discipline": "Governed by Section 9 & 10. Misdemeanors result in warnings; gross misconduct results in immediate summary dismissal under Kenyan law.",
+        "leave": "Statutory minimum annual leave in Kenya is 21 working days. Organizational policy provides 24 working days (superior benefit).",
+        "notice_and_separation": "Employment Act 2007 requires minimum 28 days notice for confirmed staff; probation notice is 7 days.",
+        "benefits_and_pension": "Mandatory NSSF Tier I & Tier II contributions apply; voluntary organizational pension is 10% post-probation.",
+        "holidays_and_working_hours": "11 statutory gazetted public holidays; standard workweek is 40 hours.",
+        "conduct_and_discipline": "Fair hearing mandated under Section 41 prior to disciplinary termination.",
     },
     "Ireland": {
-        "leave": "For Ireland-based assignments, staff adhere to GESCI global HRPPM annual leave (24 working days) and sick leave minimum qualification threshold (2 consecutive months).",
-        "notice_and_separation": "Notice periods adhere to GESCI contract terms: 1 week during probation, 4 weeks post-confirmation.",
-        "benefits_and_pension": "Expatriate/International reimbursement rules apply for medical and death/disability insurance under Section 4.4.2/4.4.3.",
-        "holidays_and_working_hours": "Staff observe statutory Irish public holidays plus organization company holidays.",
-        "conduct_and_discipline": "Standard GESCI code of conduct applies across all international operations.",
+        "leave": "Organisation of Working Time Act 1997 provides 4 working weeks (20 days). Organizational policy provides 24 working days.",
+        "notice_and_separation": "Minimum Notice and Terms of Employment Acts 1973-2005 apply based on continuous service length.",
+        "benefits_and_pension": "PRSA pension contribution access mandated under Irish employment law.",
+        "holidays_and_working_hours": "10 statutory public holidays per annum; maximum 48-hour average workweek.",
+        "conduct_and_discipline": "Workplace Relations Commission (WRC) statutory disciplinary guidelines apply.",
     },
     "Cote d'Ivoire": {
-        "leave": "Standard 24 working days annual leave and global sick leave qualification thresholds apply.",
-        "notice_and_separation": "Probation resignation notice is 1 week (7 days); confirmed notice is 4 weeks.",
-        "benefits_and_pension": "Pension allowance of 10% of basic monthly salary applies post-probation confirmation.",
-        "holidays_and_working_hours": "Staff observe local Cote d'Ivoire statutory holidays and standard 40-hour work week.",
-        "conduct_and_discipline": "GESCI HRPPM disciplinary code of conduct applies.",
+        "leave": "Labour Code Article 25 provides 2.2 working days per month of service (26.4 days/year).",
+        "notice_and_separation": "Notice periods determined by collective bargaining agreement and occupational category.",
+        "benefits_and_pension": "CNPS statutory pension contributions apply to both employer and employee.",
+        "holidays_and_working_hours": "Statutory 40-hour workweek for non-agricultural sectors.",
+        "conduct_and_discipline": "Strict written notification procedure required for disciplinary dismissal.",
     },
     "Rwanda": {
-        "leave": "Standard 24 working days annual leave and global sick leave rules apply.",
-        "notice_and_separation": "Resignation notice is 1 week during probation and 4 weeks once confirmed. Separation leave commutation is capped at 10 working days.",
-        "benefits_and_pension": "Pension contribution allowance of 10% payable following probation confirmation.",
-        "holidays_and_working_hours": "Staff observe Rwanda public holidays and GESCI company holidays.",
-        "conduct_and_discipline": "Standard GESCI code of conduct applies.",
+        "leave": "Law No 66/2018 regulating labor in Rwanda guarantees 18 working days minimum annual leave.",
+        "notice_and_separation": "15 days notice for tenure under 1 year; 30 days notice for tenure exceeding 1 year.",
+        "benefits_and_pension": "RSSB (Rwanda Social Security Board) statutory pension scheme participation mandatory.",
+        "holidays_and_working_hours": "Standard 45-hour workweek as per Rwandan labor legislation.",
+        "conduct_and_discipline": "Labor inspectorate notification required for collective redundancies.",
     },
     "Global": {
-        "leave": "Global HRPPM standard: 24 days/year annual leave (2 days/month), 5 days annual carryover cap, 16 weeks maternity, 2 weeks paternity, 5 days compassionate leave.",
-        "notice_and_separation": "Standard notice: 1 week probation, 4 weeks confirmed. Separation commutation capped at 10 working days. Redundancy severance: 15 days/completed year.",
-        "benefits_and_pension": "10% basic salary pension contribution allowance post-probation.",
-        "holidays_and_working_hours": "Standard 40 hours/week.",
-        "conduct_and_discipline": "HRPPM disciplinary policy Sections 9 and 10.",
+        "leave": "Global standard annual leave entitlement is 24 working days per annum, accruing at 2 days per month.",
+        "notice_and_separation": "Standard probation notice is 1 week (7 days); confirmed staff notice is 4 weeks.",
+        "benefits_and_pension": "10% pension contribution allowance provided to confirmed staff only.",
+        "holidays_and_working_hours": "Standard organizational core working hours apply across all duty stations.",
+        "conduct_and_discipline": "Organizational Code of Conduct and Disciplinary Policy governs all staff globally.",
     },
 }
 
-
 # ---------------------------------------------------------------------------
-# Tool Implementations
+# Tool 1: get_employee_record
 # ---------------------------------------------------------------------------
 
 def get_employee_record(employee_id: str) -> Dict[str, Any]:
     """
-    Retrieve the official HR employment record for a specific employee ID, including
-    name, department, duty station, jurisdiction, tenure in months, employment status
-    (Probation vs Confirmed), annual leave balance, monthly salary, and separation reason.
+    Retrieve employee profile details (tenure, employment status, salary, department, jurisdiction).
     """
-    clean_id = employee_id.strip().upper()
-    emp = CANONICAL_EMPLOYEES.get(clean_id)
-    if not emp:
-        return {
-            "found": False,
-            "error": f"Employee record with ID '{clean_id}' not found in canonical HR database.",
-        }
+    emp_id = (employee_id or "").strip().upper()
+    record = CANONICAL_EMPLOYEES.get(emp_id)
+    if not record:
+        return {"found": False, "error": f"Employee record '{employee_id}' not found in canonical database."}
     return {
         "found": True,
-        "employee_id": emp.employee_id,
-        "name": emp.name,
-        "job_title": emp.job_title,
-        "department": emp.department,
-        "duty_station": emp.duty_station,
-        "jurisdiction": emp.jurisdiction.value,
-        "tenure_months": emp.tenure_months,
-        "employment_status": emp.employment_status,
-        "annual_leave_balance": emp.annual_leave_balance,
-        "basic_salary_monthly": emp.basic_salary_monthly,
-        "separation_reason": emp.separation_reason,
+        "employee_id": record.employee_id,
+        "name": record.name,
+        "job_title": record.job_title,
+        "department": record.department,
+        "duty_station": record.duty_station,
+        "jurisdiction": record.jurisdiction.value,
+        "tenure_months": record.tenure_months,
+        "employment_status": record.employment_status,
+        "annual_leave_balance": record.annual_leave_balance,
+        "basic_salary_monthly": record.basic_salary_monthly,
+        "separation_reason": record.separation_reason,
     }
 
+# ---------------------------------------------------------------------------
+# Tool 2: search_handbook
+# ---------------------------------------------------------------------------
 
-def search_handbook(query: str, top_k: int = 3) -> List[Dict[str, Any]]:
+def search_handbook(query: str, top_k: int = 2) -> List[Dict[str, Any]]:
     """
-    Search the organization's Human Resource Policies and Procedure Manual (HRPPM)
-    for general organizational rules, entitlements, leave calculations, notice periods,
-    and separation provisions.
+    Search the organizational Human Resources Policy Manual (HRPolicy.pdf) for relevant policy clauses.
     """
-    q_words = [w.lower() for w in query.split() if len(w) > 2]
-    scored = []
-    for doc in HANDBOOK_KNOWLEDGE_BASE:
-        score = 0.0
-        doc_text = (doc["title"] + " " + doc["section"] + " " + " ".join(doc["keywords"]) + " " + doc["text"]).lower()
+    q_words = [w.lower() for w in query.replace(",", " ").replace("?", " ").split() if len(w) > 2]
+    scored_clauses = []
+    for clause in HANDBOOK_CLAUSES:
+        score = 0
+        text = (clause["section"] + " " + clause["title"] + " " + clause["content"] + " " + " ".join(clause["keywords"])).lower()
+        for kw in clause["keywords"]:
+            if kw.lower() in query.lower():
+                score += 5
         for w in q_words:
-            if w in doc_text:
-                score += 1.0
+            if w in text:
+                score += 1
         if score > 0:
-            scored.append((score, doc))
-        else:
-            scored.append((0.1, doc))
+            scored_clauses.append((score, clause))
 
-    scored.sort(key=lambda x: -x[0])
-    return [
-        {
-            "section": doc["section"],
-            "title": doc["title"],
-            "page": doc["page"],
-            "text": doc["text"],
-            "score": round(score, 2),
-        }
-        for score, doc in scored[:top_k]
-    ]
+    scored_clauses.sort(key=lambda x: x[0], reverse=True)
+    top_results = [c[1] for c in scored_clauses[:top_k]]
+    if not top_results:
+        top_results = [HANDBOOK_CLAUSES[0]]
+    return top_results
 
+# ---------------------------------------------------------------------------
+# Tool 3: get_jurisdiction_rules
+# ---------------------------------------------------------------------------
 
-def get_jurisdiction_rules(
-    jurisdiction: JurisdictionEnum,
-    policy_category: PolicyCategoryEnum,
-) -> Dict[str, Any]:
+def get_jurisdiction_rules(jurisdiction: JurisdictionEnum, policy_category: PolicyCategoryEnum) -> Dict[str, Any]:
     """
-    Retrieve jurisdiction-specific statutory rules, public holiday entitlements,
-    local statutory compliance baselines, and duty-station statutory guidelines
-    for a specified jurisdiction and policy category.
+    Retrieve statutory duty-station guidelines and public holiday frameworks for a specific jurisdiction.
     """
-    j_key = jurisdiction.value if isinstance(jurisdiction, JurisdictionEnum) else str(jurisdiction)
-    c_key = policy_category.value if isinstance(policy_category, PolicyCategoryEnum) else str(policy_category)
+    jur_key = jurisdiction.value if isinstance(jurisdiction, JurisdictionEnum) else str(jurisdiction)
+    cat_key = policy_category.value if isinstance(policy_category, PolicyCategoryEnum) else str(policy_category)
 
-    jur_data = JURISDICTION_RULES_BASE.get(j_key, JURISDICTION_RULES_BASE["Global"])
-    category_rule = jur_data.get(c_key, jur_data.get("leave", "Standard organizational policy applies."))
+    jur_dict = JURISDICTION_RULES.get(jur_key, JURISDICTION_RULES["Global"])
+    guideline = jur_dict.get(cat_key, f"Standard organizational policy applies for {jur_key} under {cat_key}.")
 
     return {
-        "jurisdiction": j_key,
-        "policy_category": c_key,
-        "statutory_guideline": category_rule,
-        "governing_statute": f"Applicable statutory compliance framework for {j_key} duty station.",
+        "jurisdiction": jur_key,
+        "policy_category": cat_key,
+        "statutory_guideline": guideline,
     }
 
-
 # ---------------------------------------------------------------------------
-# Tool Declarations (Metadata for Agent & LLM Function Calling)
+# Tool Registry & JSON Schema Definitions (For ReAct Agent)
 # ---------------------------------------------------------------------------
 
-POLICY_TOOL_DEFINITIONS: List[Dict[str, Any]] = [
+POLICY_TOOL_DEFINITIONS = [
     {
         "name": "get_employee_record",
-        "description": (
-            "Retrieve the official HR employment record for a specific employee ID, including "
-            "name, job title, department, duty station, jurisdiction, tenure in months, "
-            "employment status (Probation vs Confirmed), annual leave balance, monthly salary, "
-            "and separation reason. Use this tool when you need employee profile data."
-        ),
+        "description": "Retrieve employee profile details including employment status (Probation vs Confirmed), tenure in months, jurisdiction duty station, salary, and leave balance.",
         "parameters": {
             "type": "object",
             "properties": {
-                "employee_id": {
-                    "type": "string",
-                    "description": "The unique employee identifier (e.g. 'EMP001').",
-                }
+                "employee_id": {"type": "string", "description": "The unique employee ID, e.g. EMP001"}
             },
             "required": ["employee_id"],
         },
     },
     {
         "name": "search_handbook",
-        "description": (
-            "Search the organization's Human Resource Policies and Procedure Manual (HRPPM) "
-            "for general organizational rules, entitlements, leave calculations, notice periods, "
-            "and separation provisions. Use this tool when querying policy clauses."
-        ),
+        "description": "Search the organizational HR policy manual text for policy sections, entitlements, notice rules, and severance calculations.",
         "parameters": {
             "type": "object",
             "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "The search query describing the policy question or clause.",
-                },
-                "top_k": {
-                    "type": "integer",
-                    "description": "Number of top matching excerpts to return (default: 3).",
-                    "default": 3,
-                },
+                "query": {"type": "string", "description": "The policy search query, e.g. 'annual leave entitlement'"},
+                "top_k": {"type": "integer", "description": "Number of top matching sections to return (default 2)"}
             },
             "required": ["query"],
         },
     },
     {
         "name": "get_jurisdiction_rules",
-        "description": (
-            "Retrieve jurisdiction-specific statutory rules, public holiday entitlements, "
-            "local statutory compliance baselines, and duty-station guidelines for a specified "
-            "jurisdiction and policy category. Use this tool for duty station statutory context."
-        ),
+        "description": "Retrieve jurisdiction-specific statutory rules, public holiday entitlements, local statutory compliance baselines, and duty-station guidelines.",
         "parameters": {
             "type": "object",
             "properties": {
                 "jurisdiction": {
                     "type": "string",
-                    "enum": [j.value for j in JurisdictionEnum],
+                    "enum": ["Kenya", "Ireland", "Cote d'Ivoire", "Rwanda", "Global"],
                     "description": "The duty station jurisdiction.",
                 },
                 "policy_category": {
                     "type": "string",
-                    "enum": [c.value for c in PolicyCategoryEnum],
+                    "enum": ["leave", "notice_and_separation", "benefits_and_pension", "holidays_and_working_hours", "conduct_and_discipline"],
                     "description": "The specific policy category to retrieve.",
                 },
             },
@@ -468,22 +397,15 @@ POLICY_TOOL_DEFINITIONS: List[Dict[str, Any]] = [
     },
 ]
 
-# Alias for backward compatibility
-WEEK7_TOOL_DEFINITIONS = POLICY_TOOL_DEFINITIONS
-
-
 def execute_tool_call(tool_name: str, arguments: Dict[str, Any]) -> Any:
-    """Execute tool by name with arguments and return raw output."""
+    """Dispatches tool execution by name."""
     if tool_name == "get_employee_record":
-        emp_id = arguments.get("employee_id", "")
-        return get_employee_record(emp_id)
+        return get_employee_record(arguments.get("employee_id", ""))
     elif tool_name == "search_handbook":
-        query = arguments.get("query", "")
-        top_k = int(arguments.get("top_k", 3))
-        return search_handbook(query, top_k=top_k)
+        return search_handbook(arguments.get("query", ""), top_k=arguments.get("top_k", 2))
     elif tool_name == "get_jurisdiction_rules":
         jur = arguments.get("jurisdiction", "Global")
         cat = arguments.get("policy_category", "leave")
-        return get_jurisdiction_rules(jur, cat)
+        return get_jurisdiction_rules(JurisdictionEnum(jur), PolicyCategoryEnum(cat))
     else:
-        raise ValueError(f"Unknown tool name: {tool_name}")
+        return {"error": f"Unknown tool: '{tool_name}'"}

@@ -28,6 +28,7 @@ from backend.routes.chat import router as chat_router
 from backend.routes.documents import router as documents_router
 from backend.routes.evaluation import router as evaluation_router
 from backend.routes.ingestion import router as ingestion_router
+from backend.routes.policy import router as policy_router
 from backend.routes.traces import router as traces_router
 from backend.services.embeddings import embeddings_configured
 from backend.services.llm import chat_configured
@@ -102,7 +103,7 @@ def create_app() -> FastAPI:
         return JSONResponse({"error": "Favicon not found"}, status_code=404)
 
     # Register all modular routers
-    for r in (chat_router, ingestion_router, documents_router, traces_router, evaluation_router):
+    for r in (chat_router, ingestion_router, documents_router, traces_router, evaluation_router, policy_router):
         app.include_router(r)
 
 

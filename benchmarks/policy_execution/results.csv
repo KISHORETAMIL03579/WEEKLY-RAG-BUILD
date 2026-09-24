@@ -1,0 +1,11 @@
+case_id,employee_id,question,agent_passed,agent_latency_ms,agent_tokens,agent_cost_usd,agent_iterations,agent_termination,workflow_passed,workflow_latency_ms,workflow_tokens,workflow_cost_usd,workflow_iterations
+case_01,EMP001,What is the standard annual leave entitlement and monthly accrual rate for EMP001?,True,0.062,3180,0.00636,3,SUCCESS,True,0.034,825,0.00165,1
+case_02,EMP002,How many unused annual leave days can EMP002 carry forward into the next calendar year without special CEO consent?,True,0.034,3180,0.00636,3,SUCCESS,True,0.033,825,0.00165,1
+case_03,EMP003,How much written notice must EMP003 provide if they decide to resign while on probation?,True,0.035,3180,0.00636,3,SUCCESS,True,0.027,825,0.00165,1
+case_04,EMP004,How much written notice must EMP004 provide if resigning as a confirmed staff member?,True,0.027,3180,0.00636,3,SUCCESS,True,0.02,825,0.00165,1
+case_05,EMP005,"Is EMP005 eligible for paid sick leave after 1 month of service, and what is the minimum qualifying service threshold?",True,0.035,3180,0.00636,3,SUCCESS,True,0.025,825,0.00165,1
+case_06,EMP006,What is the sick leave accrual rate and the minimum paid sick leave entitlement for EMP006?,True,0.026,3180,0.00636,3,SUCCESS,True,0.021,825,0.00165,1
+case_07,EMP007,What severance payment and notice period is EMP007 entitled to upon separation due to redundancy with 4 completed years of service?,True,0.033,3180,0.00636,3,SUCCESS,True,0.026,825,0.00165,1
+case_08,EMP008,What severance pay is EMP008 entitled to upon termination for unsatisfactory performance?,True,0.027,3180,0.00636,3,SUCCESS,True,0.022,825,0.00165,1
+case_09,EMP009,Is EMP009 currently eligible to receive the 10% pension contribution allowance while on probation?,True,0.027,3180,0.00636,3,SUCCESS,True,0.028,825,0.00165,1
+case_10,EMP010,How many days of accrued unused annual leave can EMP010 commute to cash upon separation from service?,True,0.029,3180,0.00636,3,SUCCESS,True,0.024,825,0.00165,1

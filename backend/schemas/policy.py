@@ -1,14 +1,24 @@
-# backend/schemas/policy.py — Data Contracts, Enums, and Budget Definitions for Policy Agent & Workflow
+# backend/schemas/policy.py — Typed Pydantic Contracts and Schemas for HR Policy Execution
 from __future__ import annotations
 
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
-# ---------------------------------------------------------------------------
-# Enums
-# ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Strict Execution Budgets & Constants
+# ---------------------------------------------------------------------------
+MAX_ITERATIONS: int = 5
+MAX_TOKENS: int = 4000
+MAX_COST: float = 0.05
+MAX_WALL_CLOCK_SECONDS: float = 15.0
+TOKEN_COST_PROXY_RATE: float = 0.000002  # $2.00 per 1M tokens ($0.000002 per token)
+
+
+# ---------------------------------------------------------------------------
+# Enums for Strictly Scoped Policy Execution
+# ---------------------------------------------------------------------------
 class JurisdictionEnum(str, Enum):
     KENYA = "Kenya"
     IRELAND = "Ireland"
@@ -26,20 +36,8 @@ class PolicyCategoryEnum(str, Enum):
 
 
 # ---------------------------------------------------------------------------
-# Budget Constraints & Cost Constants
+# Employee Profile Schema
 # ---------------------------------------------------------------------------
-
-MAX_ITERATIONS: int = 5
-MAX_TOKENS: int = 4000
-MAX_COST: float = 0.05
-MAX_WALL_CLOCK_SECONDS: float = 30.0
-TOKEN_COST_PROXY_RATE: float = 0.50 / 1_000_000  # $0.50 per 1M tokens
-
-
-# ---------------------------------------------------------------------------
-# Pydantic Schemas
-# ---------------------------------------------------------------------------
-
 class EmployeeRecord(BaseModel):
     employee_id: str
     name: str
@@ -48,17 +46,19 @@ class EmployeeRecord(BaseModel):
     duty_station: str
     jurisdiction: JurisdictionEnum
     tenure_months: int
-    employment_status: str  # "Probation" | "Confirmed"
-    annual_leave_balance: int
-    basic_salary_monthly: float
-    separation_reason: Optional[str] = None
+    employment_status: str  # "Confirmed" | "Probation"
+    annual_leave_balance: int = 0
+    basic_salary_monthly: float = 0.0
+    separation_reason: Optional[str] = None  # None | "Redundancy" | "Unsatisfactory Performance" | "Resignation"
 
 
-class ToolCallRecord(BaseModel):
-    tool_name: str
-    arguments: Dict[str, Any]
-    output: Any
-    latency_ms: float = 0.0
+# ---------------------------------------------------------------------------
+# Policy Execution Contracts & Request/Response Schemas
+# ---------------------------------------------------------------------------
+class PolicyQueryRequest(BaseModel):
+    employee_id: str = Field(..., description="Unique Employee ID, e.g. EMP001")
+    question: str = Field(..., description="The policy entitlement or rule query")
+    case_id: Optional[str] = Field(None, description="Optional benchmark case ID")
 
 
 class PolicyOutputContract(BaseModel):
@@ -71,17 +71,13 @@ class PolicyOutputContract(BaseModel):
     passed: bool = False
     implementation: str = "agent"  # "agent" | "workflow"
     tool_calls: List[Dict[str, Any]] = Field(default_factory=list)
-    iterations: int = 0
+    iterations: int = 1
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
     cost_usd: float = 0.0
     latency_ms: float = 0.0
-    termination_reason: str = "SUCCESS"  # "SUCCESS" | "BUDGET_ITERATIONS" | "BUDGET_TOKENS" | "BUDGET_COST" | "BUDGET_WALL_CLOCK" | "ERROR"
-
-
-# Alias for backward compatibility if referenced
-Week7OutputContract = PolicyOutputContract
+    termination_reason: str = "SUCCESS"  # "SUCCESS" | "BUDGET_ITERATIONS" | "BUDGET_TOKENS" | "BUDGET_COST" | "BUDGET_WALL_CLOCK"
 
 
 class BenchmarkCase(BaseModel):
@@ -90,5 +86,5 @@ class BenchmarkCase(BaseModel):
     question: str
     source_section: str
     expected_value: str
-    tenure_dependency: str
-    deterministic_pass_criteria: List[str]
+    tenure_dependency: Optional[str] = None
+    deterministic_pass_criteria: List[str] = Field(default_factory=list)
