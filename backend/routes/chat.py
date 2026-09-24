@@ -84,7 +84,7 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
 
     # Dynamic TOP_K and TEMPERATURE from request payload (fallback to env/defaults).
     top_k = max(1, min(20, payload.top_k)) if payload.top_k is not None else get_app_symbol("TOP_K", TOP_K)
-    temperature = max(0.0, min(1.0, payload.temperature)) if payload.temperature is not None else 0.0
+    temperature = max(0.0, min(1.0, payload.temperature)) if payload.temperature is not None else get_app_symbol("DEFAULT_TEMPERATURE", 0.3)
 
     trace_id = str(uuid.uuid4())
     _t0 = time.time()

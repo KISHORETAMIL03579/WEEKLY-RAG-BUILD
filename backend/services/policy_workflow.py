@@ -21,6 +21,7 @@ def run_workflow_case(
     employee_id: str,
     question: str,
     deterministic_pass_criteria: Optional[List[str]] = None,
+    top_k: int = 5,
 ) -> PolicyOutputContract:
     """
     Execute the Fixed 3-Step Deterministic Workflow on a single employee entitlement question.
@@ -73,12 +74,12 @@ def run_workflow_case(
     # Step 3: Fetch Policy Rule & Synthesize Fixed Output
     # -----------------------------------------------------------------------
     t0 = time.perf_counter()
-    handbook_results = execute_tool_call("search_handbook", {"query": search_query, "top_k": 2})
+    handbook_results = execute_tool_call("search_handbook", {"query": search_query, "top_k": top_k})
     t_ms = (time.perf_counter() - t0) * 1000
     tool_calls_record.append({
         "step": 2,
         "tool_name": "search_handbook",
-        "arguments": {"query": search_query, "top_k": 2},
+        "arguments": {"query": search_query, "top_k": top_k},
         "output": handbook_results,
         "latency_ms": round(max(0.01, t_ms), 3),
     })
@@ -149,7 +150,7 @@ def run_workflow_case(
 
     else:
         entitlement_value = "Entitlement calculated from handbook rules."
-        rule_cited = handbook_results[0].get("section", "Section 5.0")
+        rule_cited = handbook_results[0].get("section", "Section 5.0") if handbook_results else "Section 5.0"
         explanation = f"Evaluated for {emp_name} based on {rule_cited}."
 
     # Fixed single-pass token consumption
@@ -185,4 +186,7 @@ def run_workflow_case(
         cost_usd=round(cost_usd, 6),
         latency_ms=round(max(0.01, elapsed_ms), 3),
         termination_reason="SUCCESS",
+        top_k=top_k,
+        temperature=None,
+        model=None,
     )

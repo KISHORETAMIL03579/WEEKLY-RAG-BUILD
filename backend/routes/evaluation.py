@@ -503,6 +503,9 @@ def create_evaluation_run(payload: Optional[Week6EvalPayload] = Body(default=Non
     """Starts a background evaluation run independent of the frontend component lifecycle."""
     cases_payload = payload.cases if payload else None
     eval_engine = "llm" if (payload and payload.run_llm) else "deterministic"
+    top_k = payload.top_k if payload and payload.top_k is not None else 5
+    temperature = payload.temperature if payload and payload.temperature is not None else 0.3
+    model = payload.model if payload and payload.model else "llama3.1:8b"
 
     cases_to_eval, labels, v1_template, v2_template = _prepare_cases_for_evaluation(cases_payload)
     if not cases_to_eval:
@@ -514,6 +517,9 @@ def create_evaluation_run(payload: Optional[Week6EvalPayload] = Body(default=Non
         v1_template=v1_template,
         v2_template=v2_template,
         labels=labels,
+        top_k=top_k,
+        temperature=temperature,
+        model=model,
     )
 
     return run_state.to_dict()

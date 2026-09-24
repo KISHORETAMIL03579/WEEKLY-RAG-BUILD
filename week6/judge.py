@@ -41,22 +41,29 @@ def check_ollama_health(timeout: float = 0.2) -> bool:
         return False
 
 
-def call_llm_judge_detailed(prompt: str, timeout: int = 180, retries: int = 1) -> Tuple[str, str, float]:
+def call_llm_judge_detailed(
+    prompt: str,
+    temperature: float = 0.3,
+    model: Optional[str] = None,
+    timeout: int = 180,
+    retries: int = 1,
+) -> Tuple[str, str, float]:
     """
     Production-grade LLM caller returning (raw_output, source, latency_ms).
     Source is explicitly one of 'LLM', 'FALLBACK', or 'ERROR'.
     """
     t_start = time.perf_counter()
+    target_model = model or OLLAMA_MODEL
 
     # 1. First probe local Ollama daemon
     if check_ollama_health():
         ollama_endpoint = f"{OLLAMA_URL.rstrip('/')}/api/generate"
         payload = {
-            "model": OLLAMA_MODEL,
+            "model": target_model,
             "prompt": prompt,
             "stream": False,
             "options": {
-                "temperature": 0.0,
+                "temperature": float(temperature),
                 "top_p": 0.1,
                 "num_predict": 16,
                 "stop": ["\n", "}", "```"]
@@ -92,7 +99,7 @@ def call_llm_judge_detailed(prompt: str, timeout: int = 180, retries: int = 1) -
             res = chat_call(
                 system="You are an impartial and rigorous HR Policy evaluation judge. Return ONLY the single JSON object: {\"verdict\": 1} or {\"verdict\": 0}.",
                 user=prompt,
-                temperature=0.0,
+                temperature=float(temperature),
                 max_tokens=16
             )
             if res and res.strip():
@@ -181,7 +188,12 @@ def evaluate_case_deterministically(case: Dict[str, Any], is_strict_section: boo
     return 1
 
 
-def evaluate_case_with_judge_detailed(case: Dict[str, Any], prompt_template: str) -> Tuple[int, str, str, float, bool]:
+def evaluate_case_with_judge_detailed(
+    case: Dict[str, Any],
+    prompt_template: str,
+    temperature: float = 0.3,
+    model: Optional[str] = None,
+) -> Tuple[int, str, str, float, bool]:
     """
     Evaluates a single policy QA case using the specified judge prompt template.
     Returns: (binary_verdict, raw_llm_response, source, latency_ms, llm_completed)
@@ -197,7 +209,7 @@ def evaluate_case_with_judge_detailed(case: Dict[str, Any], prompt_template: str
     formatted_prompt = formatted_prompt.replace("{context}", str(case.get("retrieved_context", "")).strip())
     formatted_prompt = formatted_prompt.replace("{answer}", str(case.get("answer", "")).strip())
 
-    raw_output, source, latency_ms = call_llm_judge_detailed(formatted_prompt)
+    raw_output, source, latency_ms = call_llm_judge_detailed(formatted_prompt, temperature=temperature, model=model)
 
     if source == "LLM":
         verdict = parse_judge_output(raw_output)

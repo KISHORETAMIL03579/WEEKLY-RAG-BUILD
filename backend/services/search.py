@@ -336,7 +336,7 @@ def build_qa_user_prompt(query: str, results: List[dict]) -> str:
     return "DOCUMENTS:\n\n" + "\n\n".join(context_blocks) + f"\n\nQUESTION: {query}\n\nANSWER:"
 
 
-def generate_answer(query: str, results: List[dict], temperature: float = 0.0) -> str:
+def generate_answer(query: str, results: List[dict], temperature: float = 0.3) -> str:
     system = QA_SYSTEM_PROMPT
     user = build_qa_user_prompt(query, results)
     try:

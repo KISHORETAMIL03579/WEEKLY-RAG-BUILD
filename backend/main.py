@@ -82,7 +82,11 @@ def create_app() -> FastAPI:
     # Core Page Routes
     @app.get("/", include_in_schema=False)
     @app.get("/eval", include_in_schema=False)
-    def index(request: Request, sid: SessionId):
+    @app.get("/eval/judge", include_in_schema=False)
+    @app.get("/eval/retrieval", include_in_schema=False)
+    @app.get("/eval/policy", include_in_schema=False)
+    @app.get("/eval/{subpath:path}", include_in_schema=False)
+    def index(request: Request, sid: SessionId, subpath: str = ""):
         index_html = FRONTEND_DIST / "index.html"
         if index_html.exists():
             return FileResponse(str(index_html))

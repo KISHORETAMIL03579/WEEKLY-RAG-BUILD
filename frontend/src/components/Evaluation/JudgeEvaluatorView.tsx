@@ -38,6 +38,8 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
   const [selectedCase, setSelectedCase] = useState<JudgeCaseResult | null>(null);
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
   const [evalEngine, setEvalEngine] = useState<'deterministic' | 'llm'>('deterministic');
+  const [topK, setTopK] = useState<number>(5);
+  const [temperature, setTemperature] = useState<number>(0.3);
 
   // New Custom QA Form State
   const [customQuestion, setCustomQuestion] = useState<string>('');
@@ -297,6 +299,18 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
     );
   };
 
+  const handleResetToBaseline = () => {
+    setTopK(8);
+    setTemperature(0.0);
+    notify('Restored Authoritative Frozen Week 6 Baseline: Top-K = 8, Temperature = 0.0', 'info');
+  };
+
+  const handleResetToAppDefault = () => {
+    setTopK(5);
+    setTemperature(0.3);
+    notify('Restored Application Default: Top-K = 5, Temperature = 0.3', 'info');
+  };
+
   // Run evaluation in the background independent of page lifecycle
   const handleRunEvaluation = async () => {
     if (cases.length === 0) {
@@ -309,14 +323,14 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
     setEvaluatingCaseId(null);
 
     try {
-      const runState = await api.startEvaluationRun(cases, evalEngine === 'llm');
+      const runState = await api.startEvaluationRun(cases, evalEngine === 'llm', topK, temperature);
       sessionStorage.setItem('active_evaluation_run_id', runState.evaluation_run_id);
       setCurrentRunId(runState.evaluation_run_id);
       setCases(runState.cases || runState.results || []);
       updateLoadingState(true);
       startPolling(runState.evaluation_run_id);
       notify(
-        `🚀 Started background evaluation run "${runState.evaluation_run_id}" (${runState.total_cases} cases, engine: ${evalEngine})!`,
+        `🚀 Started background evaluation run "${runState.evaluation_run_id}" (${runState.total_cases} cases, engine: ${evalEngine}, Top-K: ${topK}, Temp: ${temperature})!`,
         'info'
       );
     } catch (e) {
@@ -794,6 +808,139 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
               <span>⚡</span> Run Both Judges
             </button>
           )}
+        </div>
+      </div>
+
+      {/* EXPERIMENT & HYPERPARAMETER CONTROLS BAR */}
+      <div
+        style={{
+          background: 'rgba(15, 23, 42, 0.75)',
+          border: '1px solid var(--border)',
+          borderRadius: '10px',
+          padding: '14px 20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '14px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)' }}>⚙️ Experiment Controls:</span>
+          </div>
+
+          {/* Top-K Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#e2e8f0' }}>Top K:</label>
+            <select
+              value={topK}
+              onChange={(e) => setTopK(parseInt(e.target.value, 10))}
+              disabled={loading}
+              style={{
+                background: 'rgba(30, 41, 59, 0.9)',
+                border: '1px solid var(--border)',
+                color: '#fff',
+                borderRadius: '6px',
+                padding: '5px 10px',
+                fontSize: '0.82rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              {[4, 5, 6, 8, 10, 12].map((kVal) => (
+                <option key={kVal} value={kVal}>
+                  {kVal} {kVal === 8 ? '(Week 6 Baseline)' : kVal === 5 ? '(App Default)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Temperature Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#e2e8f0' }}>Temperature:</label>
+            <select
+              value={temperature}
+              onChange={(e) => setTemperature(parseFloat(e.target.value))}
+              disabled={loading}
+              style={{
+                background: 'rgba(30, 41, 59, 0.9)',
+                border: '1px solid var(--border)',
+                color: '#fff',
+                borderRadius: '6px',
+                padding: '5px 10px',
+                fontSize: '0.82rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              {[0.0, 0.1, 0.2, 0.3, 0.5, 0.7].map((tVal) => (
+                <option key={tVal} value={tVal}>
+                  {tVal.toFixed(1)} {tVal === 0.0 ? '(Week 6 Baseline)' : tVal === 0.3 ? '(App Default)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Active Config Tag */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'rgba(59, 130, 246, 0.1)',
+              border: '1px solid rgba(59, 130, 246, 0.25)',
+              borderRadius: '6px',
+              padding: '4px 10px',
+              fontSize: '0.78rem',
+              color: '#93c5fd',
+              fontFamily: 'ui-monospace, monospace',
+            }}
+          >
+            <span>Active: Top-K = <strong>{topK}</strong> | Temp = <strong>{temperature.toFixed(1)}</strong> | Model: <strong>llama3.1:8b</strong></span>
+          </div>
+        </div>
+
+        {/* Baseline / Default Quick-Reset Buttons */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={handleResetToBaseline}
+            disabled={loading}
+            style={{
+              padding: '5px 12px',
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              borderRadius: '6px',
+              border: '1px solid rgba(99, 102, 241, 0.4)',
+              background: (topK === 8 && temperature === 0.0) ? 'rgba(99, 102, 241, 0.25)' : 'rgba(99, 102, 241, 0.1)',
+              color: '#a5b4fc',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            title="Restore Authoritative Frozen Week 6 Baseline (Top-K=8, Temp=0.0)"
+          >
+            🎯 Week 6 Baseline (K=8, T=0.0)
+          </button>
+          <button
+            type="button"
+            onClick={handleResetToAppDefault}
+            disabled={loading}
+            style={{
+              padding: '5px 12px',
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              borderRadius: '6px',
+              border: '1px solid rgba(16, 185, 129, 0.4)',
+              background: (topK === 5 && temperature === 0.3) ? 'rgba(16, 185, 129, 0.25)' : 'rgba(16, 185, 129, 0.1)',
+              color: '#6ee7b7',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            title="Restore Current Application Default (Top-K=5, Temp=0.3)"
+          >
+            ⚡ App Default (K=5, T=0.3)
+          </button>
         </div>
       </div>
 

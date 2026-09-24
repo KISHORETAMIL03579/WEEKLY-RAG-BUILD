@@ -26,9 +26,15 @@ class EvaluationRunState:
         run_id: str,
         cases: List[Dict[str, Any]],
         eval_engine: str = "llm",
+        top_k: int = 5,
+        temperature: float = 0.3,
+        model: Optional[str] = "llama3.1:8b",
     ):
         self.run_id = run_id
         self.eval_engine = eval_engine
+        self.top_k = top_k
+        self.temperature = temperature
+        self.model = model
         self.status: str = "RUNNING"  # PENDING | RUNNING | COMPLETED | CANCELLED | ERROR
         self.total_cases = len(cases)
         self.completed_cases = 0
@@ -99,6 +105,9 @@ class EvaluationRunState:
                 "created_at": self.created_at,
                 "updated_at": self.updated_at,
                 "elapsed_seconds": round(elapsed, 1),
+                "top_k": self.top_k,
+                "temperature": self.temperature,
+                "model": self.model,
                 "v1_agreements": self.v1_agreements,
                 "v2_agreements": self.v2_agreements,
                 "judge_v1_agreement_pct": self.judge_v1_agreement_pct,
@@ -155,9 +164,19 @@ class EvaluationRunManager:
         v1_template: str = "",
         v2_template: str = "",
         labels: Optional[Dict[str, int]] = None,
+        top_k: int = 5,
+        temperature: float = 0.3,
+        model: Optional[str] = "llama3.1:8b",
     ) -> EvaluationRunState:
         run_id = f"eval_{uuid.uuid4().hex[:12]}"
-        run_state = EvaluationRunState(run_id=run_id, cases=cases, eval_engine=eval_engine)
+        run_state = EvaluationRunState(
+            run_id=run_id,
+            cases=cases,
+            eval_engine=eval_engine,
+            top_k=top_k,
+            temperature=temperature,
+            model=model,
+        )
 
         with self._manager_lock:
             self._runs[run_id] = run_state
@@ -179,7 +198,7 @@ class EvaluationRunManager:
         v2_template: str,
         labels: Dict[str, int],
     ):
-        logger.info("Starting background evaluation run: %s (%d cases, engine=%s)", run.run_id, run.total_cases, run.eval_engine)
+        logger.info("Starting background evaluation run: %s (%d cases, engine=%s, top_k=%d, temp=%.2f)", run.run_id, run.total_cases, run.eval_engine, run.top_k, run.temperature)
         try:
             total = len(run.cases)
             for idx in range(total):
@@ -215,8 +234,12 @@ class EvaluationRunManager:
 
                 if run.eval_engine == "llm" and v1_template and v2_template:
                     try:
-                        v1_verdict, v1_raw, v1_src, v1_lat, v1_completed = evaluate_case_with_judge_detailed(c, v1_template)
-                        v2_verdict, v2_raw, v2_src, v2_lat, v2_completed = evaluate_case_with_judge_detailed(c, v2_template)
+                        v1_verdict, v1_raw, v1_src, v1_lat, v1_completed = evaluate_case_with_judge_detailed(
+                            c, v1_template, temperature=run.temperature, model=run.model
+                        )
+                        v2_verdict, v2_raw, v2_src, v2_lat, v2_completed = evaluate_case_with_judge_detailed(
+                            c, v2_template, temperature=run.temperature, model=run.model
+                        )
                     except Exception as e:
                         logger.warning("LLM Judge evaluation failed for %s: %s", cid, e)
                         v1_verdict = evaluate_case_deterministically(c, is_strict_section=True)

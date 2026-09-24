@@ -153,9 +153,12 @@ export const api = {
   async startEvaluationRun(
     cases?: JudgeCaseResult[],
     runLlm: boolean = true,
+    top_k: number = 5,
+    temperature: number = 0.3,
+    model: string = 'llama3.1:8b',
     signal?: AbortSignal
   ): Promise<EvaluationRunStateResponse> {
-    const payload = JSON.stringify({ cases, run_llm: runLlm });
+    const payload = JSON.stringify({ cases, run_llm: runLlm, top_k, temperature, model });
     let res = await fetch(`${API_BASE}/api/evaluation/runs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

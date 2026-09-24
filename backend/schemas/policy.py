@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 MAX_ITERATIONS: int = 5
 MAX_TOKENS: int = 4000
 MAX_COST: float = 0.05
-MAX_WALL_CLOCK_SECONDS: float = 15.0
+MAX_WALL_CLOCK_SECONDS: float = 45.0
 TOKEN_COST_PROXY_RATE: float = 0.000002
 
 class JurisdictionEnum(str, Enum):

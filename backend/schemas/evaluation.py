@@ -79,6 +79,9 @@ class Week6CasePayload(BaseModel):
 class Week6EvalPayload(BaseModel):
     cases: Optional[List[Week6CasePayload]] = None
     run_llm: bool = True
+    top_k: int = 8
+    temperature: float = 0.3
+    model: Optional[str] = None
 
 
 JudgeCasePayload = Week6CasePayload
