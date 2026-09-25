@@ -749,28 +749,6 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
         </div>
 
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-          <label
-            className="btn-secondary"
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', margin: 0 }}
-            title="Import .txt, .md, or .json file containing questions and answers"
-          >
-            <span>📥</span> Import File (.txt / .json)
-            <input
-              type="file"
-              accept=".txt,.md,.json"
-              style={{ display: 'none' }}
-              onChange={handleFileUpload}
-            />
-          </label>
-          <button
-            type="button"
-            onClick={() => setShowAddModal(true)}
-            className="btn-secondary"
-            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            <span>➕</span> Add Question &amp; Answer
-          </button>
-          
           {loading ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <button

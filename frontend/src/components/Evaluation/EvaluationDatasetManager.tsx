@@ -66,6 +66,13 @@ export const EvaluationDatasetManager: React.FC<EvaluationDatasetManagerProps> =
     }
   }, [actualStorageKey]);
 
+  // Ensure active mode is always 'builtin' (Canonical) when customCases is empty
+  useEffect(() => {
+    if (datasetMode === 'custom' && customCases.length === 0) {
+      onModeChange('builtin');
+    }
+  }, [datasetMode, customCases.length, onModeChange]);
+
   // Save custom cases to localStorage on change
   const saveCases = (newCases: QADataSetCase[]) => {
     onCustomCasesChange(newCases);
@@ -250,17 +257,24 @@ export const EvaluationDatasetManager: React.FC<EvaluationDatasetManagerProps> =
             <button
               type="button"
               disabled={isRunning}
-              onClick={() => onModeChange('custom')}
+              onClick={() => {
+                if (customCases.length === 0) {
+                  onNotify('Custom dataset is empty. Click "Import Q&A File" or "+ Add Case" to add custom test cases.', 'info');
+                  return;
+                }
+                onModeChange('custom');
+              }}
               style={{
                 padding: '4px 10px',
                 fontSize: '0.78rem',
                 border: 'none',
                 borderRadius: '4px',
-                background: datasetMode === 'custom' ? 'var(--accent)' : 'transparent',
-                color: datasetMode === 'custom' ? '#fff' : 'var(--text-muted)',
-                cursor: isRunning ? 'not-allowed' : 'pointer',
+                background: datasetMode === 'custom' && customCases.length > 0 ? 'var(--accent)' : 'transparent',
+                color: datasetMode === 'custom' && customCases.length > 0 ? '#fff' : 'var(--text-muted)',
+                cursor: isRunning ? 'not-allowed' : (customCases.length === 0 ? 'default' : 'pointer'),
                 fontWeight: 600,
               }}
+              title={customCases.length === 0 ? 'No custom cases yet. Import or add cases first.' : 'Switch to Custom Dataset'}
             >
               Custom ({customCases.length})
             </button>
