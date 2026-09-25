@@ -1,8 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { EvalQuestionInput } from '../../types/evaluation';
 import { PRESETS } from './KeyTakeaways';
-import { api } from '../../services/api';
-import { generateId } from '../../utils/helpers';
 import { CANONICAL_RETRIEVAL_QUESTIONS } from '../../data/canonicalRetrievalQuestions';
 import { EvaluationProgressCard } from './EvaluationProgressCard';
 import { EvaluationDatasetManager } from './EvaluationDatasetManager';
@@ -37,11 +35,6 @@ export const FormView: React.FC<FormViewProps> = ({
   isRunning,
   onNotify,
 }) => {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isImporting, setIsImporting] = useState(false);
-  const [isCustomExpanded, setIsCustomExpanded] = useState(false);
-  const importAbortRef = useRef<AbortController | null>(null);
-
   // Common Dataset State
   const [datasetMode, setDatasetMode] = useState<DatasetMode>('builtin');
   const [customDatasetCases, setCustomDatasetCases] = useState<QADataSetCase[]>([]);
@@ -84,29 +77,6 @@ export const FormView: React.FC<FormViewProps> = ({
     }
   };
 
-  useEffect(() => {
-    return () => {
-      if (importAbortRef.current) {
-        importAbortRef.current.abort();
-      }
-    };
-  }, []);
-
-  const addQ = () => {
-    setQuestions((prev) => [...prev, { id: generateId('q'), question: '', expected: '' }]);
-  };
-
-  const updateQ = (id: string, field: 'question' | 'expected', val: string) => {
-    setQuestions((prev) => prev.map((q) => (q.id === id ? { ...q, [field]: val } : q)));
-  };
-
-  const removeQ = (id: string) => {
-    setQuestions((prev) => {
-      if (prev.length <= 1) return [{ id: generateId('q'), question: '', expected: '' }];
-      return prev.filter((q) => q.id !== id);
-    });
-  };
-
   const resetToCanonical = () => {
     setQuestions(CANONICAL_RETRIEVAL_QUESTIONS);
     notify('Reset to canonical 25-case benchmark questions.', 'info');
@@ -115,47 +85,6 @@ export const FormView: React.FC<FormViewProps> = ({
   const toggleP = (key: string) => {
     setPresets((prev) => ({ ...prev, [key]: !prev[key] }));
   };
-
-  const handleImport = async () => {
-    if (!selectedFile) {
-      notify('Please choose a file (.pdf, .txt, .md, .json) first.', 'error');
-      return;
-    }
-    if (importAbortRef.current) {
-      importAbortRef.current.abort();
-    }
-    const controller = new AbortController();
-    importAbortRef.current = controller;
-    setIsImporting(true);
-
-    try {
-      const data = await api.parseEvaluationFile(selectedFile, controller.signal);
-      if (data.pairs && data.pairs.length) {
-        setQuestions(
-          data.pairs.map((p) => ({
-            id: generateId('q'),
-            question: p.question || '',
-            expected: p.expected || '',
-          }))
-        );
-        notify(`Successfully imported ${data.pairs.length} Q/A pairs from ${selectedFile.name}!`, 'success');
-      } else {
-        notify(data.error || 'No Q/A pairs found in file.', 'error');
-      }
-    } catch (e: unknown) {
-      const err = e as Error;
-      if (err.name !== 'AbortError') {
-        notify('Import error: ' + err.message, 'error');
-      }
-    } finally {
-      if (importAbortRef.current === controller) {
-        importAbortRef.current = null;
-        setIsImporting(false);
-      }
-    }
-  };
-
-  const completeCount = questions.filter((q) => q.question.trim() && q.expected.trim()).length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -281,255 +210,7 @@ export const FormView: React.FC<FormViewProps> = ({
         storageKey="retrieval_custom_dataset"
       />
 
-      {/* 1. CUSTOM RETRIEVAL DATASET (OPTIONAL ACCORDION) */}
-      <div className="card">
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: isCustomExpanded ? '16px' : '0',
-            flexWrap: 'wrap',
-            gap: '10px',
-          }}
-        >
-          <div>
-            <h2
-              style={{
-                fontSize: '0.84rem',
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                color: 'var(--text-primary)',
-                margin: 0,
-              }}
-            >
-              Custom Retrieval Dataset (Optional)
-            </h2>
-            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-              {questions.length === CANONICAL_RETRIEVAL_QUESTIONS.length
-                ? `Loaded official ${questions.length} canonical benchmark cases (${completeCount} complete).`
-                : `${questions.length} custom cases loaded (${completeCount} complete).`}
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            {questions.length !== CANONICAL_RETRIEVAL_QUESTIONS.length && (
-              <button
-                type="button"
-                onClick={resetToCanonical}
-                className="btn-secondary"
-                style={{ fontSize: '0.75rem', padding: '4px 10px' }}
-                title="Restore canonical 25-case benchmark"
-              >
-                🔄 Reset to 25 Canonical Cases
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setIsCustomExpanded((prev) => !prev)}
-              className="btn-secondary"
-              style={{ fontSize: '0.75rem', padding: '4px 10px' }}
-            >
-              {isCustomExpanded ? '▲ Hide Custom Editor' : '▼ Expand Custom Editor'}
-            </button>
-          </div>
-        </div>
-
-        {isCustomExpanded && (
-          <div style={{ marginTop: '16px' }}>
-            {/* Import file box */}
-            <div
-              style={{
-                background: 'var(--bg-raised)',
-                border: '1px dashed var(--border)',
-                borderRadius: '8px',
-                padding: '14px 18px',
-                marginBottom: '18px',
-                display: 'flex',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '12px',
-              }}
-            >
-              <div>
-                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                  Import Q/A Pairs (Optional)
-                </div>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  Format: one line "Q: question", next line "A: expected section or document substring", blank line between pairs.
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <input
-                  id="qa-file-upload"
-                  type="file"
-                  accept=".pdf,.txt,.md,.json"
-                  style={{ display: 'none' }}
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      setSelectedFile(e.target.files[0]);
-                    }
-                  }}
-                />
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    document.getElementById('qa-file-upload')?.click();
-                  }}
-                  className="btn-secondary"
-                  style={{ padding: '6px 12px' }}
-                >
-                  <span>📁</span>
-                  <span>{selectedFile ? 'Change File' : 'Choose File'}</span>
-                </button>
-
-                {selectedFile ? (
-                  <div
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      background: 'var(--accent-dim)',
-                      border: '1px solid var(--accent-border)',
-                      padding: '3px 6px 3px 10px',
-                      borderRadius: '6px',
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: '0.75rem',
-                        color: 'var(--text-primary)',
-                        fontFamily: 'ui-monospace, monospace',
-                        maxWidth: '180px',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {selectedFile.name}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedFile(null);
-                        const fileInput = document.getElementById('qa-file-upload') as HTMLInputElement | null;
-                        if (fileInput) fileInput.value = '';
-                      }}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--text-muted)',
-                        cursor: 'pointer',
-                        padding: '2px 5px',
-                        borderRadius: '4px',
-                        fontSize: '0.8rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        lineHeight: 1,
-                      }}
-                      title="Remove selected file"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ) : (
-                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>No file chosen</span>
-                )}
-
-                <button
-                  type="button"
-                  onClick={handleImport}
-                  disabled={isImporting || !selectedFile}
-                  className="btn-primary"
-                  style={{
-                    padding: '6px 14px',
-                    fontSize: '0.78rem',
-                    opacity: selectedFile ? 1 : 0.45,
-                  }}
-                >
-                  {isImporting ? 'Importing...' : 'Import'}
-                </button>
-              </div>
-            </div>
-
-            {/* Question Rows with internal scroll when list is large */}
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-                maxHeight: questions.length > 5 ? '380px' : 'none',
-                overflowY: questions.length > 5 ? 'auto' : 'visible',
-                paddingRight: questions.length > 5 ? '6px' : '0',
-              }}
-            >
-              {questions.map((q, idx) => (
-                <div key={q.id} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <span
-                    style={{
-                      fontSize: '0.72rem',
-                      color: 'var(--text-muted)',
-                      width: '22px',
-                      textAlign: 'center',
-                      fontFamily: 'ui-monospace, monospace',
-                    }}
-                  >
-                    {idx + 1}
-                  </span>
-                  <input
-                    type="text"
-                    placeholder="Question"
-                    value={q.question}
-                    onChange={(e) => updateQ(q.id, 'question', e.target.value)}
-                    className="input-field"
-                    style={{ flex: 2 }}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Expected section or document substring (e.g. Leave Policy or HRPolicy.pdf)"
-                    value={q.expected}
-                    onChange={(e) => updateQ(q.id, 'expected', e.target.value)}
-                    className="input-field"
-                    style={{ flex: 1.4, fontFamily: 'ui-monospace, monospace', fontSize: '0.8rem' }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeQ(q.id)}
-                    style={{
-                      background: 'none',
-                      border: '1px solid var(--border)',
-                      color: 'var(--text-muted)',
-                      borderRadius: '6px',
-                      width: '34px',
-                      height: '34px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '0.85rem',
-                    }}
-                    title="Remove"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <button type="button" onClick={addQ} className="btn-secondary" style={{ marginTop: '12px' }}>
-              + Add question
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* 2. SETTINGS */}
+      {/* RETRIEVAL SETTINGS */}
       <div className="card">
         <h2
           style={{
@@ -541,7 +222,7 @@ export const FormView: React.FC<FormViewProps> = ({
             margin: '0 0 16px 0',
           }}
         >
-          2. Settings
+          Retrieval Settings
         </h2>
 
         <div
