@@ -109,6 +109,24 @@ export interface JudgeCaseResult {
   latency_ms?: number | null;
   llm_completed?: boolean | null;
 
+  // Provenance & Telemetry
+  top_k?: number;
+  requested_top_k?: number;
+  temperature?: number;
+  requested_temperature?: number;
+  actual_temperature?: number;
+  applied_temperature?: number;
+  model?: string;
+  retrieval_mode?: string;
+  retrieved_count?: number;
+  retrieved_chunk_ids?: string[];
+  retrieved_scores?: Record<string, number> | number[];
+  final_context_chunk_ids?: string[];
+  final_context_token_count?: number;
+  benchmark_taxonomy?: string | null;
+  actual_run_diagnosis?: string | null;
+  expected_answer?: string;
+
   // Assertions & Diagnosis
   assertions?: JudgeAssertions | null;
   failure_category?: 'pipeline' | 'llm_model' | 'code_issue' | 'pass' | string | null;
@@ -139,6 +157,9 @@ export interface EvaluationRunStateResponse {
   created_at: number;
   updated_at: number;
   elapsed_seconds: number;
+  top_k?: number;
+  temperature?: number;
+  model?: string;
   v1_agreements?: number;
   v2_agreements?: number;
   judge_v1_agreement_pct?: number | null;

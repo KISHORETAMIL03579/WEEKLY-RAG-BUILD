@@ -196,6 +196,11 @@ export const api = {
     return handleResponse<EvaluationRunStateResponse>(res);
   },
 
+  async listEvaluationRuns(signal?: AbortSignal): Promise<{ runs: EvaluationRunStateResponse[] }> {
+    const res = await fetch(`${API_BASE}/api/evaluation/runs`, { signal });
+    return handleResponse<{ runs: EvaluationRunStateResponse[] }>(res);
+  },
+
   async cancelEvaluationRun(runId: string, signal?: AbortSignal): Promise<{ ok: boolean; status: string }> {
     const res = await fetch(`${API_BASE}/api/evaluation/runs/${encodeURIComponent(runId)}/cancel`, {
       method: 'POST',

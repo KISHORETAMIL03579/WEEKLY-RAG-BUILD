@@ -519,6 +519,12 @@ def _prepare_cases_for_evaluation(cases_payload: Optional[list]) -> tuple[list[d
     return cases_to_eval, labels, v1_template, v2_template
 
 
+@router.get("/api/evaluation/runs")
+def list_evaluation_runs():
+    """Lists historical and active evaluation runs for comparison and provenance inspection."""
+    return {"runs": run_manager.list_runs()}
+
+
 @router.post("/api/evaluation/runs")
 @router.post("/api/week6/runs")
 def create_evaluation_run(payload: Optional[Week6EvalPayload] = Body(default=None)):

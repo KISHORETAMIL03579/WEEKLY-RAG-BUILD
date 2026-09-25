@@ -76,13 +76,30 @@ class Week6CasePayload(BaseModel):
     failure_reason: Optional[str] = None
     resolution: Optional[str] = None
 
+    # Provenance & Telemetry
+    top_k: Optional[int] = None
+    requested_top_k: Optional[int] = None
+    temperature: Optional[float] = None
+    requested_temperature: Optional[float] = None
+    actual_temperature: Optional[float] = None
+    applied_temperature: Optional[float] = None
+    model: Optional[str] = None
+    retrieval_mode: Optional[str] = None
+    retrieved_count: Optional[int] = None
+    retrieved_chunk_ids: Optional[List[str]] = None
+    retrieved_scores: Optional[List[float]] = None
+    final_context_chunk_ids: Optional[List[str]] = None
+    final_context_token_count: Optional[int] = None
+    benchmark_taxonomy: Optional[str] = None
+    actual_run_diagnosis: Optional[str] = None
+
 
 class Week6EvalPayload(BaseModel):
     cases: Optional[List[Week6CasePayload]] = None
     run_llm: bool = True
-    top_k: int = 8
+    top_k: int = 5
     temperature: float = 0.3
-    model: Optional[str] = None
+    model: Optional[str] = "llama3.1:8b"
 
 
 JudgeCasePayload = Week6CasePayload
