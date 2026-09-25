@@ -3,6 +3,8 @@ import { EvalQuestionInput } from '../../types/evaluation';
 import { PRESETS } from './KeyTakeaways';
 import { api } from '../../services/api';
 import { generateId } from '../../utils/helpers';
+import { CANONICAL_RETRIEVAL_QUESTIONS } from '../../data/canonicalRetrievalQuestions';
+import { EvaluationProgressCard } from './EvaluationProgressCard';
 
 interface FormViewProps {
   questions: EvalQuestionInput[];
@@ -35,6 +37,7 @@ export const FormView: React.FC<FormViewProps> = ({
 }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [isCustomExpanded, setIsCustomExpanded] = useState(false);
   const importAbortRef = useRef<AbortController | null>(null);
 
   const notify = (msg: string, type: 'info' | 'success' | 'error' = 'info') => {
@@ -66,6 +69,11 @@ export const FormView: React.FC<FormViewProps> = ({
       if (prev.length <= 1) return [{ id: generateId('q'), question: '', expected: '' }];
       return prev.filter((q) => q.id !== id);
     });
+  };
+
+  const resetToCanonical = () => {
+    setQuestions(CANONICAL_RETRIEVAL_QUESTIONS);
+    notify('Reset to canonical 25-case benchmark questions.', 'info');
   };
 
   const toggleP = (key: string) => {
@@ -111,222 +119,359 @@ export const FormView: React.FC<FormViewProps> = ({
     }
   };
 
+  const completeCount = questions.filter((q) => q.question.trim() && q.expected.trim()).length;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* 1. TEST QUESTIONS */}
+      {/* HERO BANNER & PRIMARY EXECUTION CTA */}
+      <div
+        className="card"
+        style={{
+          background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%)',
+          border: '1px solid var(--border)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '16px',
+        }}
+      >
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <span
+              style={{
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                color: 'var(--accent)',
+                background: 'var(--accent-dim)',
+                padding: '2px 8px',
+                borderRadius: '4px',
+                border: '1px solid rgba(59, 130, 246, 0.3)',
+              }}
+            >
+              RETRIEVAL BENCHMARK
+            </span>
+            <span style={{ color: '#10b981', fontSize: '0.78rem', fontWeight: 600 }}>
+              ● {questions.length}/{questions.length} Ready
+            </span>
+          </div>
+          <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#fff', margin: 0 }}>
+            Multi-Strategy Retrieval Benchmark
+          </h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.84rem', margin: '4px 0 0 0', maxWidth: '650px' }}>
+            Compare Document &amp; Section Recall@K and MRR across ablation stages (TF-IDF, Hybrid Weighted, Hybrid RRF, Cross-Encoder Rerank, Query Rewriting).
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div
+            style={{
+              background: 'rgba(16, 185, 129, 0.12)',
+              border: '1px solid rgba(16, 185, 129, 0.35)',
+              borderRadius: '8px',
+              padding: '8px 16px',
+              textAlign: 'right',
+            }}
+          >
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+              Benchmark Dataset
+            </div>
+            <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#34d399' }}>
+              {questions.length} Cases Loaded
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onRun}
+            disabled={isRunning || questions.length === 0}
+            className="btn-primary"
+            style={{
+              padding: '10px 22px',
+              fontSize: '0.9rem',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            {isRunning ? (
+              <>
+                <span className="spinner" style={{ width: '16px', height: '16px' }} />
+                <span>Running Benchmark...</span>
+              </>
+            ) : (
+              <>
+                <span>▶</span>
+                <span>Run Retrieval Benchmark</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* LIVE PROGRESS CARD WHEN RUNNING */}
+      {isRunning && (
+        <EvaluationProgressCard
+          title="Retrieval Benchmark Running"
+          current={0}
+          total={questions.length}
+          isRunning={true}
+          isComplete={false}
+          statusText="Executing retrieval across active ablation strategies..."
+          configurationText={`Top-K: ${topK} | Active Strategies: ${Object.keys(presets).filter((k) => presets[k]).length}`}
+          onCancel={onCancel}
+        />
+      )}
+
+      {/* 1. CUSTOM RETRIEVAL DATASET (OPTIONAL ACCORDION) */}
       <div className="card">
         <div
           style={{
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            marginBottom: '16px',
-          }}
-        >
-          <h2
-            style={{
-              fontSize: '0.82rem',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              color: 'var(--text-primary)',
-              margin: 0,
-            }}
-          >
-            1. Test Questions
-          </h2>
-          <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-            {questions.filter((q) => q.question.trim() && q.expected.trim()).length} complete / {questions.length} total
-          </span>
-        </div>
-
-        {/* Import file box */}
-        <div
-          style={{
-            background: 'var(--bg-raised)',
-            border: '1px dashed var(--border)',
-            borderRadius: '8px',
-            padding: '14px 18px',
-            marginBottom: '18px',
-            display: 'flex',
+            marginBottom: isCustomExpanded ? '16px' : '0',
             flexWrap: 'wrap',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '12px',
+            gap: '10px',
           }}
         >
           <div>
-            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-              Import Q/A Pairs (Optional)
-            </div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-              Format: one line "Q: question", next line "A: expected section or document substring", blank line between pairs.
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <input
-              id="qa-file-upload"
-              type="file"
-              accept=".pdf,.txt,.md,.json"
-              style={{ display: 'none' }}
-              onChange={(e) => {
-                if (e.target.files && e.target.files[0]) {
-                  setSelectedFile(e.target.files[0]);
-                }
-              }}
-            />
-
-            <button
-              type="button"
-              onClick={() => {
-                document.getElementById('qa-file-upload')?.click();
-              }}
-              className="btn-secondary"
-              style={{ padding: '6px 12px' }}
-            >
-              <span>📁</span>
-              <span>{selectedFile ? 'Change File' : 'Choose File'}</span>
-            </button>
-
-            {selectedFile ? (
-              <div
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  background: 'var(--accent-dim)',
-                  border: '1px solid var(--accent-border)',
-                  padding: '3px 6px 3px 10px',
-                  borderRadius: '6px',
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: '0.75rem',
-                    color: 'var(--text-primary)',
-                    fontFamily: 'ui-monospace, monospace',
-                    maxWidth: '180px',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {selectedFile.name}
-                </span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedFile(null);
-                    const fileInput = document.getElementById('qa-file-upload') as HTMLInputElement | null;
-                    if (fileInput) fileInput.value = '';
-                  }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-muted)',
-                    cursor: 'pointer',
-                    padding: '2px 5px',
-                    borderRadius: '4px',
-                    fontSize: '0.8rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    lineHeight: 1,
-                  }}
-                  title="Remove selected file"
-                >
-                  ✕
-                </button>
-              </div>
-            ) : (
-              <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>No file chosen</span>
-            )}
-
-            <button
-              type="button"
-              onClick={handleImport}
-              disabled={isImporting || !selectedFile}
-              className="btn-primary"
+            <h2
               style={{
-                padding: '6px 14px',
-                fontSize: '0.78rem',
-                opacity: selectedFile ? 1 : 0.45,
+                fontSize: '0.84rem',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                color: 'var(--text-primary)',
+                margin: 0,
               }}
             >
-              {isImporting ? 'Importing...' : 'Import'}
-            </button>
+              Custom Retrieval Dataset (Optional)
+            </h2>
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+              {questions.length === CANONICAL_RETRIEVAL_QUESTIONS.length
+                ? `Loaded official ${questions.length} canonical benchmark cases (${completeCount} complete).`
+                : `${questions.length} custom cases loaded (${completeCount} complete).`}
+            </div>
           </div>
-        </div>
 
-        {/* Question Rows with internal scroll when list is large */}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-            maxHeight: questions.length > 5 ? '380px' : 'none',
-            overflowY: questions.length > 5 ? 'auto' : 'visible',
-            paddingRight: questions.length > 5 ? '6px' : '0',
-          }}
-        >
-          {questions.map((q, idx) => (
-            <div key={q.id} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <span
-                style={{
-                  fontSize: '0.72rem',
-                  color: 'var(--text-muted)',
-                  width: '22px',
-                  textAlign: 'center',
-                  fontFamily: 'ui-monospace, monospace',
-                }}
-              >
-                {idx + 1}
-              </span>
-              <input
-                type="text"
-                placeholder="Question"
-                value={q.question}
-                onChange={(e) => updateQ(q.id, 'question', e.target.value)}
-                className="input-field"
-                style={{ flex: 2 }}
-              />
-              <input
-                type="text"
-                placeholder="Expected section or document substring (e.g. Leave Policy or HRPolicy.pdf)"
-                value={q.expected}
-                onChange={(e) => updateQ(q.id, 'expected', e.target.value)}
-                className="input-field"
-                style={{ flex: 1.4, fontFamily: 'ui-monospace, monospace', fontSize: '0.8rem' }}
-              />
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {questions.length !== CANONICAL_RETRIEVAL_QUESTIONS.length && (
               <button
                 type="button"
-                onClick={() => removeQ(q.id)}
-                style={{
-                  background: 'none',
-                  border: '1px solid var(--border)',
-                  color: 'var(--text-muted)',
-                  borderRadius: '6px',
-                  width: '34px',
-                  height: '34px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '0.85rem',
-                }}
-                title="Remove"
+                onClick={resetToCanonical}
+                className="btn-secondary"
+                style={{ fontSize: '0.75rem', padding: '4px 10px' }}
+                title="Restore canonical 25-case benchmark"
               >
-                ✕
+                🔄 Reset to 25 Canonical Cases
               </button>
-            </div>
-          ))}
+            )}
+            <button
+              type="button"
+              onClick={() => setIsCustomExpanded((prev) => !prev)}
+              className="btn-secondary"
+              style={{ fontSize: '0.75rem', padding: '4px 10px' }}
+            >
+              {isCustomExpanded ? '▲ Hide Custom Editor' : '▼ Expand Custom Editor'}
+            </button>
+          </div>
         </div>
 
-        <button type="button" onClick={addQ} className="btn-secondary" style={{ marginTop: '12px' }}>
-          + Add question
-        </button>
+        {isCustomExpanded && (
+          <div style={{ marginTop: '16px' }}>
+            {/* Import file box */}
+            <div
+              style={{
+                background: 'var(--bg-raised)',
+                border: '1px dashed var(--border)',
+                borderRadius: '8px',
+                padding: '14px 18px',
+                marginBottom: '18px',
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  Import Q/A Pairs (Optional)
+                </div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Format: one line "Q: question", next line "A: expected section or document substring", blank line between pairs.
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  id="qa-file-upload"
+                  type="file"
+                  accept=".pdf,.txt,.md,.json"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      setSelectedFile(e.target.files[0]);
+                    }
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    document.getElementById('qa-file-upload')?.click();
+                  }}
+                  className="btn-secondary"
+                  style={{ padding: '6px 12px' }}
+                >
+                  <span>📁</span>
+                  <span>{selectedFile ? 'Change File' : 'Choose File'}</span>
+                </button>
+
+                {selectedFile ? (
+                  <div
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      background: 'var(--accent-dim)',
+                      border: '1px solid var(--accent-border)',
+                      padding: '3px 6px 3px 10px',
+                      borderRadius: '6px',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: '0.75rem',
+                        color: 'var(--text-primary)',
+                        fontFamily: 'ui-monospace, monospace',
+                        maxWidth: '180px',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {selectedFile.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedFile(null);
+                        const fileInput = document.getElementById('qa-file-upload') as HTMLInputElement | null;
+                        if (fileInput) fileInput.value = '';
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        padding: '2px 5px',
+                        borderRadius: '4px',
+                        fontSize: '0.8rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        lineHeight: 1,
+                      }}
+                      title="Remove selected file"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>No file chosen</span>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleImport}
+                  disabled={isImporting || !selectedFile}
+                  className="btn-primary"
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: '0.78rem',
+                    opacity: selectedFile ? 1 : 0.45,
+                  }}
+                >
+                  {isImporting ? 'Importing...' : 'Import'}
+                </button>
+              </div>
+            </div>
+
+            {/* Question Rows with internal scroll when list is large */}
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                maxHeight: questions.length > 5 ? '380px' : 'none',
+                overflowY: questions.length > 5 ? 'auto' : 'visible',
+                paddingRight: questions.length > 5 ? '6px' : '0',
+              }}
+            >
+              {questions.map((q, idx) => (
+                <div key={q.id} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <span
+                    style={{
+                      fontSize: '0.72rem',
+                      color: 'var(--text-muted)',
+                      width: '22px',
+                      textAlign: 'center',
+                      fontFamily: 'ui-monospace, monospace',
+                    }}
+                  >
+                    {idx + 1}
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Question"
+                    value={q.question}
+                    onChange={(e) => updateQ(q.id, 'question', e.target.value)}
+                    className="input-field"
+                    style={{ flex: 2 }}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Expected section or document substring (e.g. Leave Policy or HRPolicy.pdf)"
+                    value={q.expected}
+                    onChange={(e) => updateQ(q.id, 'expected', e.target.value)}
+                    className="input-field"
+                    style={{ flex: 1.4, fontFamily: 'ui-monospace, monospace', fontSize: '0.8rem' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeQ(q.id)}
+                    style={{
+                      background: 'none',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text-muted)',
+                      borderRadius: '6px',
+                      width: '34px',
+                      height: '34px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '0.85rem',
+                    }}
+                    title="Remove"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <button type="button" onClick={addQ} className="btn-secondary" style={{ marginTop: '12px' }}>
+              + Add question
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 2. SETTINGS */}
@@ -353,12 +498,48 @@ export const FormView: React.FC<FormViewProps> = ({
           }}
         >
           <div>
-            <label
-              htmlFor="top-k-stepper-input"
-              style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '6px' }}
-            >
-              Top-k
-            </label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <label
+                htmlFor="top-k-stepper-input"
+                style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}
+              >
+                Top-k
+              </label>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setTopK(5)}
+                  style={{
+                    fontSize: '0.7rem',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    border: Number(topK) === 5 ? '1px solid var(--accent)' : '1px solid var(--border)',
+                    background: Number(topK) === 5 ? 'var(--accent-dim)' : 'transparent',
+                    color: Number(topK) === 5 ? '#fff' : 'var(--text-muted)',
+                    cursor: 'pointer',
+                  }}
+                  title="Application Default (K=5)"
+                >
+                  K=5 (Default)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTopK(8)}
+                  style={{
+                    fontSize: '0.7rem',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    border: Number(topK) === 8 ? '1px solid var(--accent)' : '1px solid var(--border)',
+                    background: Number(topK) === 8 ? 'var(--accent-dim)' : 'transparent',
+                    color: Number(topK) === 8 ? '#fff' : 'var(--text-muted)',
+                    cursor: 'pointer',
+                  }}
+                  title="Week 6 Baseline (K=8)"
+                >
+                  K=8 (Week 6)
+                </button>
+              </div>
+            </div>
             <div
               style={{
                 display: 'flex',
@@ -413,7 +594,7 @@ export const FormView: React.FC<FormViewProps> = ({
                 onBlur={() => {
                   const trimmed = String(topK).trim();
                   if (!/^\d+$/.test(trimmed)) {
-                    setTopK(8);
+                    setTopK(5);
                     return;
                   }
                   const val = Number(trimmed);
@@ -510,8 +691,13 @@ export const FormView: React.FC<FormViewProps> = ({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button type="button" onClick={onRun} disabled={isRunning} className="btn-primary">
-            {isRunning ? 'Running evaluation...' : 'Run evaluation'}
+          <button
+            type="button"
+            onClick={onRun}
+            disabled={isRunning || questions.length === 0}
+            className="btn-primary"
+          >
+            {isRunning ? 'Running benchmark...' : 'Run Retrieval Benchmark'}
           </button>
 
           {isRunning && (
@@ -524,4 +710,3 @@ export const FormView: React.FC<FormViewProps> = ({
     </div>
   );
 };
-

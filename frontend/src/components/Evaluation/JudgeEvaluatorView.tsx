@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { JudgeCaseResult } from '../../types/evaluation';
 import { api } from '../../services/api';
+import { EvaluationProgressCard } from './EvaluationProgressCard';
 
 interface JudgeEvaluatorViewProps {
   onNotify?: (msg: string, type?: 'info' | 'success' | 'error') => void;
@@ -19,12 +20,6 @@ interface EvaluationProgress {
   completedSuccess: boolean;
 }
 
-const formatDuration = (seconds: number) => {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.max(0, seconds % 60);
-  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-};
-
 export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify, onEvaluatingChange }) => {
   const [cases, setCases] = useState<JudgeCaseResult[]>([]);
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
@@ -37,7 +32,6 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCase, setSelectedCase] = useState<JudgeCaseResult | null>(null);
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
-  const [evalEngine, setEvalEngine] = useState<'deterministic' | 'llm'>('deterministic');
   const [topK, setTopK] = useState<number>(5);
   const [temperature, setTemperature] = useState<number>(0.3);
 
@@ -143,12 +137,23 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
     };
   }, [selectedCase, showAddModal]);
 
-  // Reconnect to active or existing run on component mount
+  // Reconnect to active or existing run on component mount, or auto-load canonical 25 benchmark cases
   useEffect(() => {
     let isMounted = true;
 
+    // Clean up any legacy un-namespaced key
+    try {
+      const legacyKey = sessionStorage.getItem('active_evaluation_run_id');
+      if (legacyKey) {
+        sessionStorage.removeItem('active_evaluation_run_id');
+        if (!sessionStorage.getItem('judge_evaluation_active_run_id')) {
+          sessionStorage.setItem('judge_evaluation_active_run_id', legacyKey);
+        }
+      }
+    } catch { /* storage fallback */ }
+
     const checkExistingRun = async () => {
-      const savedRunId = sessionStorage.getItem('active_evaluation_run_id');
+      const savedRunId = sessionStorage.getItem('judge_evaluation_active_run_id');
       if (savedRunId) {
         try {
           const run = await api.getEvaluationRun(savedRunId);
@@ -175,7 +180,8 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
             return;
           }
         } catch (e) {
-          console.warn('Saved run not found on server:', e);
+          // Stale run ID not found on server — clear persisted ID silently
+          sessionStorage.removeItem('judge_evaluation_active_run_id');
         }
       }
 
@@ -183,14 +189,51 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
       try {
         const active = await api.getActiveEvaluationRun();
         if (active && active.active_run_id && active.run && active.run.status === 'RUNNING' && isMounted) {
-          sessionStorage.setItem('active_evaluation_run_id', active.active_run_id);
+          sessionStorage.setItem('judge_evaluation_active_run_id', active.active_run_id);
           setCases(active.run.cases || active.run.results || []);
           setCurrentRunId(active.active_run_id);
           updateLoadingState(true);
           startPolling(active.active_run_id);
+          return;
         }
       } catch (e) {
-        // No active run, clean initial state
+        // No active run
+      }
+
+      // Auto-load the canonical 25 benchmark cases on mount
+      try {
+        const data = await api.getBenchmarkCases();
+        if (isMounted && data && (data.cases || data.results)) {
+          const rawCases = data.cases || data.results || [];
+          const cleanCases: JudgeCaseResult[] = rawCases.map((c) => ({
+            ...c,
+            status: 'PENDING' as const,
+            evaluation_run_id: null,
+            judge_v1_verdict: null,
+            judge_v1_agreed: null,
+            judge_v1_raw: null,
+            judge_v1_source: null,
+            judge_v1_latency_ms: null,
+            judge_v1_llm_completed: null,
+            judge_v2_verdict: null,
+            judge_v2_agreed: null,
+            judge_v2_raw: null,
+            judge_v2_source: null,
+            judge_v2_latency_ms: null,
+            judge_v2_llm_completed: null,
+            source: null,
+            latency_ms: null,
+            llm_completed: null,
+            assertions: null,
+            failure_category: null,
+            failure_type: null,
+            failure_reason: null,
+            resolution: null,
+          }));
+          setCases(cleanCases);
+        }
+      } catch (e) {
+        console.error('Failed to auto-load canonical benchmark cases:', e);
       }
     };
 
@@ -205,7 +248,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
   // Load clean 25 benchmark cases without precomputed evaluation results
   const handleLoadBenchmark = async () => {
     stopPolling();
-    sessionStorage.removeItem('active_evaluation_run_id');
+    sessionStorage.removeItem('judge_evaluation_active_run_id');
     updateLoadingState(true);
     setSearchQuery('');
     setFilterMode('all');
@@ -242,7 +285,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
         resolution: null,
       }));
       setCases(cleanCases);
-      notify(`Loaded official ${cleanCases.length} benchmark test cases (All Pending). Click "Run Both Judges" to evaluate.`, 'success');
+      notify(`Loaded official ${cleanCases.length} benchmark test cases (All Ready). Click "Run Evaluation" to evaluate.`, 'success');
     } catch (e) {
       console.error('Failed to load benchmark cases:', e);
       notify('Failed to load benchmark cases: ' + (e as Error).message, 'error');
@@ -254,7 +297,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
   // Clear all cases in the table
   const handleClearTable = () => {
     stopPolling();
-    sessionStorage.removeItem('active_evaluation_run_id');
+    sessionStorage.removeItem('judge_evaluation_active_run_id');
     setCases([]);
     setCurrentRunId(null);
     setSearchQuery('');
@@ -323,14 +366,14 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
     setEvaluatingCaseId(null);
 
     try {
-      const runState = await api.startEvaluationRun(cases, evalEngine === 'llm', topK, temperature);
-      sessionStorage.setItem('active_evaluation_run_id', runState.evaluation_run_id);
+      const runState = await api.startEvaluationRun(cases, true, topK, temperature);
+      sessionStorage.setItem('judge_evaluation_active_run_id', runState.evaluation_run_id);
       setCurrentRunId(runState.evaluation_run_id);
       setCases(runState.cases || runState.results || []);
       updateLoadingState(true);
       startPolling(runState.evaluation_run_id);
       notify(
-        `🚀 Started background evaluation run "${runState.evaluation_run_id}" (${runState.total_cases} cases, engine: ${evalEngine}, Top-K: ${topK}, Temp: ${temperature})!`,
+        `🚀 Started background evaluation run "${runState.evaluation_run_id}" (${runState.total_cases} cases, Top-K: ${topK}, Temp: ${temperature})!`,
         'info'
       );
     } catch (e) {
@@ -683,61 +726,6 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
             <span>➕</span> Add Question &amp; Answer
           </button>
           
-          {/* Engine Selector Segmented Switch */}
-          <div
-            style={{
-              display: 'inline-flex',
-              background: 'rgba(15, 23, 42, 0.8)',
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
-              padding: '2px',
-              alignItems: 'center',
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setEvalEngine('deterministic')}
-              style={{
-                padding: '6px 12px',
-                fontSize: '0.78rem',
-                fontWeight: 600,
-                borderRadius: '6px',
-                border: 'none',
-                cursor: 'pointer',
-                background: evalEngine === 'deterministic' ? 'linear-gradient(135deg, #10b981, #059669)' : 'transparent',
-                color: evalEngine === 'deterministic' ? '#fff' : 'var(--text-muted)',
-                transition: 'all 0.15s ease',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px',
-              }}
-              title="Fast deterministic rule evaluation using 5 substantive policy assertions (<0.1s, 100% agreement)"
-            >
-              <span>⚡</span> Fast Assertions (100% Exact)
-            </button>
-            <button
-              type="button"
-              onClick={() => setEvalEngine('llm')}
-              style={{
-                padding: '6px 12px',
-                fontSize: '0.78rem',
-                fontWeight: 600,
-                borderRadius: '6px',
-                border: 'none',
-                cursor: 'pointer',
-                background: evalEngine === 'llm' ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : 'transparent',
-                color: evalEngine === 'llm' ? '#fff' : 'var(--text-muted)',
-                transition: 'all 0.15s ease',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px',
-              }}
-              title="Live LLM Model Inference using local Ollama or configured cloud LLM"
-            >
-              <span>🤖</span> Live LLM Model
-            </button>
-          </div>
-
           {loading ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <button
@@ -802,10 +790,9 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                 gap: '6px',
                 minWidth: '160px',
                 justifyContent: 'center',
-                background: evalEngine === 'deterministic' ? 'linear-gradient(135deg, #10b981, #059669)' : undefined,
               }}
             >
-              <span>⚡</span> Run Both Judges
+              <span>⚡</span> Run Evaluation
             </button>
           )}
         </div>
@@ -827,7 +814,9 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)' }}>⚙️ Experiment Controls:</span>
+            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: loading ? '#fbbf24' : 'var(--text-muted)' }}>
+              {loading ? '🔒 Configuration Frozen:' : '⚙️ Experiment Controls:'}
+            </span>
           </div>
 
           {/* Top-K Selector */}
@@ -845,7 +834,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                 padding: '5px 10px',
                 fontSize: '0.82rem',
                 fontWeight: 600,
-                cursor: 'pointer',
+                cursor: loading ? 'not-allowed' : 'pointer',
               }}
             >
               {[4, 5, 6, 8, 10, 12].map((kVal) => (
@@ -871,7 +860,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                 padding: '5px 10px',
                 fontSize: '0.82rem',
                 fontWeight: 600,
-                cursor: 'pointer',
+                cursor: loading ? 'not-allowed' : 'pointer',
               }}
             >
               {[0.0, 0.1, 0.2, 0.3, 0.5, 0.7].map((tVal) => (
@@ -915,7 +904,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
               border: '1px solid rgba(99, 102, 241, 0.4)',
               background: (topK === 8 && temperature === 0.0) ? 'rgba(99, 102, 241, 0.25)' : 'rgba(99, 102, 241, 0.1)',
               color: '#a5b4fc',
-              cursor: 'pointer',
+              cursor: loading ? 'not-allowed' : 'pointer',
               transition: 'all 0.15s ease',
             }}
             title="Restore Authoritative Frozen Week 6 Baseline (Top-K=8, Temp=0.0)"
@@ -934,7 +923,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
               border: '1px solid rgba(16, 185, 129, 0.4)',
               background: (topK === 5 && temperature === 0.3) ? 'rgba(16, 185, 129, 0.25)' : 'rgba(16, 185, 129, 0.1)',
               color: '#6ee7b7',
-              cursor: 'pointer',
+              cursor: loading ? 'not-allowed' : 'pointer',
               transition: 'all 0.15s ease',
             }}
             title="Restore Current Application Default (Top-K=5, Temp=0.3)"
@@ -946,164 +935,47 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
 
       {/* LIVE EVALUATION PROGRESS BAR CARD */}
       {(loading || (evalProgress && evalProgress.completedSuccess)) && evalProgress && (
-        <div
-          style={{
-            background: evalProgress.completedSuccess
-              ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(15, 23, 42, 0.95))'
-              : 'linear-gradient(135deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.95))',
-            border: evalProgress.completedSuccess
-              ? '1px solid rgba(16, 185, 129, 0.4)'
-              : '1px solid rgba(59, 130, 246, 0.45)',
-            borderRadius: '12px',
-            padding: '18px 24px',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.35)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '12px',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              {loading ? (
-                <span className="spinner" style={{ width: '20px', height: '20px' }}></span>
-              ) : (
-                <span style={{ fontSize: '1.3rem' }}>✅</span>
-              )}
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontWeight: 800, fontSize: '1.15rem', color: '#fff' }}>
-                    {evalProgress.completedSuccess
-                      ? `Evaluation Complete: 100% (All ${evalProgress.total} Cases)`
-                      : `Evaluating Test Cases: ${evalProgress.pct}%`}
-                  </span>
-                  <span
-                    style={{
-                      background: evalProgress.completedSuccess
-                        ? 'rgba(16, 185, 129, 0.2)'
-                        : 'rgba(59, 130, 246, 0.2)',
-                      color: evalProgress.completedSuccess ? '#34d399' : '#60a5fa',
-                      fontSize: '0.78rem',
-                      fontWeight: 700,
-                      padding: '2px 8px',
-                      borderRadius: '6px',
-                      fontFamily: 'ui-monospace, monospace',
-                    }}
-                  >
-                    {evalProgress.current} / {evalProgress.total} COMPLETED
-                  </span>
-                </div>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  {evalProgress.completedSuccess
-                    ? `Processed ${evalProgress.total} test cases across Judge V1, Judge V2, and 5 deterministic assertions.`
-                    : `${evalProgress.total - evalProgress.current} test case(s) remaining in this run.`}
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '0.82rem' }}>
-              <div
-                style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid var(--border)',
-                  padding: '4px 10px',
-                  borderRadius: '6px',
-                  color: 'var(--text-muted)',
-                }}
-              >
-                ⏱ Elapsed: <strong style={{ color: '#fff' }}>{formatDuration(evalProgress.elapsedSeconds)}</strong>
-              </div>
-              {loading && evalProgress.estRemainingSeconds > 0 && (
-                <div
-                  style={{
-                    background: 'rgba(59, 130, 246, 0.1)',
-                    border: '1px solid rgba(59, 130, 246, 0.25)',
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    color: '#93c5fd',
-                  }}
-                >
-                  ⏳ Est. Left: <strong>~{formatDuration(evalProgress.estRemainingSeconds)}</strong>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* PROGRESS BAR TRACK */}
-          <div
-            style={{
-              width: '100%',
-              height: '12px',
-              background: 'rgba(255, 255, 255, 0.07)',
-              borderRadius: '8px',
-              overflow: 'hidden',
-              position: 'relative',
-              boxShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.4)',
-            }}
-          >
-            <div
-              style={{
-                width: `${evalProgress.pct}%`,
-                height: '100%',
-                background: evalProgress.completedSuccess
-                  ? 'linear-gradient(90deg, #10b981, #34d399)'
-                  : 'linear-gradient(90deg, #2563eb, #3b82f6, #60a5fa, #34d399)',
-                borderRadius: '8px',
-                transition: 'width 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
-                boxShadow: '0 0 14px rgba(59, 130, 246, 0.65)',
-              }}
-            />
-          </div>
-
-          {/* ACTIVE CASE STEP FOOTER */}
-          {loading && evalProgress.activeCaseId && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                fontSize: '0.78rem',
-                color: 'var(--text-muted)',
-                background: 'rgba(0, 0, 0, 0.3)',
-                padding: '7px 12px',
-                borderRadius: '6px',
-                border: '1px solid rgba(255, 255, 255, 0.05)',
-              }}
-            >
-              <span style={{ color: '#fbbf24', fontWeight: 700, letterSpacing: '0.04em' }}>⚡ CURRENT STEP:</span>
-              <span
-                style={{
-                  fontFamily: 'ui-monospace, monospace',
-                  color: '#93c5fd',
-                  background: 'rgba(59, 130, 246, 0.2)',
-                  padding: '1px 7px',
-                  borderRadius: '4px',
-                  fontWeight: 700,
-                }}
-              >
-                {evalProgress.activeCaseId}
-              </span>
-              <span
-                style={{
-                  color: '#e2e8f0',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  maxWidth: '700px',
-                }}
-              >
-                "{evalProgress.currentQuestion}"
-              </span>
-            </div>
-          )}
-        </div>
+        <EvaluationProgressCard
+          title={
+            evalProgress.completedSuccess
+              ? `Evaluation Complete: 100% (All ${evalProgress.total} Cases)`
+              : `Evaluation Running: ${evalProgress.pct}%`
+          }
+          current={evalProgress.current}
+          total={evalProgress.total}
+          pct={evalProgress.pct}
+          currentCaseId={evalProgress.currentCaseId || evaluatingCaseId}
+          currentQuestion={evalProgress.currentQuestion}
+          elapsedSeconds={evalProgress.elapsedSeconds}
+          estRemainingSeconds={evalProgress.estRemainingSeconds}
+          isRunning={loading}
+          isComplete={evalProgress.completedSuccess}
+          configurationText={`Top-K: ${topK} | Temperature: ${temperature.toFixed(1)} | Model: llama3.1:8b`}
+          signals={[
+            {
+              label: 'Judge V1',
+              completed: evalProgress.current,
+              total: evalProgress.total,
+              agreementPct: totalEvaluated > 0 ? v1Pct : null,
+              color: '#60a5fa',
+            },
+            {
+              label: 'Judge V2',
+              completed: evalProgress.current,
+              total: evalProgress.total,
+              agreementPct: totalEvaluated > 0 ? v2Pct : null,
+              color: '#f59e0b',
+            },
+            {
+              label: 'Assertions',
+              completed: evalProgress.current,
+              total: evalProgress.total,
+              color: '#10b981',
+              statusText: '5 Rules',
+            },
+          ]}
+          onCancel={loading ? handleCancelEvaluation : undefined}
+        />
       )}
 
       {/* STAT CARDS */}
@@ -1127,11 +999,15 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
           </div>
           <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#fff', marginTop: '4px' }}>
             {totalCount}{' '}
-            {totalEvaluated > 0 && (
+            {totalEvaluated > 0 ? (
               <span style={{ fontSize: '0.85rem', color: '#10b981', fontWeight: 500 }}>
                 ({humanCorrectCount} Human Correct)
               </span>
-            )}
+            ) : totalCount > 0 ? (
+              <span style={{ fontSize: '0.85rem', color: '#60a5fa', fontWeight: 500 }}>
+                (Loaded: {totalCount}/{totalCount})
+              </span>
+            ) : null}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
             5 Taxonomy Modes + 6 Regressions
@@ -1203,7 +1079,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
           }}
         >
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
-            Evaluation Progress
+            Status
           </div>
           <div
             style={{
@@ -1212,8 +1088,12 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
               color:
                 totalEvaluated === totalCount && totalCount > 0
                   ? '#34d399'
-                  : loading || totalEvaluated > 0
+                  : loading
                   ? '#60a5fa'
+                  : totalEvaluated > 0
+                  ? '#60a5fa'
+                  : totalCount > 0
+                  ? '#10b981'
                   : 'var(--text-muted)',
               marginTop: '4px',
             }}
@@ -1226,10 +1106,12 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                 : `Running (0/${totalCount})`
               : totalEvaluated > 0
               ? `${totalEvaluated}/${totalCount} Evaluated`
+              : totalCount > 0
+              ? 'Ready'
               : 'Not Started'}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-            {currentRunId ? `Run: ${currentRunId.slice(0, 16)}` : 'No active run'}
+            {loading ? (currentRunId ? `Run: ${currentRunId.slice(0, 16)}` : 'In progress') : totalCount > 0 && totalEvaluated === 0 ? 'Loaded: 25/25 Ready' : currentRunId ? `Run: ${currentRunId.slice(0, 16)}` : 'No active run'}
           </div>
         </div>
 

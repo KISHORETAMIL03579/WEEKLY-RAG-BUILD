@@ -158,40 +158,19 @@ export const api = {
     model: string = 'llama3.1:8b',
     signal?: AbortSignal
   ): Promise<EvaluationRunStateResponse> {
-    const payload = JSON.stringify({ cases, run_llm: runLlm, top_k, temperature, model });
-    let res = await fetch(`${API_BASE}/api/evaluation/runs`, {
+    const res = await fetch(`${API_BASE}/api/evaluation/runs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: payload,
+      body: JSON.stringify({ cases, run_llm: runLlm, top_k, temperature, model }),
       signal,
-    }).catch(() => null);
-
-    if (!res || !res.ok) {
-      const fallbackRes = await fetch(`${API_BASE}/api/week6/runs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: payload,
-        signal,
-      }).catch(() => null);
-
-      if (fallbackRes && fallbackRes.ok) {
-        return handleResponse<EvaluationRunStateResponse>(fallbackRes);
-      }
-    }
-
-    if (!res) {
-      throw new Error('Failed to connect to backend evaluation service');
-    }
-
+    });
     return handleResponse<EvaluationRunStateResponse>(res);
   },
 
   async getActiveEvaluationRun(signal?: AbortSignal): Promise<ActiveEvaluationRunResponse> {
     try {
       const res = await fetch(`${API_BASE}/api/evaluation/runs/active`, { signal });
-      if (res.status === 404) {
-        const fallbackRes = await fetch(`${API_BASE}/api/week6/runs/active`, { signal });
-        if (fallbackRes && fallbackRes.ok) return await fallbackRes.json();
+      if (!res.ok) {
         return { active_run_id: null, run: null };
       }
       return handleResponse<ActiveEvaluationRunResponse>(res);
@@ -201,50 +180,26 @@ export const api = {
   },
 
   async getEvaluationRun(runId: string, signal?: AbortSignal): Promise<EvaluationRunStateResponse> {
-    let res = await fetch(`${API_BASE}/api/evaluation/runs/${encodeURIComponent(runId)}`, { signal }).catch(() => null);
-    if (!res || !res.ok) {
-      const fallbackRes = await fetch(`${API_BASE}/api/week6/runs/${encodeURIComponent(runId)}`, { signal }).catch(() => null);
-      if (fallbackRes && fallbackRes.ok) {
-        return handleResponse<EvaluationRunStateResponse>(fallbackRes);
-      }
-    }
-    if (!res) {
-      throw new Error(`Failed to fetch evaluation run ${runId}`);
-    }
+    const res = await fetch(`${API_BASE}/api/evaluation/runs/${encodeURIComponent(runId)}`, { signal });
     return handleResponse<EvaluationRunStateResponse>(res);
   },
 
   async cancelEvaluationRun(runId: string, signal?: AbortSignal): Promise<{ ok: boolean; status: string }> {
-    let res = await fetch(`${API_BASE}/api/evaluation/runs/${encodeURIComponent(runId)}/cancel`, {
+    const res = await fetch(`${API_BASE}/api/evaluation/runs/${encodeURIComponent(runId)}/cancel`, {
       method: 'POST',
       signal,
-    }).catch(() => null);
-    if (!res || !res.ok) {
-      const fallbackRes = await fetch(`${API_BASE}/api/week6/runs/${encodeURIComponent(runId)}/cancel`, {
-        method: 'POST',
-        signal,
-      }).catch(() => null);
-      if (fallbackRes) return handleResponse<{ ok: boolean; status: string }>(fallbackRes);
-    }
-    if (!res) {
-      return { ok: false, status: 'UNKNOWN' };
-    }
+    });
     return handleResponse<{ ok: boolean; status: string }>(res);
   },
 
   async getBenchmarkCases(signal?: AbortSignal): Promise<JudgeEvalResponse> {
-    const res = await fetch(`${API_BASE}/api/evaluation/benchmark`, { signal }).catch(async () => {
-      return fetch(`${API_BASE}/api/week6/benchmark`, { signal });
-    });
+    const res = await fetch(`${API_BASE}/api/evaluation/benchmark`, { signal });
     return handleResponse<JudgeEvalResponse>(res);
   },
 
   async getJudgeResults(includeHistory: boolean = false, signal?: AbortSignal): Promise<JudgeEvalResponse> {
     const query = includeHistory ? '?include_history=true' : '';
-    const res = await fetch(`${API_BASE}/api/evaluation/judges${query}`, { signal }).catch(async () => {
-      // Fallback to legacy path if needed
-      return fetch(`${API_BASE}/api/week6/results${query}`, { signal });
-    });
+    const res = await fetch(`${API_BASE}/api/evaluation/judges${query}`, { signal });
     return handleResponse<JudgeEvalResponse>(res);
   },
 
@@ -258,14 +213,6 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cases, run_llm: runLlm }),
       signal,
-    }).catch(async () => {
-      // Fallback to legacy path if needed
-      return fetch(`${API_BASE}/api/week6/evaluate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cases, run_llm: runLlm }),
-        signal,
-      });
     });
     return handleResponse<JudgeEvalResponse>(res);
   },
@@ -311,7 +258,7 @@ export const api = {
   },
 
   async startPolicyBenchmark(payload?: { top_k?: number; temperature?: number; model?: string }, signal?: AbortSignal): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/policy/benchmark/start`, {
+    const res = await fetch(`${API_BASE}/api/policy/benchmark`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...(payload || {}), background: true }),

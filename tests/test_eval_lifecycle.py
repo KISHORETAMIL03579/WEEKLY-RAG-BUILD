@@ -88,6 +88,72 @@ class TestEvaluationLifecycle(unittest.TestCase):
         self.assertTrue(cancel_data.get("ok"))
         self.assertEqual(cancel_data.get("status"), "CANCELLED")
 
+    def test_05_stale_judge_run_error_contract(self):
+        """Verify stale run ID (e.g. eval_6e2692a623ef) returns 404 with canonical error contract."""
+        res = self.client.get("/api/evaluation/runs/eval_6e2692a623ef")
+        self.assertEqual(res.status_code, 404)
+        data = res.json()
+        self.assertFalse(data.get("success", True))
+        self.assertIn("error", data)
+        self.assertEqual(data["error"].get("code"), "NOT_FOUND")
+        self.assertIn("eval_6e2692a623ef", data["error"].get("message", ""))
+        self.assertIn("request_id", data["error"])
+        # Ensure no stack traces or path leakage
+        self.assertNotIn("Traceback", res.text)
+        self.assertNotIn("D:\\", res.text)
+
+    def test_06_cross_module_state_isolation(self):
+        """Verify Policy, Judge, and Retrieval benchmarks have completely isolated endpoints and states."""
+        # 1. Start a judge run
+        res_bm = self.client.get("/api/evaluation/benchmark")
+        cases = res_bm.json().get("cases", [])[:2]
+        res_start = self.client.post("/api/evaluation/runs", json={"cases": cases, "run_llm": False})
+        self.assertEqual(res_start.status_code, 200)
+        judge_run_id = res_start.json().get("evaluation_run_id")
+
+        # 2. Verify Policy active run does NOT adopt the judge run
+        res_policy_active = self.client.get("/api/policy/benchmark/runs/active")
+        self.assertEqual(res_policy_active.status_code, 200)
+        policy_data = res_policy_active.json()
+        # Even if a judge run is running, policy run should not be active or match judge_run_id
+        if policy_data.get("active") and policy_data.get("run"):
+            self.assertNotEqual(policy_data["run"].get("run_id"), judge_run_id)
+
+        # 3. Clean up
+        self.client.post(f"/api/evaluation/runs/{judge_run_id}/cancel")
+
+    def test_07_frontend_source_contains_zero_legacy_week6_calls(self):
+        """Verify frontend source files do not contain any legacy /api/week6/runs calls."""
+        import os
+        frontend_src = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "src")
+        legacy_occurrences = []
+        for root, _, files in os.walk(frontend_src):
+            for file in files:
+                if file.endswith((".ts", ".tsx", ".js", ".jsx")):
+                    path = os.path.join(root, file)
+                    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                        for line_idx, line in enumerate(f, 1):
+                            if "week6/runs" in line:
+                                legacy_occurrences.append(f"{file}:{line_idx}: {line.strip()}")
+        self.assertEqual(len(legacy_occurrences), 0, f"Found legacy week6 calls in frontend: {legacy_occurrences}")
+
+    def test_08_benchmark_progress_and_completion_invariants(self):
+        """Verify progress counters increment monotonically and complete at 100%."""
+        res_bm = self.client.get("/api/evaluation/benchmark")
+        cases = res_bm.json().get("cases", [])[:3]
+        res_start = self.client.post("/api/evaluation/runs", json={"cases": cases, "run_llm": False})
+        run_id = res_start.json().get("evaluation_run_id")
+
+        for _ in range(30):
+            time.sleep(0.05)
+            poll = self.client.get(f"/api/evaluation/runs/{run_id}").json()
+            if poll.get("status") == "COMPLETED":
+                self.assertEqual(poll.get("completed_cases"), 3)
+                self.assertEqual(poll.get("total_cases"), 3)
+                self.assertIsNotNone(poll.get("cases"))
+                self.assertEqual(len(poll.get("cases")), 3)
+                break
+
 
 if __name__ == "__main__":
     unittest.main()

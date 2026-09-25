@@ -45,7 +45,7 @@ export const Topbar: React.FC<TopbarProps> = ({
       <div className="topbar-spacer"></div>
 
       <a
-        href="/eval?tab=policy"
+        href="/eval/policy"
         className="eval-btn"
         style={{
           display: 'flex',
@@ -62,7 +62,7 @@ export const Topbar: React.FC<TopbarProps> = ({
       </a>
 
       <a
-        href="/eval?tab=judge"
+        href="/eval"
         className="eval-btn"
         style={{
           display: 'flex',

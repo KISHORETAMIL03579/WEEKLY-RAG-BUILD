@@ -6,6 +6,7 @@ import { JudgeEvaluatorView } from '../components/Evaluation/JudgeEvaluatorView'
 import { PolicyAssistantView } from '../components/Evaluation/PolicyAssistantView';
 import { ToastContainer, ToastItem } from '../components/common/ToastContainer';
 import { PRESETS } from '../components/Evaluation/KeyTakeaways';
+import { CANONICAL_RETRIEVAL_QUESTIONS } from '../data/canonicalRetrievalQuestions';
 import { api } from '../services/api';
 import { generateId } from '../utils/helpers';
 
@@ -42,13 +43,9 @@ export const EvaluationPage: React.FC = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Retrieval Benchmark State
-  const [questions, setQuestions] = useState<EvalQuestionInput[]>([
-    { id: generateId('q'), question: '', expected: '' },
-    { id: generateId('q'), question: '', expected: '' },
-    { id: generateId('q'), question: '', expected: '' },
-  ]);
-  const [topK, setTopK] = useState<number | string>(8);
+  // Retrieval Benchmark State: Auto-load canonical 25 questions on mount with default Top-K = 5
+  const [questions, setQuestions] = useState<EvalQuestionInput[]>(() => [...CANONICAL_RETRIEVAL_QUESTIONS]);
+  const [topK, setTopK] = useState<number | string>(5);
   const [strategyFilter, setStrategyFilter] = useState<string>('');
   const [presets, setPresets] = useState<Record<string, boolean>>({
     'tfidf': true,
@@ -396,42 +393,44 @@ export const EvaluationPage: React.FC = () => {
         </div>
       </header>
 
-      {/* MAIN CONTENT WITH PERSISTENT MULTI-TAB DOM MOUNTING */}
+      {/* MAIN CONTENT — ONLY ACTIVE TAB IS MOUNTED */}
       <main style={{ maxWidth: '1200px', width: '100%', margin: '0 auto', padding: '28px 20px 50px 20px', flex: 1 }}>
         {/* TAB 1: POLICY ASSISTANT */}
-        <div style={{ display: activeTab === 'policy' ? 'block' : 'none' }}>
+        {activeTab === 'policy' && (
           <PolicyAssistantView onNotify={showToast} />
-        </div>
+        )}
 
         {/* TAB 2: JUDGE EVALUATOR */}
-        <div style={{ display: activeTab === 'judge' ? 'block' : 'none' }}>
+        {activeTab === 'judge' && (
           <JudgeEvaluatorView
             onNotify={showToast}
             onEvaluatingChange={setIsJudgeEvaluating}
           />
-        </div>
+        )}
 
         {/* TAB 3: RETRIEVAL BENCHMARK */}
-        <div style={{ display: activeTab === 'retrieval' ? 'block' : 'none', maxWidth: '1000px', margin: '0 auto' }}>
-          {view === 'form' ? (
-            <FormView
-              questions={questions}
-              setQuestions={setQuestions}
-              topK={topK}
-              setTopK={setTopK}
-              strategyFilter={strategyFilter}
-              setStrategyFilter={setStrategyFilter}
-              presets={presets}
-              setPresets={setPresets}
-              onRun={handleRun}
-              onCancel={handleCancel}
-              isRunning={isRunning}
-              onNotify={showToast}
-            />
-          ) : (
-            <ResultsView results={results} onBack={goToForm} onClear={handleClear} />
-          )}
-        </div>
+        {activeTab === 'retrieval' && (
+          <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+            {view === 'form' ? (
+              <FormView
+                questions={questions}
+                setQuestions={setQuestions}
+                topK={topK}
+                setTopK={setTopK}
+                strategyFilter={strategyFilter}
+                setStrategyFilter={setStrategyFilter}
+                presets={presets}
+                setPresets={setPresets}
+                onRun={handleRun}
+                onCancel={handleCancel}
+                isRunning={isRunning}
+                onNotify={showToast}
+              />
+            ) : (
+              <ResultsView results={results} onBack={goToForm} onClear={handleClear} />
+            )}
+          </div>
+        )}
       </main>
     </div>
   );
