@@ -19,6 +19,7 @@ import {
   Week6CaseResult,
 } from '../types/evaluation';
 import { TracesResponse, ReplayResponse } from '../types/trace';
+import { DatasetParseResult } from '../types/dataset';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -141,6 +142,17 @@ export const api = {
     return handleResponse<ParseQaResponse>(res);
   },
 
+  async parseEvaluationDataset(file: File, evaluatorType: string = 'general', signal?: AbortSignal): Promise<DatasetParseResult> {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch(`${API_BASE}/api/evaluation/dataset/parse?evaluator_type=${encodeURIComponent(evaluatorType)}`, {
+      method: 'POST',
+      body: fd,
+      signal,
+    });
+    return handleResponse<DatasetParseResult>(res);
+  },
+
   async getOrphans(adminKey?: string, signal?: AbortSignal): Promise<unknown> {
     const headers: Record<string, string> = {};
     if (adminKey) {
@@ -257,7 +269,7 @@ export const api = {
     return handleResponse<any>(res);
   },
 
-  async startPolicyBenchmark(payload?: { top_k?: number; temperature?: number; model?: string }, signal?: AbortSignal): Promise<any> {
+  async startPolicyBenchmark(payload?: { top_k?: number; temperature?: number; model?: string; cases?: any[] }, signal?: AbortSignal): Promise<any> {
     const res = await fetch(`${API_BASE}/api/policy/benchmark`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -5,6 +5,8 @@ import { api } from '../../services/api';
 import { generateId } from '../../utils/helpers';
 import { CANONICAL_RETRIEVAL_QUESTIONS } from '../../data/canonicalRetrievalQuestions';
 import { EvaluationProgressCard } from './EvaluationProgressCard';
+import { EvaluationDatasetManager } from './EvaluationDatasetManager';
+import { QADataSetCase, DatasetMode } from '../../types/dataset';
 
 interface FormViewProps {
   questions: EvalQuestionInput[];
@@ -39,6 +41,40 @@ export const FormView: React.FC<FormViewProps> = ({
   const [isImporting, setIsImporting] = useState(false);
   const [isCustomExpanded, setIsCustomExpanded] = useState(false);
   const importAbortRef = useRef<AbortController | null>(null);
+
+  // Common Dataset State
+  const [datasetMode, setDatasetMode] = useState<DatasetMode>('builtin');
+  const [customDatasetCases, setCustomDatasetCases] = useState<QADataSetCase[]>([]);
+
+  const handleCustomCasesChange = (cases: QADataSetCase[]) => {
+    setCustomDatasetCases(cases);
+    if (datasetMode === 'custom') {
+      const mapped: EvalQuestionInput[] = cases.map((c) => ({
+        id: c.case_id,
+        question: c.question,
+        expected: c.expected_answer || c.expected || '',
+        expected_section: c.expected_section || '',
+      }));
+      setQuestions(mapped);
+    }
+  };
+
+  const handleModeChange = (mode: DatasetMode) => {
+    setDatasetMode(mode);
+    if (mode === 'builtin') {
+      setQuestions(CANONICAL_RETRIEVAL_QUESTIONS);
+      notify('Switched to Canonical Retrieval Benchmark dataset.', 'info');
+    } else {
+      const mapped: EvalQuestionInput[] = customDatasetCases.map((c) => ({
+        id: c.case_id,
+        question: c.question,
+        expected: c.expected_answer || c.expected || '',
+        expected_section: c.expected_section || '',
+      }));
+      setQuestions(mapped);
+      notify(`Switched to Custom Dataset (${customDatasetCases.length} cases loaded).`, 'info');
+    }
+  };
 
   const notify = (msg: string, type: 'info' | 'success' | 'error' = 'info') => {
     if (onNotify) {
@@ -205,7 +241,7 @@ export const FormView: React.FC<FormViewProps> = ({
             ) : (
               <>
                 <span>▶</span>
-                <span>Run Retrieval Benchmark</span>
+                <span>Run Retrieval Benchmark ({questions.length} Cases)</span>
               </>
             )}
           </button>
@@ -225,6 +261,25 @@ export const FormView: React.FC<FormViewProps> = ({
           onCancel={onCancel}
         />
       )}
+
+      {/* UNIFIED DATASET MANAGEMENT (UPLOAD / MANUAL EDITING) */}
+      <EvaluationDatasetManager
+        evaluatorType="retrieval"
+        title="Multi-Strategy Retrieval"
+        builtinCount={CANONICAL_RETRIEVAL_QUESTIONS.length}
+        builtinLabel="Canonical 25-Case Retrieval Benchmark"
+        datasetMode={datasetMode}
+        customCases={customDatasetCases}
+        isRunning={isRunning}
+        onModeChange={handleModeChange}
+        onCustomCasesChange={handleCustomCasesChange}
+        onResetToBuiltin={() => {
+          setDatasetMode('builtin');
+          resetToCanonical();
+        }}
+        onNotify={notify}
+        storageKey="retrieval_custom_dataset"
+      />
 
       {/* 1. CUSTOM RETRIEVAL DATASET (OPTIONAL ACCORDION) */}
       <div className="card">

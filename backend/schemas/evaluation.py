@@ -62,7 +62,8 @@ class Week6CasePayload(BaseModel):
     case_id: Optional[str] = None
     trace_id: Optional[str] = None
     question: str
-    answer: str
+    answer: Optional[str] = ""
+    expected_answer: Optional[str] = None
     retrieved_context: Optional[str] = ""
     handbook_version: Optional[str] = "2018"
     section_info: Optional[str] = ""

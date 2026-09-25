@@ -8,6 +8,8 @@ import {
   PolicyBenchmarkRunStateResponse,
   BenchmarkCaseLiveStatus,
 } from '../../types/policy';
+import { EvaluationDatasetManager } from './EvaluationDatasetManager';
+import { QADataSetCase, DatasetMode } from '../../types/dataset';
 
 interface PolicyAssistantViewProps {
   onNotify: (msg: string, type?: 'info' | 'success' | 'error') => void;
@@ -17,6 +19,23 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({ onNoti
   // Canonical data
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [cases, setCases] = useState<BenchmarkCase[]>([]);
+
+  // Common Dataset State
+  const [datasetMode, setDatasetMode] = useState<DatasetMode>('builtin');
+  const [customDatasetCases, setCustomDatasetCases] = useState<QADataSetCase[]>([]);
+
+  const canonicalDatasetCases: QADataSetCase[] = useMemo(() => {
+    return cases.map((c) => ({
+      case_id: c.case_id,
+      question: c.question,
+      expected_answer: c.expected_value,
+      employee_id: c.employee_id,
+      expected_section: c.source_section,
+      expected_entitlement: c.expected_value,
+    }));
+  }, [cases]);
+
+  const activeCasesCount = datasetMode === 'custom' ? customDatasetCases.length : (canonicalDatasetCases.length || cases.length || 10);
 
   // Benchmark Configuration State
   const [topK, setTopK] = useState<number>(5);
@@ -116,17 +135,22 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({ onNoti
   };
 
   const handleStartBenchmark = async () => {
+    if (datasetMode === 'custom' && customDatasetCases.length === 0) {
+      onNotify('Custom dataset is empty. Please add or import test cases first.', 'error');
+      return;
+    }
     setIsRunningBenchmark(true);
     try {
       const res: PolicyBenchmarkRunStateResponse = await api.startPolicyBenchmark({
         top_k: topK,
         temperature,
         model: selectedModel,
+        cases: datasetMode === 'custom' ? customDatasetCases : undefined,
       });
       setActiveRunId(res.run_id);
       setBenchmarkRunState(res);
       startPolling(res.run_id);
-      onNotify(`Started 10-Case Benchmark Race (Run ID: ${res.run_id})`, 'info');
+      onNotify(`Started Benchmark Race (${activeCasesCount} cases, Run ID: ${res.run_id})`, 'info');
     } catch (err: any) {
       setIsRunningBenchmark(false);
       onNotify('Failed to start benchmark: ' + err.message, 'error');
@@ -368,13 +392,13 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({ onNoti
               disabled={isRunningBenchmark || isRunningSingle}
               style={{
                 padding: '10px 24px',
-                background: 'var(--accent)',
-                color: '#fff',
+                background: (datasetMode === 'custom' && customDatasetCases.length === 0) ? 'var(--bg-card)' : 'var(--accent)',
+                color: (datasetMode === 'custom' && customDatasetCases.length === 0) ? 'var(--text-muted)' : '#fff',
                 border: 'none',
                 borderRadius: '8px',
                 fontWeight: 600,
                 fontSize: '0.92rem',
-                cursor: 'pointer',
+                cursor: (datasetMode === 'custom' && customDatasetCases.length === 0) ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
@@ -382,11 +406,37 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({ onNoti
                 transition: 'all 0.15s ease',
               }}
             >
-              <span>▶</span> Run 10-Case Benchmark
+              <span>▶</span> Run {activeCasesCount}-Case Benchmark
             </button>
           )}
         </div>
       </div>
+
+      {/* DATASET MANAGEMENT (UPLOAD / MANUAL EDITING) */}
+      <EvaluationDatasetManager
+        evaluatorType="policy"
+        title="HR Policy Assistant"
+        builtinCount={cases.length || 10}
+        builtinLabel="Canonical HR Policy Benchmark"
+        datasetMode={datasetMode}
+        customCases={customDatasetCases}
+        isRunning={isRunningBenchmark}
+        onModeChange={(mode) => {
+          setDatasetMode(mode);
+          if (mode === 'builtin') {
+            onNotify('Switched to Canonical HR Policy Benchmark dataset.', 'info');
+          } else {
+            onNotify(`Switched to Custom Dataset (${customDatasetCases.length} cases loaded).`, 'info');
+          }
+        }}
+        onCustomCasesChange={(updated) => setCustomDatasetCases(updated)}
+        onResetToBuiltin={() => {
+          setDatasetMode('builtin');
+          onNotify('Reset to Canonical HR Policy Benchmark dataset.', 'info');
+        }}
+        onNotify={onNotify}
+        storageKey="policy_custom_dataset"
+      />
 
       {/* ==================================================
           2. BENCHMARK CONFIGURATION
@@ -560,28 +610,28 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({ onNoti
           <div style={{ fontSize: '2rem' }}>🏁</div>
           <div style={{ fontSize: '1.05rem', fontWeight: 600, color: '#fff' }}>No benchmark results yet.</div>
           <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', maxWidth: '480px' }}>
-            Run the 10-case benchmark to compare the real Agent against the deterministic Workflow across 4 execution budgets.
+            Run the {activeCasesCount}-case benchmark to compare the real Agent against the deterministic Workflow across 4 execution budgets.
           </p>
           <button
             type="button"
             onClick={handleStartBenchmark}
-            disabled={isRunningBenchmark}
+            disabled={isRunningBenchmark || (datasetMode === 'custom' && customDatasetCases.length === 0)}
             style={{
               marginTop: '8px',
               padding: '10px 22px',
-              background: 'var(--accent)',
-              color: '#fff',
+              background: (datasetMode === 'custom' && customDatasetCases.length === 0) ? 'var(--bg-card)' : 'var(--accent)',
+              color: (datasetMode === 'custom' && customDatasetCases.length === 0) ? 'var(--text-muted)' : '#fff',
               border: 'none',
               borderRadius: '8px',
               fontWeight: 600,
               fontSize: '0.88rem',
-              cursor: 'pointer',
+              cursor: (datasetMode === 'custom' && customDatasetCases.length === 0) ? 'not-allowed' : 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
             }}
           >
-            <span>▶</span> Run 10-Case Benchmark
+            <span>▶</span> Run {activeCasesCount}-Case Benchmark
           </button>
         </div>
       )}

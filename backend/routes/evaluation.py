@@ -23,6 +23,7 @@ from backend.evaluation.retrieval_runner import (
     run_eval_preset,
 )
 from backend.services.evaluation_runner import run_manager
+from backend.services.evaluation_dataset import parse_and_validate_dataset
 from backend.schemas.evaluation import (
     EvalRunPayload,
     JudgeCasePayload,
@@ -156,6 +157,24 @@ def eval_parse_qa_pdf(file: Optional[UploadFile] = File(default=None)):
             'No "Q:"/"A:" pairs found. Expected format: "Q: your question" on one line, "A: expected answer" on the next, blank line between pairs.'
         )
     return {"ok": True, "pairs": pairs}
+
+
+@router.post("/api/evaluation/dataset/parse")
+def parse_evaluation_dataset_file(
+    file: UploadFile = File(...),
+    evaluator_type: Optional[str] = "general",
+):
+    """Standardized dataset parser and validator across all evaluators (.txt, .md, .json)."""
+    if not file or not file.filename:
+        raise BadRequestError("No file uploaded")
+    try:
+        raw_bytes = file.file.read()
+        content = raw_bytes.decode("utf-8", errors="replace")
+    except Exception as e:
+        raise BadRequestError(f"Could not read uploaded file: {e}")
+
+    result = parse_and_validate_dataset(content, file.filename, evaluator_type or "general")
+    return JSONResponse(content=result.to_dict())
 
 
 @router.post("/eval/run")
@@ -471,7 +490,7 @@ def _prepare_cases_for_evaluation(cases_payload: Optional[list]) -> tuple[list[d
                 "case_id": resolved_cid,
                 "trace_id": c_dict.get("trace_id") or bm.get("trace_id", f"trace_{resolved_cid}"),
                 "question": c_dict.get("question", ""),
-                "answer": c_dict.get("answer", ""),
+                "answer": c_dict.get("answer") or c_dict.get("expected_answer") or c_dict.get("expected") or "",
                 "retrieved_context": ctx,
                 "handbook_version": c_dict.get("handbook_version") or bm.get("handbook_version", "2018"),
                 "section_info": c_dict.get("section_info") or bm.get("section_info", ""),

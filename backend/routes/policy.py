@@ -29,6 +29,7 @@ class PolicyBenchmarkStartRequest(BaseModel):
     temperature: float = Field(default=0.3, ge=0.0, le=1.0)
     model: Optional[str] = "llama3.1:8b"
     background: bool = Field(default=False)
+    cases: Optional[List[Dict[str, Any]]] = None
 
 
 def _load_benchmark_cases() -> List[Dict[str, Any]]:
@@ -110,11 +111,11 @@ def start_or_run_benchmark(payload: Optional[PolicyBenchmarkStartRequest] = None
     If payload.background is True, starts a background thread and returns run_id immediately.
     Otherwise runs synchronously and returns completed summary and case records.
     """
-    cases = _load_benchmark_cases()
-    if not cases:
-        raise HTTPException(status_code=404, detail="Benchmark cases not found at benchmarks/policy_execution/cases.json")
-
     req = payload or PolicyBenchmarkStartRequest()
+    cases = req.cases if req.cases else _load_benchmark_cases()
+    if not cases:
+        raise HTTPException(status_code=404, detail="Benchmark cases not found")
+
     manager = PolicyBenchmarkRunManager.get_instance()
 
     if req.background:
@@ -141,11 +142,11 @@ def start_or_run_benchmark(payload: Optional[PolicyBenchmarkStartRequest] = None
 @router.post("/benchmark/start")
 def start_benchmark_background(payload: Optional[PolicyBenchmarkStartRequest] = None):
     """Explicit endpoint to start an asynchronous background benchmark run."""
-    cases = _load_benchmark_cases()
-    if not cases:
-        raise HTTPException(status_code=404, detail="Benchmark cases not found at benchmarks/policy_execution/cases.json")
-
     req = payload or PolicyBenchmarkStartRequest(background=True)
+    cases = req.cases if req.cases else _load_benchmark_cases()
+    if not cases:
+        raise HTTPException(status_code=404, detail="Benchmark cases not found")
+
     manager = PolicyBenchmarkRunManager.get_instance()
     run_state = manager.start_benchmark(
         cases=cases,

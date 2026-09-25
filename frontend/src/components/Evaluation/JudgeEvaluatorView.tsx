@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { JudgeCaseResult } from '../../types/evaluation';
 import { api } from '../../services/api';
 import { EvaluationProgressCard } from './EvaluationProgressCard';
+import { EvaluationDatasetManager } from './EvaluationDatasetManager';
+import { QADataSetCase, DatasetMode } from '../../types/dataset';
 
 interface JudgeEvaluatorViewProps {
   onNotify?: (msg: string, type?: 'info' | 'success' | 'error') => void;
@@ -34,6 +36,10 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
   const [topK, setTopK] = useState<number>(5);
   const [temperature, setTemperature] = useState<number>(0.3);
+
+  // Common Dataset State
+  const [datasetMode, setDatasetMode] = useState<DatasetMode>('builtin');
+  const [customDatasetCases, setCustomDatasetCases] = useState<QADataSetCase[]>([]);
 
   // New Custom QA Form State
   const [customQuestion, setCustomQuestion] = useState<string>('');
@@ -356,7 +362,46 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
 
   // Run evaluation in the background independent of page lifecycle
   const handleRunEvaluation = async () => {
-    if (cases.length === 0) {
+    const targetCases: JudgeCaseResult[] = datasetMode === 'custom'
+      ? customDatasetCases.map((c, idx) => ({
+          case_id: c.case_id || `custom_${idx + 1}`,
+          trace_id: `custom_trace_${idx + 1}`,
+          question: c.question,
+          answer: c.expected_answer || '',
+          expected_answer: c.expected_answer || '',
+          retrieved_context: c.retrieved_context || '',
+          handbook_version: c.handbook_version || '2018',
+          section_info: c.expected_section || '',
+          taxonomy_mode: c.taxonomy || 'Custom Case',
+          human_label: c.human_label ?? 1,
+          expected_numeric: c.expected_numeric,
+          out_of_jurisdiction: c.out_of_jurisdiction ?? false,
+          status: 'PENDING' as const,
+          evaluation_run_id: null,
+          judge_v1_verdict: null,
+          judge_v1_agreed: null,
+          judge_v1_raw: null,
+          judge_v1_source: null,
+          judge_v1_latency_ms: null,
+          judge_v1_llm_completed: null,
+          judge_v2_verdict: null,
+          judge_v2_agreed: null,
+          judge_v2_raw: null,
+          judge_v2_source: null,
+          judge_v2_latency_ms: null,
+          judge_v2_llm_completed: null,
+          source: null,
+          latency_ms: null,
+          llm_completed: null,
+          assertions: null,
+          failure_category: null,
+          failure_type: null,
+          failure_reason: null,
+          resolution: null,
+        }))
+      : cases;
+
+    if (targetCases.length === 0) {
       notify('Please load or import test cases before running evaluation.', 'error');
       return;
     }
@@ -366,7 +411,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
     setEvaluatingCaseId(null);
 
     try {
-      const runState = await api.startEvaluationRun(cases, true, topK, temperature);
+      const runState = await api.startEvaluationRun(targetCases, true, topK, temperature);
       sessionStorage.setItem('judge_evaluation_active_run_id', runState.evaluation_run_id);
       setCurrentRunId(runState.evaluation_run_id);
       setCases(runState.cases || runState.results || []);
@@ -782,7 +827,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
             <button
               type="button"
               onClick={handleRunEvaluation}
-              disabled={cases.length === 0}
+              disabled={datasetMode === 'custom' ? customDatasetCases.length === 0 : cases.length === 0}
               className="btn-primary"
               style={{
                 display: 'flex',
@@ -792,11 +837,37 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({ onNotify
                 justifyContent: 'center',
               }}
             >
-              <span>⚡</span> Run Evaluation
+              <span>⚡</span> Run Evaluation ({datasetMode === 'custom' ? customDatasetCases.length : (cases.length || 25)} Cases)
             </button>
           )}
         </div>
       </div>
+
+      {/* DATASET MANAGEMENT (UPLOAD / MANUAL EDITING) */}
+      <EvaluationDatasetManager
+        evaluatorType="judge"
+        title="LLM Judge Evaluator"
+        builtinCount={cases.length || 25}
+        builtinLabel="Official 25-Case Benchmark"
+        datasetMode={datasetMode}
+        customCases={customDatasetCases}
+        isRunning={loading || isStarting}
+        onModeChange={(mode) => {
+          setDatasetMode(mode);
+          if (mode === 'builtin') {
+            notify('Switched to Official 25-Case Benchmark dataset.', 'info');
+          } else {
+            notify(`Switched to Custom Dataset (${customDatasetCases.length} cases loaded).`, 'info');
+          }
+        }}
+        onCustomCasesChange={(updated) => setCustomDatasetCases(updated)}
+        onResetToBuiltin={() => {
+          setDatasetMode('builtin');
+          handleLoadBenchmark();
+        }}
+        onNotify={notify}
+        storageKey="judge_custom_dataset"
+      />
 
       {/* EXPERIMENT & HYPERPARAMETER CONTROLS BAR */}
       <div

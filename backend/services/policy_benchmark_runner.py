@@ -53,11 +53,11 @@ class PolicyBenchmarkRunState:
         for c in cases:
             self.cases_status.append({
                 "case_id": c.get("case_id", ""),
-                "employee_id": c.get("employee_id", ""),
+                "employee_id": c.get("employee_id") or "EMP001",
                 "question": c.get("question", ""),
-                "ground_truth": c.get("expected_value", ""),
+                "ground_truth": c.get("expected_value") or c.get("expected_answer", ""),
                 "source_section": c.get("source_section", ""),
-                "pass_criteria": c.get("deterministic_pass_criteria", []),
+                "pass_criteria": c.get("deterministic_pass_criteria") or ([c.get("expected_value") or c.get("expected_answer")] if (c.get("expected_value") or c.get("expected_answer")) else []),
                 "status": "WAITING",  # WAITING | RUNNING | PASS | FAIL | ERROR
                 "agent_status": "WAITING",
                 "workflow_status": "WAITING",
@@ -206,9 +206,9 @@ class PolicyBenchmarkRunManager:
                         break
 
                     cid = c.get("case_id", f"case_{idx+1}")
-                    empid = c.get("employee_id", "")
+                    empid = c.get("employee_id") or "EMP001"
                     q = c.get("question", "")
-                    crit = c.get("deterministic_pass_criteria", [])
+                    crit = c.get("deterministic_pass_criteria") or ([c.get("expected_value") or c.get("expected_answer")] if (c.get("expected_value") or c.get("expected_answer")) else [])
 
                     run_state.current_case_id = cid
                     run_state.current_question = q
