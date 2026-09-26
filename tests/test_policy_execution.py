@@ -21,6 +21,7 @@ from backend.services.policy_tools import (
 from backend.services.policy_agent import run_agent_case
 from backend.services.policy_workflow import run_workflow_case
 
+
 class TestPolicyExecution(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -65,7 +66,9 @@ class TestPolicyExecution(unittest.TestCase):
             crit = case["deterministic_pass_criteria"]
             result = run_agent_case(cid, empid, q, deterministic_pass_criteria=crit)
             self.assertEqual(result.termination_reason, "SUCCESS")
-            self.assertTrue(result.passed, f"Agent failed on {cid}: {result.explanation}")
+            self.assertTrue(
+                result.passed, f"Agent failed on {cid}: {result.explanation}"
+            )
             self.assertLessEqual(result.total_tokens, MAX_TOKENS)
 
     def test_all_10_workflow_cases_pass(self):
@@ -76,7 +79,9 @@ class TestPolicyExecution(unittest.TestCase):
             crit = case["deterministic_pass_criteria"]
             result = run_workflow_case(cid, empid, q, deterministic_pass_criteria=crit)
             self.assertEqual(result.termination_reason, "SUCCESS")
-            self.assertTrue(result.passed, f"Workflow failed on {cid}: {result.explanation}")
+            self.assertTrue(
+                result.passed, f"Workflow failed on {cid}: {result.explanation}"
+            )
             self.assertEqual(result.iterations, 1)
 
     def test_agent_budget_enforcement(self):
@@ -94,15 +99,22 @@ class TestPolicyExecution(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(resp.json()), 10)
 
-        resp = self.client.post("/api/policy/agent", json={"employee_id": "EMP001", "question": "What is annual leave?"})
+        resp = self.client.post(
+            "/api/policy/agent",
+            json={"employee_id": "EMP001", "question": "What is annual leave?"},
+        )
         self.assertEqual(resp.status_code, 200)
 
-        resp = self.client.post("/api/policy/workflow", json={"employee_id": "EMP001", "question": "What is annual leave?"})
+        resp = self.client.post(
+            "/api/policy/workflow",
+            json={"employee_id": "EMP001", "question": "What is annual leave?"},
+        )
         self.assertEqual(resp.status_code, 200)
 
         resp = self.client.post("/api/policy/benchmark")
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["summary"]["agent"]["pass_rate_pct"], 100.0)
+
 
 if __name__ == "__main__":
     unittest.main()

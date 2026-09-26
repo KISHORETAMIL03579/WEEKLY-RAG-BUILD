@@ -32,7 +32,9 @@ _handbook_index: Optional[Dict[str, Any]] = None
 _corpus_lock = threading.Lock()
 
 
-def get_handbook_corpus() -> Tuple[Optional[List[Dict[str, Any]]], Optional[Dict[str, Any]]]:
+def get_handbook_corpus() -> (
+    Tuple[Optional[List[Dict[str, Any]]], Optional[Dict[str, Any]]]
+):
     global _handbook_corpus, _handbook_index
     with _corpus_lock:
         if _handbook_corpus is None:
@@ -46,7 +48,9 @@ def get_handbook_corpus() -> Tuple[Optional[List[Dict[str, Any]]], Optional[Dict
                         ch["chunk_id"] = ch.get("id") or f"c{idx}"
                     _handbook_index = build_index(_handbook_corpus)
             except Exception as e:
-                logger.warning("Could not load handbook corpus for dynamic evaluation: %s", e)
+                logger.warning(
+                    "Could not load handbook corpus for dynamic evaluation: %s", e
+                )
     return _handbook_corpus, _handbook_index
 
 
@@ -149,11 +153,15 @@ class EvaluationRunState:
         self.top_k = top_k
         self.temperature = temperature
         self.model = model or "llama3.1:8b"
-        self.status: str = "RUNNING"  # PENDING | RUNNING | COMPLETED | CANCELLED | ERROR
+        self.status: str = (
+            "RUNNING"  # PENDING | RUNNING | COMPLETED | CANCELLED | ERROR
+        )
         self.total_cases = len(cases)
         self.completed_cases = 0
         self.current_case_id: Optional[str] = cases[0].get("case_id") if cases else None
-        self.current_question: Optional[str] = cases[0].get("question") if cases else None
+        self.current_question: Optional[str] = (
+            cases[0].get("question") if cases else None
+        )
         self.created_at = time.time()
         self.updated_at = time.time()
         self.start_time = time.time()
@@ -169,63 +177,69 @@ class EvaluationRunState:
         # Initialize clean cases with strict PENDING state and explicit provenance
         self.cases: List[Dict[str, Any]] = []
         for c in cases:
-            self.cases.append({
-                "case_id": c.get("case_id"),
-                "trace_id": c.get("trace_id", ""),
-                "question": c.get("question", ""),
-                "answer": c.get("answer", ""),
-                "expected_answer": c.get("expected_answer", c.get("answer", "")),
-                "retrieved_context": c.get("retrieved_context", ""),
-                "handbook_version": c.get("handbook_version", "2018"),
-                "section_info": c.get("section_info", ""),
-                "taxonomy_mode": c.get("taxonomy_mode", "HR Policy"),
-                "human_label": c.get("human_label", 1),
-                "expected_numeric": c.get("expected_numeric"),
-                "out_of_jurisdiction": c.get("out_of_jurisdiction", False),
-                "status": "PENDING",
-                "evaluation_run_id": run_id,
-                # Provenance & Telemetry
-                "top_k": top_k,
-                "requested_top_k": top_k,
-                "temperature": temperature,
-                "requested_temperature": temperature,
-                "actual_temperature": temperature,
-                "applied_temperature": temperature,
-                "model": self.model,
-                "retrieval_mode": "Hybrid (Dense + BM25 + RRF)",
-                "retrieved_count": None,
-                "retrieved_chunk_ids": [],
-                "retrieved_scores": [],
-                "final_context_chunk_ids": [],
-                "final_context_token_count": None,
-                "benchmark_taxonomy": c.get("taxonomy_mode", "HR Policy"),
-                "actual_run_diagnosis": None,
-                # Verdicts
-                "judge_v1_verdict": None,
-                "judge_v1_agreed": None,
-                "judge_v1_raw": None,
-                "judge_v1_source": None,
-                "judge_v1_latency_ms": None,
-                "judge_v1_llm_completed": None,
-                "judge_v2_verdict": None,
-                "judge_v2_agreed": None,
-                "judge_v2_raw": None,
-                "judge_v2_source": None,
-                "judge_v2_latency_ms": None,
-                "judge_v2_llm_completed": None,
-                "source": None,
-                "latency_ms": None,
-                "llm_completed": None,
-                "assertions": None,
-                "failure_category": None,
-                "failure_type": None,
-                "failure_reason": None,
-                "resolution": None,
-            })
+            self.cases.append(
+                {
+                    "case_id": c.get("case_id"),
+                    "trace_id": c.get("trace_id", ""),
+                    "question": c.get("question", ""),
+                    "answer": c.get("answer", ""),
+                    "expected_answer": c.get("expected_answer", c.get("answer", "")),
+                    "retrieved_context": c.get("retrieved_context", ""),
+                    "handbook_version": c.get("handbook_version", "2018"),
+                    "section_info": c.get("section_info", ""),
+                    "taxonomy_mode": c.get("taxonomy_mode", "HR Policy"),
+                    "human_label": c.get("human_label", 1),
+                    "expected_numeric": c.get("expected_numeric"),
+                    "out_of_jurisdiction": c.get("out_of_jurisdiction", False),
+                    "status": "PENDING",
+                    "evaluation_run_id": run_id,
+                    # Provenance & Telemetry
+                    "top_k": top_k,
+                    "requested_top_k": top_k,
+                    "temperature": temperature,
+                    "requested_temperature": temperature,
+                    "actual_temperature": temperature,
+                    "applied_temperature": temperature,
+                    "model": self.model,
+                    "retrieval_mode": "Hybrid (Dense + BM25 + RRF)",
+                    "retrieved_count": None,
+                    "retrieved_chunk_ids": [],
+                    "retrieved_scores": [],
+                    "final_context_chunk_ids": [],
+                    "final_context_token_count": None,
+                    "benchmark_taxonomy": c.get("taxonomy_mode", "HR Policy"),
+                    "actual_run_diagnosis": None,
+                    # Verdicts
+                    "judge_v1_verdict": None,
+                    "judge_v1_agreed": None,
+                    "judge_v1_raw": None,
+                    "judge_v1_source": None,
+                    "judge_v1_latency_ms": None,
+                    "judge_v1_llm_completed": None,
+                    "judge_v2_verdict": None,
+                    "judge_v2_agreed": None,
+                    "judge_v2_raw": None,
+                    "judge_v2_source": None,
+                    "judge_v2_latency_ms": None,
+                    "judge_v2_llm_completed": None,
+                    "source": None,
+                    "latency_ms": None,
+                    "llm_completed": None,
+                    "assertions": None,
+                    "failure_category": None,
+                    "failure_type": None,
+                    "failure_reason": None,
+                    "resolution": None,
+                }
+            )
 
     def to_dict(self) -> Dict[str, Any]:
         with self.lock:
-            elapsed = time.time() - self.start_time if self.status == "RUNNING" else self.elapsed_seconds
+            elapsed = (
+                time.time() - self.start_time
+                if self.status == "RUNNING"
+                else self.elapsed_seconds
+            )
             return {
                 "evaluation_run_id": self.run_id,
                 "status": self.status,
@@ -252,6 +266,7 @@ class EvaluationRunState:
 
 class EvaluationRunManager:
     """Singleton manager overseeing background evaluation threads and lifecycle states."""
+
     _instance: Optional[EvaluationRunManager] = None
     _lock = threading.Lock()
 
@@ -279,19 +294,21 @@ class EvaluationRunManager:
         with self._manager_lock:
             runs_list = []
             for r in reversed(list(self._runs.values())):
-                runs_list.append({
-                    "evaluation_run_id": r.run_id,
-                    "status": r.status,
-                    "top_k": r.top_k,
-                    "temperature": r.temperature,
-                    "model": r.model,
-                    "total_cases": r.total_cases,
-                    "completed_cases": r.completed_cases,
-                    "created_at": r.created_at,
-                    "elapsed_seconds": round(r.elapsed_seconds, 1),
-                    "judge_v1_agreement_pct": r.judge_v1_agreement_pct,
-                    "judge_v2_agreement_pct": r.judge_v2_agreement_pct,
-                })
+                runs_list.append(
+                    {
+                        "evaluation_run_id": r.run_id,
+                        "status": r.status,
+                        "top_k": r.top_k,
+                        "temperature": r.temperature,
+                        "model": r.model,
+                        "total_cases": r.total_cases,
+                        "completed_cases": r.completed_cases,
+                        "created_at": r.created_at,
+                        "elapsed_seconds": round(r.elapsed_seconds, 1),
+                        "judge_v1_agreement_pct": r.judge_v1_agreement_pct,
+                        "judge_v2_agreement_pct": r.judge_v2_agreement_pct,
+                    }
+                )
             return runs_list
 
     def cancel_run(self, run_id: str) -> bool:
@@ -364,7 +381,12 @@ class EvaluationRunManager:
             total = len(run.cases)
             for idx in range(total):
                 if run.cancellation_requested:
-                    logger.info("Evaluation run %s cancelled by user at case %d/%d", run.run_id, idx, total)
+                    logger.info(
+                        "Evaluation run %s cancelled by user at case %d/%d",
+                        run.run_id,
+                        idx,
+                        total,
+                    )
                     with run.lock:
                         run.status = "CANCELLED"
                         run.elapsed_seconds = time.time() - run.start_time
@@ -386,22 +408,38 @@ class EvaluationRunManager:
                 final_context_chunks = []
                 if corpus and index and q:
                     retrieved_chunks = search_chunks(q, corpus, index, top_k=run.top_k)
-                    final_context_chunks = fit_to_token_budget(retrieved_chunks, max_tokens=2000)
-                    final_context_text = "\n\n".join(r.get("text", "") for r in final_context_chunks)
+                    final_context_chunks = fit_to_token_budget(
+                        retrieved_chunks, max_tokens=2000
+                    )
+                    final_context_text = "\n\n".join(
+                        r.get("text", "") for r in final_context_chunks
+                    )
                     context_tokens = estimate_tokens(final_context_text)
 
                     c["retrieved_count"] = len(retrieved_chunks)
-                    c["retrieved_chunk_ids"] = [r.get("id") or r.get("chunk_id", f"c{i}") for i, r in enumerate(retrieved_chunks)]
-                    c["retrieved_scores"] = [round(float(r.get("score", 0.0)), 4) for r in retrieved_chunks]
-                    c["final_context_chunk_ids"] = [r.get("id") or r.get("chunk_id", f"c{i}") for i, r in enumerate(final_context_chunks)]
+                    c["retrieved_chunk_ids"] = [
+                        r.get("id") or r.get("chunk_id", f"c{i}")
+                        for i, r in enumerate(retrieved_chunks)
+                    ]
+                    c["retrieved_scores"] = [
+                        round(float(r.get("score", 0.0)), 4) for r in retrieved_chunks
+                    ]
+                    c["final_context_chunk_ids"] = [
+                        r.get("id") or r.get("chunk_id", f"c{i}")
+                        for i, r in enumerate(final_context_chunks)
+                    ]
                     c["final_context_token_count"] = context_tokens
                     c["retrieved_context"] = final_context_text
                 else:
                     c["retrieved_count"] = run.top_k
                     c["retrieved_chunk_ids"] = [f"c{140 + i}" for i in range(run.top_k)]
-                    c["retrieved_scores"] = [round(1.0 / (1.0 + i * 0.1), 4) for i in range(run.top_k)]
+                    c["retrieved_scores"] = [
+                        round(1.0 / (1.0 + i * 0.1), 4) for i in range(run.top_k)
+                    ]
                     c["final_context_chunk_ids"] = c["retrieved_chunk_ids"]
-                    c["final_context_token_count"] = estimate_tokens(c.get("retrieved_context", ""))
+                    c["final_context_token_count"] = estimate_tokens(
+                        c.get("retrieved_context", "")
+                    )
 
                 c["top_k"] = run.top_k
                 c["requested_top_k"] = run.top_k
@@ -426,24 +464,42 @@ class EvaluationRunManager:
 
                 if run.eval_engine == "llm" and v1_template and v2_template:
                     try:
-                        v1_verdict, v1_raw, v1_src, v1_lat, v1_completed = evaluate_case_with_judge_detailed(
-                            c, v1_template, temperature=run.temperature, model=run.model
+                        v1_verdict, v1_raw, v1_src, v1_lat, v1_completed = (
+                            evaluate_case_with_judge_detailed(
+                                c,
+                                v1_template,
+                                temperature=run.temperature,
+                                model=run.model,
+                            )
                         )
-                        v2_verdict, v2_raw, v2_src, v2_lat, v2_completed = evaluate_case_with_judge_detailed(
-                            c, v2_template, temperature=run.temperature, model=run.model
+                        v2_verdict, v2_raw, v2_src, v2_lat, v2_completed = (
+                            evaluate_case_with_judge_detailed(
+                                c,
+                                v2_template,
+                                temperature=run.temperature,
+                                model=run.model,
+                            )
                         )
                     except Exception as e:
                         logger.warning("LLM Judge evaluation failed for %s: %s", cid, e)
-                        v1_verdict = evaluate_case_deterministically(c, is_strict_section=True)
-                        v2_verdict = evaluate_case_deterministically(c, is_strict_section=False)
+                        v1_verdict = evaluate_case_deterministically(
+                            c, is_strict_section=True
+                        )
+                        v2_verdict = evaluate_case_deterministically(
+                            c, is_strict_section=False
+                        )
                         v1_src = "ERROR"
                         v2_src = "ERROR"
                 else:
-                    v1_verdict = evaluate_case_deterministically(c, is_strict_section=True)
-                    v2_verdict = evaluate_case_deterministically(c, is_strict_section=False)
+                    v1_verdict = evaluate_case_deterministically(
+                        c, is_strict_section=True
+                    )
+                    v2_verdict = evaluate_case_deterministically(
+                        c, is_strict_section=False
+                    )
 
-                is_v1_agreed = (v1_verdict == h_label)
-                is_v2_agreed = (v2_verdict == h_label)
+                is_v1_agreed = v1_verdict == h_label
+                is_v2_agreed = v2_verdict == h_label
 
                 # Strict evidence-based failure classification
                 fail_cat, actual_diag, fail_reason, res_text = diagnose_case_evidence(
@@ -486,8 +542,12 @@ class EvaluationRunManager:
                         run.v1_agreements += 1
                     if is_v2_agreed:
                         run.v2_agreements += 1
-                    run.judge_v1_agreement_pct = round((run.v1_agreements / run.completed_cases) * 100, 1)
-                    run.judge_v2_agreement_pct = round((run.v2_agreements / run.completed_cases) * 100, 1)
+                    run.judge_v1_agreement_pct = round(
+                        (run.v1_agreements / run.completed_cases) * 100, 1
+                    )
+                    run.judge_v2_agreement_pct = round(
+                        (run.v2_agreements / run.completed_cases) * 100, 1
+                    )
                     run.updated_at = time.time()
 
                 # Safe telemetry log (never log full prompts, documents, or keys)
@@ -527,4 +587,3 @@ class EvaluationRunManager:
 
 # Module-level accessor
 run_manager = EvaluationRunManager.get_instance()
-

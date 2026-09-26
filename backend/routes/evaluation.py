@@ -54,7 +54,7 @@ def parse_qa_pairs(text: str) -> list[dict]:
     # Metadata keys to ignore when parsing question/answer blocks
     ignored_prefix_pattern = re.compile(
         r"^(?:case\s*id|employee\s*(?:id|details)?|source\s*(?:policy\s*)?section|tenure\s*(?:\/|\s*)status|deterministic\s*pass\s*criteria)\s*[:\-.]",
-        re.IGNORECASE
+        re.IGNORECASE,
     )
 
     def flush():
@@ -69,14 +69,18 @@ def parse_qa_pairs(text: str) -> list[dict]:
         if not line:
             continue
         # Ignore comment lines and section dividers
-        if line.startswith(("#", "//", "/*", "*/", "---", "===")) or re.match(r"^[=\-_*]{3,}$", line):
+        if line.startswith(("#", "//", "/*", "*/", "---", "===")) or re.match(
+            r"^[=\-_*]{3,}$", line
+        ):
             continue
 
-        q_match = re.match(r"^(?:q(?:uestion)?|query)\s*[:\-.]\s*(.*)", line, re.IGNORECASE)
+        q_match = re.match(
+            r"^(?:q(?:uestion)?|query)\s*[:\-.]\s*(.*)", line, re.IGNORECASE
+        )
         a_match = re.match(
             r"^(?:a(?:nswer)?|expected(?:\s*(?:entitlement\s*\/\s*answer|entitlement|value|answer))?)\s*[:\-.]\s*(.*)",
             line,
-            re.IGNORECASE
+            re.IGNORECASE,
         )
 
         if q_match:
@@ -130,17 +134,44 @@ def eval_parse_qa_pdf(file: Optional[UploadFile] = File(default=None)):
                 for item in data:
                     if isinstance(item, dict):
                         q = item.get("question") or item.get("q") or ""
-                        a = item.get("expected") or item.get("answer") or item.get("section_info") or item.get("a") or ""
+                        a = (
+                            item.get("expected")
+                            or item.get("answer")
+                            or item.get("section_info")
+                            or item.get("a")
+                            or ""
+                        )
                         if q:
-                            pairs.append({"question": str(q).strip(), "expected": str(a).strip() or "HR Policy"})
+                            pairs.append(
+                                {
+                                    "question": str(q).strip(),
+                                    "expected": str(a).strip() or "HR Policy",
+                                }
+                            )
             elif isinstance(data, dict):
-                items = data.get("pairs") or data.get("questions") or data.get("cases") or []
+                items = (
+                    data.get("pairs")
+                    or data.get("questions")
+                    or data.get("cases")
+                    or []
+                )
                 for item in items:
                     if isinstance(item, dict):
                         q = item.get("question") or item.get("q") or ""
-                        a = item.get("expected") or item.get("answer") or item.get("section_info") or item.get("a") or ""
+                        a = (
+                            item.get("expected")
+                            or item.get("answer")
+                            or item.get("section_info")
+                            or item.get("a")
+                            or ""
+                        )
                         if q:
-                            pairs.append({"question": str(q).strip(), "expected": str(a).strip() or "HR Policy"})
+                            pairs.append(
+                                {
+                                    "question": str(q).strip(),
+                                    "expected": str(a).strip() or "HR Policy",
+                                }
+                            )
             if pairs:
                 return {"ok": True, "pairs": pairs}
             raise BadRequestError("No valid question/expected pairs found in JSON")
@@ -173,16 +204,22 @@ def parse_evaluation_dataset_file(
     except Exception as e:
         raise BadRequestError(f"Could not read uploaded file: {e}")
 
-    result = parse_and_validate_dataset(content, file.filename, evaluator_type or "general")
+    result = parse_and_validate_dataset(
+        content, file.filename, evaluator_type or "general"
+    )
     return JSONResponse(content=result.to_dict())
 
 
 @router.post("/eval/run")
-def eval_run(sid: RequiredSessionId, payload: Optional[EvalRunPayload] = Body(default=None)):
+def eval_run(
+    sid: RequiredSessionId, payload: Optional[EvalRunPayload] = Body(default=None)
+):
     """Runs a hit-rate@k and MRR benchmark over question sets across retrieval strategies."""
     payload = payload or EvalRunPayload()
     k = max(1, min(payload.top_k or payload.k, 20))
-    chunk_mode_filter = (payload.strategy_filter or payload.chunk_mode or "").strip() or None
+    chunk_mode_filter = (
+        payload.strategy_filter or payload.chunk_mode or ""
+    ).strip() or None
     preset_names = payload.presets or list(EVAL_PRESETS.keys())
     legacy_modes = payload.modes
 
@@ -195,17 +232,21 @@ def eval_run(sid: RequiredSessionId, payload: Optional[EvalRunPayload] = Body(de
         q_id = str(q.id or f"q_{idx + 1}")
 
         if q_text and (expected or expected_doc or expected_section):
-            questions.append({
-                "id": q_id,
-                "question": q_text,
-                "expected": expected or expected_section or expected_doc,
-                "expected_doc": expected_doc,
-                "expected_section": expected_section,
-            })
+            questions.append(
+                {
+                    "id": q_id,
+                    "question": q_text,
+                    "expected": expected or expected_section or expected_doc,
+                    "expected_doc": expected_doc,
+                    "expected_section": expected_section,
+                }
+            )
 
     if not questions:
         return JSONResponse(
-            {"error": "No valid questions provided (both question and expected ground truth are required)"},
+            {
+                "error": "No valid questions provided (both question and expected ground truth are required)"
+            },
             status_code=400,
         )
 
@@ -215,19 +256,28 @@ def eval_run(sid: RequiredSessionId, payload: Optional[EvalRunPayload] = Body(de
 
     store = fn_get_store(sid)
     if not store.chunks:
-        return JSONResponse({"error": "No documents indexed in this session yet — upload one first"},
-                            status_code=400)
+        return JSONResponse(
+            {"error": "No documents indexed in this session yet — upload one first"},
+            status_code=400,
+        )
 
-    active_store = store.filtered_by_method(chunk_mode_filter) if chunk_mode_filter else store
+    active_store = (
+        store.filtered_by_method(chunk_mode_filter) if chunk_mode_filter else store
+    )
     if chunk_mode_filter and not active_store.chunks:
-        return JSONResponse({"error": f"No documents indexed under the '{chunk_mode_filter}' strategy"},
-                            status_code=400)
+        return JSONResponse(
+            {"error": f"No documents indexed under the '{chunk_mode_filter}' strategy"},
+            status_code=400,
+        )
 
     by_preset = {}
     names = legacy_modes if legacy_modes else preset_names
     for name in names:
         preset = eval_presets_map.get(name) or {
-            "force_tfidf": False, "mode": name, "rerank": False, "rewrite": False,
+            "force_tfidf": False,
+            "mode": name,
+            "rerank": False,
+            "rewrite": False,
         }
         per_question = []
         hits = 0
@@ -240,7 +290,7 @@ def eval_run(sid: RequiredSessionId, payload: Optional[EvalRunPayload] = Body(de
                 k,
                 preset,
                 expected_doc=q["expected_doc"],
-                expected_section=q["expected_section"]
+                expected_section=q["expected_section"],
             )
             hits += int(result["hit"])
             per_question.append(result)
@@ -258,7 +308,9 @@ def eval_run(sid: RequiredSessionId, payload: Optional[EvalRunPayload] = Body(de
     return {"ok": True, "k": k, "total_questions": len(questions), "modes": by_preset}
 
 
-def find_matching_benchmark(cid: str, question: str, answer: str, raw_cases: list[dict]) -> dict:
+def find_matching_benchmark(
+    cid: str, question: str, answer: str, raw_cases: list[dict]
+) -> dict:
     """Robustly matches an incoming case against the benchmark catalog by ID, index, or QA similarity."""
     if not raw_cases:
         return {}
@@ -280,7 +332,8 @@ def find_matching_benchmark(cid: str, question: str, answer: str, raw_cases: lis
     # 3. Match by question and disambiguate with answer tokens
     q_norm = re.sub(r"[^\w\s]", "", question or "").strip().lower()
     matching_q = [
-        c for c in raw_cases
+        c
+        for c in raw_cases
         if re.sub(r"[^\w\s]", "", c.get("question", "")).strip().lower() == q_norm
     ]
     if len(matching_q) == 1:
@@ -289,7 +342,9 @@ def find_matching_benchmark(cid: str, question: str, answer: str, raw_cases: lis
         ans_tokens = set(re.findall(r"\w+", (answer or "").lower()))
         return max(
             matching_q,
-            key=lambda c: len(ans_tokens & set(re.findall(r"\w+", (c.get("answer", "")).lower())))
+            key=lambda c: len(
+                ans_tokens & set(re.findall(r"\w+", (c.get("answer", "")).lower()))
+            ),
         )
 
     return {}
@@ -321,35 +376,37 @@ def get_week6_benchmark():
     clean_cases = []
     for c in raw_cases:
         cid = c.get("case_id")
-        clean_cases.append({
-            "case_id": cid,
-            "trace_id": c.get("trace_id", ""),
-            "question": c.get("question", ""),
-            "answer": c.get("answer", ""),
-            "retrieved_context": c.get("retrieved_context", ""),
-            "handbook_version": c.get("handbook_version", "2018"),
-            "section_info": c.get("section_info", ""),
-            "taxonomy_mode": c.get("taxonomy_mode", ""),
-            "human_label": labels.get(cid, c.get("human_label", 1)),
-            "expected_numeric": c.get("expected_numeric"),
-            "out_of_jurisdiction": c.get("out_of_jurisdiction", False),
-            "status": "PENDING",
-            "evaluation_run_id": None,
-            "judge_v1_verdict": None,
-            "judge_v1_agreed": None,
-            "judge_v1_raw": None,
-            "judge_v2_verdict": None,
-            "judge_v2_agreed": None,
-            "judge_v2_raw": None,
-            "assertions": None,
-            "failure_category": None,
-            "failure_type": None,
-            "failure_reason": None,
-            "resolution": None,
-            "source": None,
-            "llm_completed": None,
-            "latency_ms": None,
-        })
+        clean_cases.append(
+            {
+                "case_id": cid,
+                "trace_id": c.get("trace_id", ""),
+                "question": c.get("question", ""),
+                "answer": c.get("answer", ""),
+                "retrieved_context": c.get("retrieved_context", ""),
+                "handbook_version": c.get("handbook_version", "2018"),
+                "section_info": c.get("section_info", ""),
+                "taxonomy_mode": c.get("taxonomy_mode", ""),
+                "human_label": labels.get(cid, c.get("human_label", 1)),
+                "expected_numeric": c.get("expected_numeric"),
+                "out_of_jurisdiction": c.get("out_of_jurisdiction", False),
+                "status": "PENDING",
+                "evaluation_run_id": None,
+                "judge_v1_verdict": None,
+                "judge_v1_agreed": None,
+                "judge_v1_raw": None,
+                "judge_v2_verdict": None,
+                "judge_v2_agreed": None,
+                "judge_v2_raw": None,
+                "assertions": None,
+                "failure_category": None,
+                "failure_type": None,
+                "failure_reason": None,
+                "resolution": None,
+                "source": None,
+                "llm_completed": None,
+                "latency_ms": None,
+            }
+        )
 
     return {
         "total_cases": len(clean_cases),
@@ -427,15 +484,21 @@ def get_week6_results(include_history: bool = False):
     }
 
 
-def _prepare_cases_for_evaluation(cases_payload: Optional[list]) -> tuple[list[dict], dict[str, int], str, str]:
+def _prepare_cases_for_evaluation(
+    cases_payload: Optional[list],
+) -> tuple[list[dict], dict[str, int], str, str]:
     """Prepares and resolves test cases against benchmark metadata with zero data leakage."""
     v1_prompt_path = BASE_DIR / "week6" / "judge_v1.txt"
     v2_prompt_path = BASE_DIR / "week6" / "judge_v2.txt"
     cases_file = BASE_DIR / "week6" / "eval_cases_25.json"
     labels_file = BASE_DIR / "week6" / "labels_25.json"
 
-    v1_template = v1_prompt_path.read_text(encoding="utf-8") if v1_prompt_path.exists() else ""
-    v2_template = v2_prompt_path.read_text(encoding="utf-8") if v2_prompt_path.exists() else ""
+    v1_template = (
+        v1_prompt_path.read_text(encoding="utf-8") if v1_prompt_path.exists() else ""
+    )
+    v2_template = (
+        v2_prompt_path.read_text(encoding="utf-8") if v2_prompt_path.exists() else ""
+    )
 
     raw_benchmark_cases = []
     if cases_file.exists():
@@ -464,12 +527,25 @@ def _prepare_cases_for_evaluation(cases_payload: Optional[list]) -> tuple[list[d
                 c_dict = getattr(c, "__dict__", {})
 
             cid = c_dict.get("case_id") or f"custom_{idx + 1}"
-            bm = find_matching_benchmark(cid, c_dict.get("question", ""), c_dict.get("answer", ""), raw_benchmark_cases)
+            bm = find_matching_benchmark(
+                cid,
+                c_dict.get("question", ""),
+                c_dict.get("answer", ""),
+                raw_benchmark_cases,
+            )
             resolved_cid = bm.get("case_id", cid)
 
             ctx = c_dict.get("retrieved_context") or bm.get("retrieved_context", "")
-            exp_num = c_dict.get("expected_numeric") if c_dict.get("expected_numeric") is not None else bm.get("expected_numeric")
-            is_ooj = c_dict.get("out_of_jurisdiction") if c_dict.get("out_of_jurisdiction") is not None else bm.get("out_of_jurisdiction", False)
+            exp_num = (
+                c_dict.get("expected_numeric")
+                if c_dict.get("expected_numeric") is not None
+                else bm.get("expected_numeric")
+            )
+            is_ooj = (
+                c_dict.get("out_of_jurisdiction")
+                if c_dict.get("out_of_jurisdiction") is not None
+                else bm.get("out_of_jurisdiction", False)
+            )
 
             if c_dict.get("human_label") is not None:
                 h_lbl = c_dict["human_label"]
@@ -483,38 +559,52 @@ def _prepare_cases_for_evaluation(cases_payload: Optional[list]) -> tuple[list[d
                 h_lbl = 1
 
             mode_val = c_dict.get("taxonomy_mode")
-            if not mode_val or mode_val in ("Custom Query", "Uploaded TXT QA", "Imported Case"):
+            if not mode_val or mode_val in (
+                "Custom Query",
+                "Uploaded TXT QA",
+                "Imported Case",
+            ):
                 mode_val = bm.get("taxonomy_mode", "HR Policy")
 
-            cases_to_eval.append({
-                "case_id": resolved_cid,
-                "trace_id": c_dict.get("trace_id") or bm.get("trace_id", f"trace_{resolved_cid}"),
-                "question": c_dict.get("question", ""),
-                "answer": c_dict.get("answer") or c_dict.get("expected_answer") or c_dict.get("expected") or "",
-                "retrieved_context": ctx,
-                "handbook_version": c_dict.get("handbook_version") or bm.get("handbook_version", "2018"),
-                "section_info": c_dict.get("section_info") or bm.get("section_info", ""),
-                "taxonomy_mode": mode_val,
-                "human_label": h_lbl,
-                "expected_numeric": exp_num,
-                "out_of_jurisdiction": is_ooj,
-            })
+            cases_to_eval.append(
+                {
+                    "case_id": resolved_cid,
+                    "trace_id": c_dict.get("trace_id")
+                    or bm.get("trace_id", f"trace_{resolved_cid}"),
+                    "question": c_dict.get("question", ""),
+                    "answer": c_dict.get("answer")
+                    or c_dict.get("expected_answer")
+                    or c_dict.get("expected")
+                    or "",
+                    "retrieved_context": ctx,
+                    "handbook_version": c_dict.get("handbook_version")
+                    or bm.get("handbook_version", "2018"),
+                    "section_info": c_dict.get("section_info")
+                    or bm.get("section_info", ""),
+                    "taxonomy_mode": mode_val,
+                    "human_label": h_lbl,
+                    "expected_numeric": exp_num,
+                    "out_of_jurisdiction": is_ooj,
+                }
+            )
     else:
         for c in raw_benchmark_cases:
             cid = c.get("case_id")
-            cases_to_eval.append({
-                "case_id": cid,
-                "trace_id": c.get("trace_id", f"trace_{cid}"),
-                "question": c.get("question", ""),
-                "answer": c.get("answer", ""),
-                "retrieved_context": c.get("retrieved_context", ""),
-                "handbook_version": c.get("handbook_version", "2018"),
-                "section_info": c.get("section_info", ""),
-                "taxonomy_mode": c.get("taxonomy_mode", "HR Policy"),
-                "human_label": labels.get(cid, c.get("human_label", 1)),
-                "expected_numeric": c.get("expected_numeric"),
-                "out_of_jurisdiction": c.get("out_of_jurisdiction", False),
-            })
+            cases_to_eval.append(
+                {
+                    "case_id": cid,
+                    "trace_id": c.get("trace_id", f"trace_{cid}"),
+                    "question": c.get("question", ""),
+                    "answer": c.get("answer", ""),
+                    "retrieved_context": c.get("retrieved_context", ""),
+                    "handbook_version": c.get("handbook_version", "2018"),
+                    "section_info": c.get("section_info", ""),
+                    "taxonomy_mode": c.get("taxonomy_mode", "HR Policy"),
+                    "human_label": labels.get(cid, c.get("human_label", 1)),
+                    "expected_numeric": c.get("expected_numeric"),
+                    "out_of_jurisdiction": c.get("out_of_jurisdiction", False),
+                }
+            )
 
     return cases_to_eval, labels, v1_template, v2_template
 
@@ -532,10 +622,14 @@ def create_evaluation_run(payload: Optional[Week6EvalPayload] = Body(default=Non
     cases_payload = payload.cases if payload else None
     eval_engine = "llm" if (payload and payload.run_llm) else "deterministic"
     top_k = payload.top_k if payload and payload.top_k is not None else 5
-    temperature = payload.temperature if payload and payload.temperature is not None else 0.3
+    temperature = (
+        payload.temperature if payload and payload.temperature is not None else 0.3
+    )
     model = payload.model if payload and payload.model else "llama3.1:8b"
 
-    cases_to_eval, labels, v1_template, v2_template = _prepare_cases_for_evaluation(cases_payload)
+    cases_to_eval, labels, v1_template, v2_template = _prepare_cases_for_evaluation(
+        cases_payload
+    )
     if not cases_to_eval:
         raise BadRequestError("No cases available to evaluate")
 
@@ -594,7 +688,9 @@ def evaluate_week6(payload: Optional[Week6EvalPayload] = Body(default=None)):
     cases_payload = payload.cases if payload else None
     run_llm_active = bool(payload and payload.run_llm)
 
-    cases_to_eval, labels, v1_template, v2_template = _prepare_cases_for_evaluation(cases_payload)
+    cases_to_eval, labels, v1_template, v2_template = _prepare_cases_for_evaluation(
+        cases_payload
+    )
     eval_run_id = f"eval_{uuid.uuid4().hex[:12]}"
     results = []
     v1_agreed = 0
@@ -618,8 +714,12 @@ def evaluate_week6(payload: Optional[Week6EvalPayload] = Body(default=None)):
 
         if run_llm_active and v1_template and v2_template:
             try:
-                v1_verdict, v1_raw, v1_src, v1_lat, v1_completed = evaluate_case_with_judge_detailed(c, v1_template)
-                v2_verdict, v2_raw, v2_src, v2_lat, v2_completed = evaluate_case_with_judge_detailed(c, v2_template)
+                v1_verdict, v1_raw, v1_src, v1_lat, v1_completed = (
+                    evaluate_case_with_judge_detailed(c, v1_template)
+                )
+                v2_verdict, v2_raw, v2_src, v2_lat, v2_completed = (
+                    evaluate_case_with_judge_detailed(c, v2_template)
+                )
             except Exception as e:
                 logger.warning("LLM Judge call failed for case %s: %s", cid, e)
                 v1_verdict = evaluate_case_deterministically(c, is_strict_section=True)
@@ -627,11 +727,15 @@ def evaluate_week6(payload: Optional[Week6EvalPayload] = Body(default=None)):
                 v1_src = "ERROR"
                 v2_src = "ERROR"
         else:
-            judge_v1_verdict = evaluate_case_deterministically(c, is_strict_section=True)
-            judge_v2_verdict = evaluate_case_deterministically(c, is_strict_section=False)
+            judge_v1_verdict = evaluate_case_deterministically(
+                c, is_strict_section=True
+            )
+            judge_v2_verdict = evaluate_case_deterministically(
+                c, is_strict_section=False
+            )
 
-        is_v1_agreed = (v1_verdict == h_label)
-        is_v2_agreed = (v2_verdict == h_label)
+        is_v1_agreed = v1_verdict == h_label
+        is_v2_agreed = v2_verdict == h_label
 
         if is_v1_agreed:
             v1_agreed += 1
@@ -648,7 +752,9 @@ def evaluate_week6(payload: Optional[Week6EvalPayload] = Body(default=None)):
             fail_cat = "code_issue"
             fail_type = "unresolvable_section_reference"
             fail_reason = "Policy section cited in answer failed to resolve against handbook hierarchy."
-            res_text = "Fix section reference resolver or verify handbook page numbering."
+            res_text = (
+                "Fix section reference resolver or verify handbook page numbering."
+            )
         elif h_label == 0:
             fail_cat = "llm_model"
             fail_type = "generator_completeness_omission"
@@ -656,39 +762,43 @@ def evaluate_week6(payload: Optional[Week6EvalPayload] = Body(default=None)):
                 fail_reason = "Generator omitted mandatory qualifying conditions present in retrieved context; Judge V2 correctly detected omission."
             else:
                 fail_reason = "Generator omitted mandatory qualifying conditions present in retrieved context; Judge V2 failed to detect omission (judge disagreement)."
-            res_text = "Investigate generation completeness for multi-clause policy answers."
+            res_text = (
+                "Investigate generation completeness for multi-clause policy answers."
+            )
         else:
             fail_cat = "llm_model"
             fail_type = "judge_disagreement"
             fail_reason = "Judge rejected answer despite human ground truth agreement."
             res_text = "Calibrate judge rubric with balanced multi-clause criteria."
 
-        results.append({
-            **c,
-            "status": "COMPLETED",
-            "evaluation_run_id": eval_run_id,
-            "human_label": h_label,
-            "assertions": assertions,
-            "judge_v1_verdict": v1_verdict,
-            "judge_v1_agreed": is_v1_agreed,
-            "judge_v1_raw": v1_raw,
-            "judge_v1_source": v1_src,
-            "judge_v1_latency_ms": round(v1_lat, 2),
-            "judge_v1_llm_completed": v1_completed,
-            "judge_v2_verdict": v2_verdict,
-            "judge_v2_agreed": is_v2_agreed,
-            "judge_v2_raw": v2_raw,
-            "judge_v2_source": v2_src,
-            "judge_v2_latency_ms": round(v2_lat, 2),
-            "judge_v2_llm_completed": v2_completed,
-            "source": v2_src,
-            "latency_ms": round(v2_lat, 2),
-            "llm_completed": v2_completed,
-            "failure_category": fail_cat,
-            "failure_type": fail_type,
-            "failure_reason": fail_reason,
-            "resolution": res_text,
-        })
+        results.append(
+            {
+                **c,
+                "status": "COMPLETED",
+                "evaluation_run_id": eval_run_id,
+                "human_label": h_label,
+                "assertions": assertions,
+                "judge_v1_verdict": v1_verdict,
+                "judge_v1_agreed": is_v1_agreed,
+                "judge_v1_raw": v1_raw,
+                "judge_v1_source": v1_src,
+                "judge_v1_latency_ms": round(v1_lat, 2),
+                "judge_v1_llm_completed": v1_completed,
+                "judge_v2_verdict": v2_verdict,
+                "judge_v2_agreed": is_v2_agreed,
+                "judge_v2_raw": v2_raw,
+                "judge_v2_source": v2_src,
+                "judge_v2_latency_ms": round(v2_lat, 2),
+                "judge_v2_llm_completed": v2_completed,
+                "source": v2_src,
+                "latency_ms": round(v2_lat, 2),
+                "llm_completed": v2_completed,
+                "failure_category": fail_cat,
+                "failure_type": fail_type,
+                "failure_reason": fail_reason,
+                "resolution": res_text,
+            }
+        )
 
     total = len(results)
     v1_pct = (v1_agreed / total * 100) if total else 0.0

@@ -6,9 +6,9 @@ export interface EmployeeRecord {
   job_title: string;
   department: string;
   duty_station: string;
-  jurisdiction: 'Kenya' | 'Ireland' | "Cote d'Ivoire" | 'Rwanda' | 'Global';
+  jurisdiction: "Kenya" | "Ireland" | "Cote d'Ivoire" | "Rwanda" | "Global";
   tenure_months: number;
-  employment_status: 'Confirmed' | 'Probation';
+  employment_status: "Confirmed" | "Probation";
   annual_leave_balance: number;
   basic_salary_monthly: number;
   separation_reason?: string | null;
@@ -33,7 +33,7 @@ export interface ToolCallRecord {
 
 export interface RetryRecord {
   attempt: number;
-  status: 'SUCCESS' | 'RETRY' | 'FAILED' | 'BUDGET_EXHAUSTED';
+  status: "SUCCESS" | "RETRY" | "FAILED" | "BUDGET_EXHAUSTED";
   retry_reason?: string | null;
   retryable: boolean;
   latency_ms: number;
@@ -45,8 +45,8 @@ export interface RetryRecord {
 }
 
 export interface RoutingDecision {
-  mode: 'workflow' | 'agent';
-  complexity: 'SIMPLE' | 'MODERATE' | 'COMPLEX';
+  mode: "workflow" | "agent";
+  complexity: "SIMPLE" | "MODERATE" | "COMPLEX";
   reason: string;
   requires_agent: boolean;
   routing_ms: number;
@@ -67,12 +67,12 @@ export interface PolicyOutputContract {
   rule_cited: string;
   explanation: string;
   passed: boolean;
-  implementation: 'agent' | 'workflow';
+  implementation: "agent" | "workflow";
 
   // Routing metadata
-  execution_mode?: 'workflow' | 'agent';
+  execution_mode?: "workflow" | "agent";
   routing_reason?: string;
-  complexity?: 'SIMPLE' | 'MODERATE' | 'COMPLEX';
+  complexity?: "SIMPLE" | "MODERATE" | "COMPLEX";
   routing_ms?: number;
   mode_history?: string[];
   routing?: RoutingDecision;
@@ -85,12 +85,12 @@ export interface PolicyOutputContract {
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
-  token_source?: string;  // "ollama_live" | "proxy_estimate" | "unavailable"
+  token_source?: string; // "ollama_live" | "proxy_estimate" | "unavailable"
   llm_calls?: any[];
 
   // Cost
   cost_usd: number;
-  provider_cost?: string;  // "N/A" for local Ollama
+  provider_cost?: string; // "N/A" for local Ollama
 
   // Latency
   latency_ms: number;
@@ -147,9 +147,9 @@ export interface BenchmarkCaseLiveStatus {
   ground_truth?: string;
   source_section?: string;
   pass_criteria?: string[];
-  status: 'WAITING' | 'RUNNING' | 'PASS' | 'FAIL' | 'ERROR';
-  agent_status: 'WAITING' | 'RUNNING' | 'PASS' | 'FAIL' | 'ERROR';
-  workflow_status: 'WAITING' | 'RUNNING' | 'PASS' | 'FAIL' | 'ERROR';
+  status: "WAITING" | "RUNNING" | "PASS" | "FAIL" | "ERROR";
+  agent_status: "WAITING" | "RUNNING" | "PASS" | "FAIL" | "ERROR";
+  workflow_status: "WAITING" | "RUNNING" | "PASS" | "FAIL" | "ERROR";
   agent_entitlement?: string | null;
   workflow_entitlement?: string | null;
   agent_rule?: string | null;
@@ -170,7 +170,7 @@ export interface BenchmarkCaseLiveStatus {
 
 export interface PolicyBenchmarkRunStateResponse {
   run_id: string;
-  status: 'RUNNING' | 'COMPLETED' | 'CANCELLED' | 'ERROR';
+  status: "RUNNING" | "COMPLETED" | "CANCELLED" | "ERROR";
   top_k: number;
   temperature: number;
   model: string;

@@ -18,15 +18,90 @@ from backend.services.llm import chat_call
 from backend.storage.trace_store import QA_PROMPT_VERSION, register_prompt
 
 STOPWORDS: Set[str] = {
-    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "do", "does", "did", "will", "would", "could",
-    "should", "may", "might", "shall", "can", "to", "of", "in", "for",
-    "on", "with", "at", "by", "from", "up", "about", "into", "through",
-    "and", "but", "or", "if", "while", "when", "where", "who", "which",
-    "that", "this", "these", "those", "it", "its", "all", "each", "both",
-    "more", "most", "other", "some", "no", "not", "only", "same", "than",
-    "too", "very", "just", "your", "you", "they", "we", "he", "she", "i",
-    "my", "their", "our", "his", "her", "also", "how", "what", "so", "as",
+    "the",
+    "a",
+    "an",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "being",
+    "have",
+    "has",
+    "had",
+    "do",
+    "does",
+    "did",
+    "will",
+    "would",
+    "could",
+    "should",
+    "may",
+    "might",
+    "shall",
+    "can",
+    "to",
+    "of",
+    "in",
+    "for",
+    "on",
+    "with",
+    "at",
+    "by",
+    "from",
+    "up",
+    "about",
+    "into",
+    "through",
+    "and",
+    "but",
+    "or",
+    "if",
+    "while",
+    "when",
+    "where",
+    "who",
+    "which",
+    "that",
+    "this",
+    "these",
+    "those",
+    "it",
+    "its",
+    "all",
+    "each",
+    "both",
+    "more",
+    "most",
+    "other",
+    "some",
+    "no",
+    "not",
+    "only",
+    "same",
+    "than",
+    "too",
+    "very",
+    "just",
+    "your",
+    "you",
+    "they",
+    "we",
+    "he",
+    "she",
+    "i",
+    "my",
+    "their",
+    "our",
+    "his",
+    "her",
+    "also",
+    "how",
+    "what",
+    "so",
+    "as",
 }
 
 _simple_tokenizer = re.compile(r"[\w]+")
@@ -80,7 +155,9 @@ def build_index(chunks: List[dict]) -> dict:
     for tokens in corpus_tokens:
         for t in set(tokens):
             doc_freq[t] = doc_freq.get(t, 0) + 1
-    bm25_idf = {t: math.log((n - df + 0.5) / (df + 0.5) + 1) for t, df in doc_freq.items()}
+    bm25_idf = {
+        t: math.log((n - df + 0.5) / (df + 0.5) + 1) for t, df in doc_freq.items()
+    }
     return {
         "corpus_tokens": corpus_tokens,
         "idf": compute_idf(corpus_tokens),
@@ -127,7 +204,9 @@ def bm25_scores_for_corpus(query: str, index: dict) -> List[float]:
     ]
 
 
-def search_chunks(query: str, chunks: List[dict], index: dict, top_k: int = 4) -> List[dict]:
+def search_chunks(
+    query: str, chunks: List[dict], index: dict, top_k: int = 4
+) -> List[dict]:
     if not chunks:
         return []
     query_tokens = tokenize(query)
@@ -167,7 +246,8 @@ def reciprocal_rank_fusion(store: Any, query: str, top_k: int = 5) -> List[dict]
 
     max_possible = 2.0 / (RRF_K + 1)
     rrf_scores = [
-        (1.0 / (RRF_K + embed_rank[i] + 1) + 1.0 / (RRF_K + keyword_rank[i] + 1)) / max_possible
+        (1.0 / (RRF_K + embed_rank[i] + 1) + 1.0 / (RRF_K + keyword_rank[i] + 1))
+        / max_possible
         for i in range(n)
     ]
 
@@ -183,7 +263,9 @@ def reciprocal_rank_fusion(store: Any, query: str, top_k: int = 5) -> List[dict]
     ]
 
 
-def hybrid_search(store: Any, query: str, top_k: int = 5, alpha: float = HYBRID_ALPHA) -> List[dict]:
+def hybrid_search(
+    store: Any, query: str, top_k: int = 5, alpha: float = HYBRID_ALPHA
+) -> List[dict]:
     """Weighted blend of embedding similarity and TF-IDF similarity."""
     if not store.chunks:
         return []
@@ -216,9 +298,15 @@ def hybrid_search(store: Any, query: str, top_k: int = 5, alpha: float = HYBRID_
 
 
 _DONT_KNOW_MARKERS = (
-    "i don't know", "i do not know", "cannot answer", "can't answer",
-    "not enough information", "doesn't contain", "does not contain",
-    "not available in the", "no information",
+    "i don't know",
+    "i do not know",
+    "cannot answer",
+    "can't answer",
+    "not enough information",
+    "doesn't contain",
+    "does not contain",
+    "not available in the",
+    "no information",
 )
 
 
@@ -245,10 +333,31 @@ def validate_context(
         return rerank_score >= 5.0
     if query is not None:
         META_QUESTION_WORDS = {
-            "meaning", "mean", "definition", "define", "explain", "explanation",
-            "describe", "description", "overview", "detail", "details", "tell",
-            "show", "give", "list", "state", "clarify", "understand", "concept",
-            "purpose", "reason", "procedure", "process", "rule", "rules"
+            "meaning",
+            "mean",
+            "definition",
+            "define",
+            "explain",
+            "explanation",
+            "describe",
+            "description",
+            "overview",
+            "detail",
+            "details",
+            "tell",
+            "show",
+            "give",
+            "list",
+            "state",
+            "clarify",
+            "understand",
+            "concept",
+            "purpose",
+            "reason",
+            "procedure",
+            "process",
+            "rule",
+            "rules",
         }
         query_tokens = set(tokenize(query))
         if query_tokens:
@@ -285,7 +394,9 @@ def estimate_tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
 
-def fit_to_token_budget(results: List[dict], max_tokens: int = MAX_CONTEXT_TOKENS) -> List[dict]:
+def fit_to_token_budget(
+    results: List[dict], max_tokens: int = MAX_CONTEXT_TOKENS
+) -> List[dict]:
     kept: List[dict] = []
     used = 0
     for r in results:
@@ -303,7 +414,7 @@ QA_SYSTEM_PROMPT = register_prompt(
         "You are a grounded policy question-answering assistant. Answer using ONLY the "
         "document excerpts provided. Cite every fact with its source number like [1] or [2]. "
         "If the excerpts do not contain enough information to answer the question, reply "
-        "exactly with: \"I don't know.\" Do not use outside knowledge.\n\n"
+        'exactly with: "I don\'t know." Do not use outside knowledge.\n\n'
         "COMPLETENESS & CLAUSE COVERAGE CONTRACT:\n"
         "When the provided excerpts contain multiple qualifying conditions, "
         "prerequisites, approval tiers, calculations, entitlements, exceptions, "
@@ -333,7 +444,11 @@ def build_qa_user_prompt(query: str, results: List[dict]) -> str:
         if r.get("section"):
             loc += f", section: {r['section']}"
         context_blocks.append(f"[{i}] {loc}\n{r['text']}")
-    return "DOCUMENTS:\n\n" + "\n\n".join(context_blocks) + f"\n\nQUESTION: {query}\n\nANSWER:"
+    return (
+        "DOCUMENTS:\n\n"
+        + "\n\n".join(context_blocks)
+        + f"\n\nQUESTION: {query}\n\nANSWER:"
+    )
 
 
 def generate_answer(query: str, results: List[dict], temperature: float = 0.3) -> str:
@@ -415,6 +530,3 @@ _reciprocal_rank_fusion = reciprocal_rank_fusion
 _hybrid_search = hybrid_search
 _estimate_tokens = estimate_tokens
 _build_qa_user_prompt = build_qa_user_prompt
-
-
-

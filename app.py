@@ -5,6 +5,7 @@ This module serves as the backwards-compatible entrypoint and re-export facade,
 exposing configuration, storage layers, services, evaluation metrics, and the
 primary FastAPI application from the clean, modular `backend/` package.
 """
+
 from __future__ import annotations
 
 import os
@@ -223,6 +224,7 @@ from backend.services.embeddings import (
     embed_texts,
     embeddings_configured,
 )
+
 _embeddings_configured = embeddings_configured
 
 from backend.services.evaluation_runner import (
@@ -233,6 +235,7 @@ from backend.services.llm import (
     chat_call,
     chat_configured,
 )
+
 _chat_configured = chat_configured
 _chat_call = chat_call
 from backend.services.reranker import (

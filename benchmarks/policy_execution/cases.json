@@ -51,7 +51,12 @@
     "source_section": "Section 5.3.2",
     "expected_value": "Rate of 2 working days per month (1 day full pay / 1 day half pay), with a minimum of 7 days full pay and 7 days half pay (maximum 3 months full / 3 months half).",
     "tenure_dependency": "Confirmed tenure >= 2 months (tenure 14 months).",
-    "deterministic_pass_criteria": ["2 working days", "full pay", "half pay", "7 days"]
+    "deterministic_pass_criteria": [
+      "2 working days",
+      "full pay",
+      "half pay",
+      "7 days"
+    ]
   },
   {
     "case_id": "case_07",

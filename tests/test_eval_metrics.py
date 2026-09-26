@@ -51,8 +51,16 @@ class TestEvalMetrics(unittest.TestCase):
 
     def test_rank_1_hit(self):
         retrieved = [
-            {"filename": "HRPolicy.pdf", "section": "5.1 Annual Leave", "text": "20 days annual leave"},
-            {"filename": "Security.pdf", "section": "2.0 Password", "text": "Use strong passwords"},
+            {
+                "filename": "HRPolicy.pdf",
+                "section": "5.1 Annual Leave",
+                "text": "20 days annual leave",
+            },
+            {
+                "filename": "Security.pdf",
+                "section": "2.0 Password",
+                "text": "Use strong passwords",
+            },
         ]
         hit, rr, rank = _rr_rank(retrieved, expected_doc="HRPolicy.pdf")
         self.assertTrue(hit)
@@ -86,8 +94,16 @@ class TestEvalMetrics(unittest.TestCase):
 
     def test_section_vs_doc_matching(self):
         retrieved = [
-            {"filename": "Handbook.pdf", "section": "4.2 Probation Period", "text": "Probation is 3 months"},
-            {"filename": "Handbook.pdf", "section": "9.1 Exit Policy", "text": "Notice is 2 months"},
+            {
+                "filename": "Handbook.pdf",
+                "section": "4.2 Probation Period",
+                "text": "Probation is 3 months",
+            },
+            {
+                "filename": "Handbook.pdf",
+                "section": "9.1 Exit Policy",
+                "text": "Notice is 2 months",
+            },
         ]
         # Section match on Probation Period
         hit_sec, rr_sec, rank_sec = _rr_rank(retrieved, expected_section="Probation")
@@ -95,7 +111,9 @@ class TestEvalMetrics(unittest.TestCase):
         self.assertEqual(rank_sec, 1)
 
         # Section match on Exit Policy (rank 2)
-        hit_exit, rr_exit, rank_exit = _rr_rank(retrieved, expected_section="Exit Policy")
+        hit_exit, rr_exit, rank_exit = _rr_rank(
+            retrieved, expected_section="Exit Policy"
+        )
         self.assertTrue(hit_exit)
         self.assertEqual(rank_exit, 2)
         self.assertEqual(rr_exit, 0.5)
@@ -117,16 +135,32 @@ class TestEvalMetrics(unittest.TestCase):
 
     def test_distinct_id_isolation(self):
         # Two queries with exact same question string but distinct IDs
-        q1 = {"id": "q_abc1", "question": "What is the policy?", "expected_doc": "DocA.pdf"}
-        q2 = {"id": "q_xyz2", "question": "What is the policy?", "expected_doc": "DocB.pdf"}
+        q1 = {
+            "id": "q_abc1",
+            "question": "What is the policy?",
+            "expected_doc": "DocA.pdf",
+        }
+        q2 = {
+            "id": "q_xyz2",
+            "question": "What is the policy?",
+            "expected_doc": "DocB.pdf",
+        }
 
         self.assertNotEqual(q1["id"], q2["id"])
 
     def test_arbitrary_strategy_order_id_lookup(self):
         # Strategy A returns Q1, Q2, Q3
         # Strategy B returns Q3, Q1, Q2
-        results_a = [{"id": "q1", "hit": True, "rank": 1}, {"id": "q2", "hit": False, "rank": None}, {"id": "q3", "hit": True, "rank": 2}]
-        results_b = [{"id": "q3", "hit": True, "rank": 1}, {"id": "q1", "hit": True, "rank": 3}, {"id": "q2", "hit": True, "rank": 2}]
+        results_a = [
+            {"id": "q1", "hit": True, "rank": 1},
+            {"id": "q2", "hit": False, "rank": None},
+            {"id": "q3", "hit": True, "rank": 2},
+        ]
+        results_b = [
+            {"id": "q3", "hit": True, "rank": 1},
+            {"id": "q1", "hit": True, "rank": 3},
+            {"id": "q2", "hit": True, "rank": 2},
+        ]
 
         map_a = {r["id"]: r for r in results_a}
         map_b = {r["id"]: r for r in results_b}
@@ -142,17 +176,25 @@ class TestEvalMetrics(unittest.TestCase):
         # Case 1: Duplicate IDs
         dup_results = [{"id": "q1"}, {"id": "q1"}, {"id": "q2"}]
         dup_ids = [r["id"] for r in dup_results]
-        self.assertNotEqual(len(dup_ids), len(set(dup_ids)), "Duplicate IDs must be detectable")
+        self.assertNotEqual(
+            len(dup_ids), len(set(dup_ids)), "Duplicate IDs must be detectable"
+        )
 
         # Case 2: Missing submitted IDs
         missing_results = [{"id": "q1"}, {"id": "q2"}]
         missing_ids = {r["id"] for r in missing_results}
-        self.assertTrue(any(q not in missing_ids for q in submitted_ids), "Missing IDs must be detectable")
+        self.assertTrue(
+            any(q not in missing_ids for q in submitted_ids),
+            "Missing IDs must be detectable",
+        )
 
         # Case 3: Unexpected IDs
         extra_results = [{"id": "q1"}, {"id": "q2"}, {"id": "q3"}, {"id": "q99"}]
         extra_ids = {r["id"] for r in extra_results}
-        self.assertTrue(any(r not in submitted_ids for r in extra_ids), "Unexpected IDs must be detectable")
+        self.assertTrue(
+            any(r not in submitted_ids for r in extra_ids),
+            "Unexpected IDs must be detectable",
+        )
 
     def test_key_takeaways_tie_breaking_mrr(self):
         # When Hit-Rate is tied, higher MRR must win
@@ -171,15 +213,17 @@ class TestEvalMetrics(unittest.TestCase):
         def normalize_hit(val):
             if isinstance(val, bool):
                 return val
-            if val in (1, '1', 'true'):
+            if val in (1, "1", "true"):
                 return True
-            if val in (0, '0', 'false'):
+            if val in (0, "0", "false"):
                 return False
             raise ValueError(f"Invalid hit value: {val}")
 
         self.assertTrue(normalize_hit(True))
         self.assertFalse(normalize_hit(False))
-        self.assertFalse(normalize_hit("false"))  # Must NOT coerce to True like Javascript !!"false"
+        self.assertFalse(
+            normalize_hit("false")
+        )  # Must NOT coerce to True like Javascript !!"false"
         self.assertTrue(normalize_hit("true"))
         self.assertTrue(normalize_hit(1))
         self.assertFalse(normalize_hit(0))
@@ -202,7 +246,9 @@ class TestEvalMetrics(unittest.TestCase):
                 "context": [
                     {
                         "text": "Employee: John Smith has SSN 123-45-6789 and phone 555-123-4567",
-                        "metadata": {"nested_info": "Reach out to hr@company.com for employee EMP-9988"}
+                        "metadata": {
+                            "nested_info": "Reach out to hr@company.com for employee EMP-9988"
+                        },
                     }
                 ],
                 "answer": "Contact staff at john@example.com",
@@ -218,17 +264,29 @@ class TestEvalMetrics(unittest.TestCase):
             self.assertNotIn("john@example.com", saved["answer"])
             self.assertIn("[REDACTED_EMAIL]", saved["answer"])
             # Assert deeply nested dictionary/list redaction
-            self.assertNotIn("hr@company.com", saved["context"][0]["metadata"]["nested_info"])
-            self.assertIn("[REDACTED_EMAIL]", saved["context"][0]["metadata"]["nested_info"])
+            self.assertNotIn(
+                "hr@company.com", saved["context"][0]["metadata"]["nested_info"]
+            )
+            self.assertIn(
+                "[REDACTED_EMAIL]", saved["context"][0]["metadata"]["nested_info"]
+            )
             self.assertNotIn("EMP-9988", saved["context"][0]["metadata"]["nested_info"])
-            self.assertIn("[REDACTED_EMP_ID]", saved["context"][0]["metadata"]["nested_info"])
+            self.assertIn(
+                "[REDACTED_EMP_ID]", saved["context"][0]["metadata"]["nested_info"]
+            )
         finally:
             import os
+
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
     def test_durable_prompt_registry_persistence(self):
-        from backend.storage.trace_store import register_prompt, get_prompt, PROMPT_REGISTRY, PROMPTS_DIR
+        from backend.storage.trace_store import (
+            register_prompt,
+            get_prompt,
+            PROMPT_REGISTRY,
+            PROMPTS_DIR,
+        )
 
         version = "test-durable-prompt-v1"
         prompt_text = "You are an HR assistant adhering to strict company policies."
@@ -336,7 +394,10 @@ class TestEvalMetrics(unittest.TestCase):
 
     def test_sample_trace_invalid_n(self):
         import subprocess
-        sample_script = str(Path(__file__).resolve().parent.parent / "scripts" / "sample_trace.py")
+
+        sample_script = str(
+            Path(__file__).resolve().parent.parent / "scripts" / "sample_trace.py"
+        )
         # Run sample_trace.py CLI with --n 0
         res = subprocess.run(
             [sys.executable, sample_script, "--n", "0", "--seed", "42"],
@@ -348,17 +409,24 @@ class TestEvalMetrics(unittest.TestCase):
 
     def test_is_dont_know_edge_cases(self):
         from app import _is_dont_know
+
         self.assertTrue(_is_dont_know(None))
         self.assertTrue(_is_dont_know(""))
         self.assertTrue(_is_dont_know("   "))
         self.assertTrue(_is_dont_know("I don't know."))
         self.assertTrue(_is_dont_know("I do not know"))
-        self.assertTrue(_is_dont_know("The document does not contain this information."))
-        self.assertFalse(_is_dont_know("The policy specifies 20 days of annual leave per section 5.2."))
-
+        self.assertTrue(
+            _is_dont_know("The document does not contain this information.")
+        )
+        self.assertFalse(
+            _is_dont_know(
+                "The policy specifies 20 days of annual leave per section 5.2."
+            )
+        )
 
     def test_qdrant_chunk_vector_length_mismatch(self):
         from backend.storage.qdrant_store import QdrantVectorStore
+
         store = QdrantVectorStore("test_session")
         chunks = [{"id": "c1", "text": "foo"}, {"id": "c2", "text": "bar"}]
         vectors = [[0.1, 0.2]]  # 2 chunks vs 1 vector
@@ -368,6 +436,7 @@ class TestEvalMetrics(unittest.TestCase):
 
     def test_qdrant_vectorless_insert_rejected(self):
         from backend.storage.qdrant_store import QdrantVectorStore
+
         store = QdrantVectorStore("test_session")
         chunks = [{"id": "c1", "text": "foo"}]
         vectors = []
@@ -386,7 +455,7 @@ class TestEvalMetrics(unittest.TestCase):
             "http://192.168.1.1",
             "http://10.0.0.1",
             "http://example.com:6379",  # Unauthorized port
-            "ftp://example.com",        # Unauthorized scheme
+            "ftp://example.com",  # Unauthorized scheme
         ]
         for url in blocked_urls:
             with self.subTest(url=url):
@@ -407,15 +476,19 @@ class TestEvalMetrics(unittest.TestCase):
                 # Log a trace for session A
                 sid_a = "session_user_a_12345"
                 sid_a_hash = hashlib.sha256(sid_a.encode()).hexdigest()[:16]
-                trace_id = test_store.log({
-                    "session_id_hash": sid_a_hash,
-                    "question": "What is the policy?",
-                    "prompt_version": "qa-answer-v1",
-                    "model": "grok-4.3",
-                    "retrieved": [{"filename": "doc.pdf", "page": 1, "text": "Policy detail"}],
-                    "raw_output": "The policy detail is [1].",
-                    "answer": "The policy detail is [1].",
-                })
+                trace_id = test_store.log(
+                    {
+                        "session_id_hash": sid_a_hash,
+                        "question": "What is the policy?",
+                        "prompt_version": "qa-answer-v1",
+                        "model": "grok-4.3",
+                        "retrieved": [
+                            {"filename": "doc.pdf", "page": 1, "text": "Policy detail"}
+                        ],
+                        "raw_output": "The policy detail is [1].",
+                        "answer": "The policy detail is [1].",
+                    }
+                )
 
                 client = make_client(app)
 
@@ -430,7 +503,9 @@ class TestEvalMetrics(unittest.TestCase):
                 # Session A can replay their own trace
                 set_session(client, sid_a)
 
-                with patch("app._chat_call", return_value="The replayed policy detail is [1]."):
+                with patch(
+                    "app._chat_call", return_value="The replayed policy detail is [1]."
+                ):
                     resp_ok = client.post(f"/replay/{trace_id}")
                     self.assertEqual(resp_ok.status_code, 200)
                     data_ok = resp_ok.json()
@@ -449,15 +524,19 @@ class TestEvalMetrics(unittest.TestCase):
             with patch("app.TRACES", test_store):
                 sid = "session_missing_prompt_test"
                 sid_hash = hashlib.sha256(sid.encode()).hexdigest()[:16]
-                trace_id = test_store.log({
-                    "session_id_hash": sid_hash,
-                    "question": "What is the policy?",
-                    "prompt_version": "non_existent_prompt_v999",
-                    "model": "grok-4.3",
-                    "retrieved": [{"filename": "doc.pdf", "page": 1, "text": "Policy detail"}],
-                    "raw_output": "The policy detail.",
-                    "answer": "The policy detail.",
-                })
+                trace_id = test_store.log(
+                    {
+                        "session_id_hash": sid_hash,
+                        "question": "What is the policy?",
+                        "prompt_version": "non_existent_prompt_v999",
+                        "model": "grok-4.3",
+                        "retrieved": [
+                            {"filename": "doc.pdf", "page": 1, "text": "Policy detail"}
+                        ],
+                        "raw_output": "The policy detail.",
+                        "answer": "The policy detail.",
+                    }
+                )
 
                 client = make_client(app)
                 set_session(client, sid)
@@ -484,16 +563,20 @@ class TestEvalMetrics(unittest.TestCase):
             with patch("app.TRACES", test_store):
                 sid = "session_model_test"
                 sid_hash = hashlib.sha256(sid.encode()).hexdigest()[:16]
-                trace_id = test_store.log({
-                    "session_id_hash": sid_hash,
-                    "question": "What is the policy?",
-                    "prompt_version": "qa-answer-v1",
-                    "model": "custom-special-model-v3",
-                    "temperature": 0.35,
-                    "retrieved": [{"filename": "doc.pdf", "page": 1, "text": "Policy text"}],
-                    "raw_output": "Output text.",
-                    "answer": "Output text.",
-                })
+                trace_id = test_store.log(
+                    {
+                        "session_id_hash": sid_hash,
+                        "question": "What is the policy?",
+                        "prompt_version": "qa-answer-v1",
+                        "model": "custom-special-model-v3",
+                        "temperature": 0.35,
+                        "retrieved": [
+                            {"filename": "doc.pdf", "page": 1, "text": "Policy text"}
+                        ],
+                        "raw_output": "Output text.",
+                        "answer": "Output text.",
+                    }
+                )
 
                 client = make_client(app)
                 set_session(client, sid)
@@ -515,15 +598,18 @@ class TestEvalMetrics(unittest.TestCase):
         set_session(client, "test_ask_error_session")
 
         # Mock vector store to simulate Qdrant outage during /ask
-        with patch("app._get_store") as mock_get_store, \
-             patch("app._embeddings_configured", return_value=True), \
-             patch("app._chat_configured", return_value=True):
+        with patch("app._get_store") as mock_get_store, patch(
+            "app._embeddings_configured", return_value=True
+        ), patch("app._chat_configured", return_value=True):
             mock_store = mock_get_store.return_value
             mock_store.chunks = [{"id": "c1", "text": "sample"}]
             mock_store.vectors = [[0.1, 0.2]]
             mock_store.filtered_by_method.return_value = mock_store
 
-            with patch("app.reciprocal_rank_fusion", side_effect=RetrievalBackendError("Qdrant cluster unavailable")):
+            with patch(
+                "app.reciprocal_rank_fusion",
+                side_effect=RetrievalBackendError("Qdrant cluster unavailable"),
+            ):
                 resp = client.post("/ask", json={"query": "test query"})
                 self.assertEqual(resp.status_code, 503)
                 data = resp.json()
@@ -567,25 +653,41 @@ class TestEvalMetrics(unittest.TestCase):
         client = make_client(app)
         set_session(client, "test_rollback_file_move")
 
-        with patch("app._get_store") as mock_get_store, \
-             patch("app.embed_texts", return_value=[[0.1, 0.2]]), \
-             patch("app._embeddings_configured", return_value=True), \
-             patch("pathlib.Path.replace", side_effect=OSError("Permission denied on destination")):
+        with patch("app._get_store") as mock_get_store, patch(
+            "app.embed_texts", return_value=[[0.1, 0.2]]
+        ), patch("app._embeddings_configured", return_value=True), patch(
+            "pathlib.Path.replace",
+            side_effect=OSError("Permission denied on destination"),
+        ):
             mock_store = MagicMock()
             mock_store.chunks = []
             mock_get_store.return_value = mock_store
 
             files = {
-                "files": ("test_doc.txt", io.BytesIO(b"Hello world document text content for testing."), "text/plain")
+                "files": (
+                    "test_doc.txt",
+                    io.BytesIO(b"Hello world document text content for testing."),
+                    "text/plain",
+                )
             }
             resp = client.post("/upload", files=files)
             self.assertEqual(resp.status_code, 200)
             res_data = resp.json()
             mock_store.add.assert_called_once()
             mock_store.remove_doc.assert_called_once()
-            self.assertTrue(any("Failed to index" in doc.get("error", "") for doc in res_data.get("documents", [])))
+            self.assertTrue(
+                any(
+                    "Failed to index" in doc.get("error", "")
+                    for doc in res_data.get("documents", [])
+                )
+            )
             # Successful rollback marks cleanup_complete=True
-            self.assertTrue(all(doc.get("cleanup_complete") is True for doc in res_data.get("documents", [])))
+            self.assertTrue(
+                all(
+                    doc.get("cleanup_complete") is True
+                    for doc in res_data.get("documents", [])
+                )
+            )
 
     def test_upload_post_store_manifest_failure_rollback(self):
         """If store.add() succeeds and file moves but manifest save fails, rollback doc from vector store."""
@@ -596,28 +698,45 @@ class TestEvalMetrics(unittest.TestCase):
         client = make_client(app)
         set_session(client, "test_rollback_manifest")
 
-        with patch("app._get_store") as mock_get_store, \
-             patch("app.embed_texts", return_value=[[0.1, 0.2]]), \
-             patch("app._embeddings_configured", return_value=True), \
-             patch("app._save_session_manifest", side_effect=OSError("Disk full writing manifest")):
+        with patch("app._get_store") as mock_get_store, patch(
+            "app.embed_texts", return_value=[[0.1, 0.2]]
+        ), patch("app._embeddings_configured", return_value=True), patch(
+            "app._save_session_manifest",
+            side_effect=OSError("Disk full writing manifest"),
+        ):
             mock_store = MagicMock()
             mock_store.chunks = []
             mock_get_store.return_value = mock_store
 
             files = {
-                "files": ("test_manifest_doc.txt", io.BytesIO(b"Hello world document text content for testing."), "text/plain")
+                "files": (
+                    "test_manifest_doc.txt",
+                    io.BytesIO(b"Hello world document text content for testing."),
+                    "text/plain",
+                )
             }
             resp = client.post("/upload", files=files)
             self.assertEqual(resp.status_code, 200)
             res_data = resp.json()
             mock_store.add.assert_called_once()
             mock_store.remove_doc.assert_called_once()
-            self.assertTrue(any("Failed to index" in doc.get("error", "") for doc in res_data.get("documents", [])))
-            self.assertTrue(all(doc.get("cleanup_complete") is True for doc in res_data.get("documents", [])))
+            self.assertTrue(
+                any(
+                    "Failed to index" in doc.get("error", "")
+                    for doc in res_data.get("documents", [])
+                )
+            )
+            self.assertTrue(
+                all(
+                    doc.get("cleanup_complete") is True
+                    for doc in res_data.get("documents", [])
+                )
+            )
 
     def test_upload_post_store_rollback_failure_tracked(self):
         """If store.add() succeeds, post-store operation fails, and store.remove_doc ALSO fails,
-        cleanup_complete=False must be reported and orphan metadata must be recorded in ORPHANED_DOCS."""
+        cleanup_complete=False must be reported and orphan metadata must be recorded in ORPHANED_DOCS.
+        """
         import io
         from unittest.mock import patch, MagicMock
         from app import app, ORPHANED_DOCS
@@ -629,17 +748,24 @@ class TestEvalMetrics(unittest.TestCase):
         client = make_client(app)
         set_session(client, sid)
 
-        with patch("app._get_store") as mock_get_store, \
-             patch("app.embed_texts", return_value=[[0.1, 0.2]]), \
-             patch("app._embeddings_configured", return_value=True), \
-             patch("pathlib.Path.replace", side_effect=OSError("Disk write error")):
+        with patch("app._get_store") as mock_get_store, patch(
+            "app.embed_texts", return_value=[[0.1, 0.2]]
+        ), patch("app._embeddings_configured", return_value=True), patch(
+            "pathlib.Path.replace", side_effect=OSError("Disk write error")
+        ):
             mock_store = MagicMock()
             mock_store.chunks = []
-            mock_store.remove_doc.side_effect = RetrievalBackendError("Vector backend timed out during rollback")
+            mock_store.remove_doc.side_effect = RetrievalBackendError(
+                "Vector backend timed out during rollback"
+            )
             mock_get_store.return_value = mock_store
 
             files = {
-                "files": ("doc_fail.txt", io.BytesIO(b"Document content for rollback failure test."), "text/plain")
+                "files": (
+                    "doc_fail.txt",
+                    io.BytesIO(b"Document content for rollback failure test."),
+                    "text/plain",
+                )
             }
             resp = client.post("/upload", files=files)
             self.assertEqual(resp.status_code, 200)
@@ -647,7 +773,9 @@ class TestEvalMetrics(unittest.TestCase):
             failed_doc = res_data["documents"][0]
 
             self.assertFalse(failed_doc.get("cleanup_complete"))
-            self.assertIn("Vector store rollback failed", failed_doc.get("cleanup_error", ""))
+            self.assertIn(
+                "Vector store rollback failed", failed_doc.get("cleanup_error", "")
+            )
             self.assertIsNotNone(failed_doc.get("doc_id"))
             # Orphan metadata recorded in ORPHANED_DOCS
             self.assertIn(sid, ORPHANED_DOCS)
@@ -663,21 +791,35 @@ class TestEvalMetrics(unittest.TestCase):
         client = make_client(app)
         set_session(client, "test_qdrant_embed_fail")
 
-        with patch("app.VECTOR_BACKEND", "qdrant"), \
-             patch("app._embeddings_configured", return_value=True), \
-             patch("app.embed_texts", side_effect=RuntimeError("Embedding model service unavailable")), \
-             patch("app._get_store") as mock_get_store:
+        with patch("app.VECTOR_BACKEND", "qdrant"), patch(
+            "app._embeddings_configured", return_value=True
+        ), patch(
+            "app.embed_texts",
+            side_effect=RuntimeError("Embedding model service unavailable"),
+        ), patch(
+            "app._get_store"
+        ) as mock_get_store:
             mock_store = MagicMock()
             mock_get_store.return_value = mock_store
 
             files = {
-                "files": ("test_qdrant.txt", io.BytesIO(b"Document content for qdrant embedding test."), "text/plain")
+                "files": (
+                    "test_qdrant.txt",
+                    io.BytesIO(b"Document content for qdrant embedding test."),
+                    "text/plain",
+                )
             }
             resp = client.post("/upload", files=files)
             self.assertEqual(resp.status_code, 200)
             res_data = resp.json()
             mock_store.add.assert_not_called()
-            self.assertTrue(any("Embedding generation failed on Qdrant backend" in doc.get("error", "") for doc in res_data.get("documents", [])))
+            self.assertTrue(
+                any(
+                    "Embedding generation failed on Qdrant backend"
+                    in doc.get("error", "")
+                    for doc in res_data.get("documents", [])
+                )
+            )
 
     def test_load_url_qdrant_embeddings_unavailable_returns_503(self):
         """When VECTOR_BACKEND=qdrant and embeddings are unconfigured, /load-url returns 503 without calling store.add with []."""
@@ -688,17 +830,20 @@ class TestEvalMetrics(unittest.TestCase):
         set_session(client, "test_load_url_qdrant")
 
         long_text = " ".join(["content_word"] * 40)
-        with patch("app.VECTOR_BACKEND", "qdrant"), \
-             patch("app._embeddings_configured", return_value=False), \
-             patch("app.fetch_web_page", return_value=("Test Page", long_text)), \
-             patch("app._get_store") as mock_get_store:
+        with patch("app.VECTOR_BACKEND", "qdrant"), patch(
+            "app._embeddings_configured", return_value=False
+        ), patch("app.fetch_web_page", return_value=("Test Page", long_text)), patch(
+            "app._get_store"
+        ) as mock_get_store:
             mock_store = MagicMock()
             mock_get_store.return_value = mock_store
 
             resp = client.post("/load-url", json={"url": "http://example.com/test"})
             self.assertEqual(resp.status_code, 503)
             data = resp.json()
-            self.assertIn("Qdrant vector backend requires embeddings", data.get("error", ""))
+            self.assertIn(
+                "Qdrant vector backend requires embeddings", data.get("error", "")
+            )
             mock_store.add.assert_not_called()
 
     def test_upload_cancellation_delete_failure_reports_incomplete(self):
@@ -723,17 +868,24 @@ class TestEvalMetrics(unittest.TestCase):
             cancelled_map[upload_id] = time.time()
             return [[0.1, 0.2]]
 
-        with patch("app.CANCELLED_UPLOADS", cancelled_map), \
-             patch("app._get_store") as mock_get_store, \
-             patch("app.embed_texts", side_effect=mock_embed), \
-             patch("app._embeddings_configured", return_value=True):
+        with patch("app.CANCELLED_UPLOADS", cancelled_map), patch(
+            "app._get_store"
+        ) as mock_get_store, patch("app.embed_texts", side_effect=mock_embed), patch(
+            "app._embeddings_configured", return_value=True
+        ):
             mock_store = MagicMock()
             mock_store.chunks = []
-            mock_store.remove_doc.side_effect = RetrievalBackendError("Qdrant connection timed out during deletion")
+            mock_store.remove_doc.side_effect = RetrievalBackendError(
+                "Qdrant connection timed out during deletion"
+            )
             mock_get_store.return_value = mock_store
 
             files = {
-                "files": ("doc1.txt", io.BytesIO(b"Doc 1 text content for cancellation test."), "text/plain")
+                "files": (
+                    "doc1.txt",
+                    io.BytesIO(b"Doc 1 text content for cancellation test."),
+                    "text/plain",
+                )
             }
             resp = client.post("/upload", files=files, data={"upload_id": upload_id})
             self.assertEqual(resp.status_code, 200)
@@ -767,17 +919,22 @@ class TestEvalMetrics(unittest.TestCase):
             cancelled_map[upload_id] = time.time()
             return [[0.1, 0.2]]
 
-        with patch("app.CANCELLED_UPLOADS", cancelled_map), \
-             patch("app._get_store") as mock_get_store, \
-             patch("app.embed_texts", side_effect=mock_embed), \
-             patch("app._embeddings_configured", return_value=True):
+        with patch("app.CANCELLED_UPLOADS", cancelled_map), patch(
+            "app._get_store"
+        ) as mock_get_store, patch("app.embed_texts", side_effect=mock_embed), patch(
+            "app._embeddings_configured", return_value=True
+        ):
             mock_store = MagicMock()
             mock_store.chunks = []
             mock_store.remove_doc.return_value = 1  # Deletion succeeds
             mock_get_store.return_value = mock_store
 
             files = {
-                "files": ("doc_clean.txt", io.BytesIO(b"Doc text for clean cancellation."), "text/plain")
+                "files": (
+                    "doc_clean.txt",
+                    io.BytesIO(b"Doc text for clean cancellation."),
+                    "text/plain",
+                )
             }
             resp = client.post("/upload", files=files, data={"upload_id": upload_id})
             self.assertEqual(resp.status_code, 200)
@@ -884,7 +1041,12 @@ class TestEvalMetrics(unittest.TestCase):
         import tempfile
         from pathlib import Path
         from unittest.mock import patch
-        from app import ORPHANED_DOCS, _record_orphaned_doc, _resolve_orphaned_doc, _load_orphaned_docs
+        from app import (
+            ORPHANED_DOCS,
+            _record_orphaned_doc,
+            _resolve_orphaned_doc,
+            _load_orphaned_docs,
+        )
 
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_log = Path(tmpdir) / "orphans.jsonl"
@@ -923,18 +1085,28 @@ class TestEvalMetrics(unittest.TestCase):
             client = make_client(app)
             set_session(client, sid)
 
-            with patch("app.ORPHAN_LOG_PATH", temp_log), \
-                 patch("app._get_store") as mock_get_store, \
-                 patch("app.embed_texts", return_value=[[0.1, 0.2]]), \
-                 patch("app._embeddings_configured", return_value=True), \
-                 patch("pathlib.Path.replace", side_effect=OSError("Disk full writing storage")):
+            with patch("app.ORPHAN_LOG_PATH", temp_log), patch(
+                "app._get_store"
+            ) as mock_get_store, patch(
+                "app.embed_texts", return_value=[[0.1, 0.2]]
+            ), patch(
+                "app._embeddings_configured", return_value=True
+            ), patch(
+                "pathlib.Path.replace", side_effect=OSError("Disk full writing storage")
+            ):
                 mock_store = MagicMock()
                 mock_store.chunks = []
-                mock_store.remove_doc.side_effect = RetrievalBackendError("Backend unreachable on delete")
+                mock_store.remove_doc.side_effect = RetrievalBackendError(
+                    "Backend unreachable on delete"
+                )
                 mock_get_store.return_value = mock_store
 
                 files = {
-                    "files": ("retryable.txt", io.BytesIO(b"Document content for retryable orphan test."), "text/plain")
+                    "files": (
+                        "retryable.txt",
+                        io.BytesIO(b"Document content for retryable orphan test."),
+                        "text/plain",
+                    )
                 }
                 resp = client.post("/upload", files=files)
                 self.assertEqual(resp.status_code, 200)
@@ -943,7 +1115,9 @@ class TestEvalMetrics(unittest.TestCase):
 
                 # HTTP response exposes failure contract
                 self.assertFalse(failed_doc["cleanup_complete"])
-                self.assertIn("Vector store rollback failed", failed_doc["cleanup_error"])
+                self.assertIn(
+                    "Vector store rollback failed", failed_doc["cleanup_error"]
+                )
                 doc_id = failed_doc["doc_id"]
                 self.assertIsNotNone(doc_id)
 
@@ -960,7 +1134,9 @@ class TestEvalMetrics(unittest.TestCase):
 
                 # Verify admin observability includes stored_path for operator reconciliation
                 with patch("app.ADMIN_API_KEY", "admin_secret"):
-                    admin_resp = client.get("/orphans", headers={"X-Admin-Key": "admin_secret"})
+                    admin_resp = client.get(
+                        "/orphans", headers={"X-Admin-Key": "admin_secret"}
+                    )
                     self.assertEqual(admin_resp.status_code, 200)
                     admin_data = admin_resp.json()
                     self.assertTrue(admin_data.get("admin"))
@@ -971,6 +1147,7 @@ class TestEvalMetrics(unittest.TestCase):
     def test_orphans_unauthenticated_rejected(self):
         """GET /orphans without an active session or admin credentials must return 401 Unauthorized."""
         from app import app
+
         client = make_client(app)
         resp = client.get("/orphans")
         self.assertEqual(resp.status_code, 401)
@@ -986,8 +1163,20 @@ class TestEvalMetrics(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_log = Path(tmpdir) / "orphans.jsonl"
             with patch("app.ORPHAN_LOG_PATH", temp_log):
-                _record_orphaned_doc("user_sess_1", "doc_u1", "user1_doc.pdf", "Error 1", "/secret/path/user1.pdf")
-                _record_orphaned_doc("user_sess_2", "doc_u2", "user2_doc.pdf", "Error 2", "/secret/path/user2.pdf")
+                _record_orphaned_doc(
+                    "user_sess_1",
+                    "doc_u1",
+                    "user1_doc.pdf",
+                    "Error 1",
+                    "/secret/path/user1.pdf",
+                )
+                _record_orphaned_doc(
+                    "user_sess_2",
+                    "doc_u2",
+                    "user2_doc.pdf",
+                    "Error 2",
+                    "/secret/path/user2.pdf",
+                )
 
                 client = make_client(app)
                 set_session(client, "user_sess_1")
@@ -1013,10 +1202,15 @@ class TestEvalMetrics(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_log = Path(tmpdir) / "orphans.jsonl"
-            with patch("app.ORPHAN_LOG_PATH", temp_log), \
-                 patch("app.ADMIN_API_KEY", "admin_pass_123"):
-                _record_orphaned_doc("sess_alpha", "doc_a", "alpha.pdf", "Err A", "/data/alpha.pdf")
-                _record_orphaned_doc("sess_beta", "doc_b", "beta.pdf", "Err B", "/data/beta.pdf")
+            with patch("app.ORPHAN_LOG_PATH", temp_log), patch(
+                "app.ADMIN_API_KEY", "admin_pass_123"
+            ):
+                _record_orphaned_doc(
+                    "sess_alpha", "doc_a", "alpha.pdf", "Err A", "/data/alpha.pdf"
+                )
+                _record_orphaned_doc(
+                    "sess_beta", "doc_b", "beta.pdf", "Err B", "/data/beta.pdf"
+                )
 
                 client = make_client(app)
 
@@ -1025,7 +1219,9 @@ class TestEvalMetrics(unittest.TestCase):
                 self.assertEqual(bad_resp.status_code, 401)
 
                 # Valid Bearer token gets system-wide records
-                admin_resp = client.get("/orphans", headers={"Authorization": "Bearer admin_pass_123"})
+                admin_resp = client.get(
+                    "/orphans", headers={"Authorization": "Bearer admin_pass_123"}
+                )
                 self.assertEqual(admin_resp.status_code, 200)
                 admin_data = admin_resp.json()
                 self.assertTrue(admin_data["admin"])
@@ -1033,12 +1229,17 @@ class TestEvalMetrics(unittest.TestCase):
                 self.assertTrue(all("stored_path" in o for o in admin_data["orphans"]))
 
                 # Admin filter by session_id
-                filter_resp = client.get("/orphans?session_id=sess_beta", headers={"X-Admin-Key": "admin_pass_123"})
+                filter_resp = client.get(
+                    "/orphans?session_id=sess_beta",
+                    headers={"X-Admin-Key": "admin_pass_123"},
+                )
                 self.assertEqual(filter_resp.status_code, 200)
                 filter_data = filter_resp.json()
                 self.assertEqual(filter_data["count"], 1)
                 self.assertEqual(filter_data["orphans"][0]["doc_id"], "doc_b")
-                self.assertEqual(filter_data["orphans"][0]["stored_path"], "/data/beta.pdf")
+                self.assertEqual(
+                    filter_data["orphans"][0]["stored_path"], "/data/beta.pdf"
+                )
 
     def test_cross_worker_durable_log_visibility(self):
         """Worker B with empty memory must observe Worker A's durable orphan by reading from orphans.jsonl."""
@@ -1051,7 +1252,9 @@ class TestEvalMetrics(unittest.TestCase):
             temp_log = Path(tmpdir) / "orphans.jsonl"
             with patch("app.ORPHAN_LOG_PATH", temp_log):
                 # Worker A writes orphan to durable log
-                _record_orphaned_doc("worker_sess", "worker_doc_99", "shared.pdf", "Worker A timeout")
+                _record_orphaned_doc(
+                    "worker_sess", "worker_doc_99", "shared.pdf", "Worker A timeout"
+                )
 
                 # Simulate Worker B: clean in-memory cache
                 ORPHANED_DOCS.clear()
@@ -1084,14 +1287,18 @@ class TestEvalMetrics(unittest.TestCase):
 
             # Direct call to _record_orphaned_doc with failing file write
             orig_open = Path.open
+
             def conditional_open(self, *args, **kwargs):
                 if "orphans.jsonl" in str(self):
                     raise OSError("Disk write I/O error")
                 return orig_open(self, *args, **kwargs)
 
-            with patch("app.ORPHAN_LOG_PATH", temp_log), \
-                 patch("pathlib.Path.open", side_effect=conditional_open, autospec=True):
-                rec = _record_orphaned_doc(sid, "doc_disk_fail", "fail.pdf", "Vector rollback failed")
+            with patch("app.ORPHAN_LOG_PATH", temp_log), patch(
+                "pathlib.Path.open", side_effect=conditional_open, autospec=True
+            ):
+                rec = _record_orphaned_doc(
+                    sid, "doc_disk_fail", "fail.pdf", "Vector rollback failed"
+                )
                 self.assertTrue(rec.get("reconciliation_persistence_failed"))
                 self.assertNotIn("persisted", rec)
 
@@ -1099,21 +1306,32 @@ class TestEvalMetrics(unittest.TestCase):
             client = make_client(app)
             set_session(client, sid)
 
-            with patch("app.ORPHAN_LOG_PATH", temp_log), \
-                 patch("app._get_store") as mock_get_store, \
-                 patch("app.embed_texts", return_value=[[0.1, 0.2]]), \
-                 patch("app._embeddings_configured", return_value=True), \
-                 patch("pathlib.Path.replace", side_effect=OSError("Disk full writing storage")), \
-                 patch("pathlib.Path.open", side_effect=conditional_open, autospec=True):
+            with patch("app.ORPHAN_LOG_PATH", temp_log), patch(
+                "app._get_store"
+            ) as mock_get_store, patch(
+                "app.embed_texts", return_value=[[0.1, 0.2]]
+            ), patch(
+                "app._embeddings_configured", return_value=True
+            ), patch(
+                "pathlib.Path.replace", side_effect=OSError("Disk full writing storage")
+            ), patch(
+                "pathlib.Path.open", side_effect=conditional_open, autospec=True
+            ):
                 mock_store = MagicMock()
                 mock_store.chunks = []
-                mock_store.remove_doc.side_effect = RetrievalBackendError("Delete failed")
+                mock_store.remove_doc.side_effect = RetrievalBackendError(
+                    "Delete failed"
+                )
                 mock_get_store.return_value = mock_store
 
                 files = {
-                    "files": ("persist_fail.txt",
-                              io.BytesIO(b"Document content for persistence failure test with enough words."),
-                              "text/plain")
+                    "files": (
+                        "persist_fail.txt",
+                        io.BytesIO(
+                            b"Document content for persistence failure test with enough words."
+                        ),
+                        "text/plain",
+                    )
                 }
                 resp = client.post("/upload", files=files)
                 self.assertEqual(resp.status_code, 200)
@@ -1132,7 +1350,7 @@ class TestEvalMetrics(unittest.TestCase):
             lines = [
                 "{corrupted line that is not json\n",
                 '"just a string"\n',
-                '[1, 2, 3]\n',
+                "[1, 2, 3]\n",
                 '{"status": "orphaned"}\n',  # missing session_id and doc_id
                 '{"session_id": "s1", "status": "orphaned"}\n',  # missing doc_id
                 '{"doc_id": "d1", "status": "orphaned"}\n',  # missing session_id
@@ -1173,7 +1391,13 @@ class TestEvalMetrics(unittest.TestCase):
                 "assert not rec.get('reconciliation_persistence_failed'); "
                 "sys.exit(0)"
             )
-            res1 = subprocess.run([sys.executable, "-c", code_1], env=env, cwd=repo_dir, capture_output=True, text=True)
+            res1 = subprocess.run(
+                [sys.executable, "-c", code_1],
+                env=env,
+                cwd=repo_dir,
+                capture_output=True,
+                text=True,
+            )
             self.assertEqual(res1.returncode, 0, f"Subprocess 1 failed: {res1.stderr}")
             self.assertTrue(temp_log.exists())
 
@@ -1186,7 +1410,13 @@ class TestEvalMetrics(unittest.TestCase):
                 "assert res is True; "
                 "sys.exit(0)"
             )
-            res2 = subprocess.run([sys.executable, "-c", code_2], env=env, cwd=repo_dir, capture_output=True, text=True)
+            res2 = subprocess.run(
+                [sys.executable, "-c", code_2],
+                env=env,
+                cwd=repo_dir,
+                capture_output=True,
+                text=True,
+            )
             self.assertEqual(res2.returncode, 0, f"Subprocess 2 failed: {res2.stderr}")
 
             # Subprocess 3: Fresh process starts, verifies orphan remained resolved across restart
@@ -1195,7 +1425,13 @@ class TestEvalMetrics(unittest.TestCase):
                 "assert len(app.ORPHANED_DOCS.get('sub_sess', [])) == 0, f'Expected resolved: {app.ORPHANED_DOCS}'; "
                 "sys.exit(0)"
             )
-            res3 = subprocess.run([sys.executable, "-c", code_3], env=env, cwd=repo_dir, capture_output=True, text=True)
+            res3 = subprocess.run(
+                [sys.executable, "-c", code_3],
+                env=env,
+                cwd=repo_dir,
+                capture_output=True,
+                text=True,
+            )
             self.assertEqual(res3.returncode, 0, f"Subprocess 3 failed: {res3.stderr}")
 
     def test_resolution_persistence_failure_does_not_claim_resolved(self):
@@ -1204,7 +1440,12 @@ class TestEvalMetrics(unittest.TestCase):
         import tempfile
         from pathlib import Path
         from unittest.mock import patch
-        from app import ORPHANED_DOCS, _record_orphaned_doc, _resolve_orphaned_doc, _load_orphaned_docs
+        from app import (
+            ORPHANED_DOCS,
+            _record_orphaned_doc,
+            _resolve_orphaned_doc,
+            _load_orphaned_docs,
+        )
 
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_log = Path(tmpdir) / "orphans.jsonl"
@@ -1213,19 +1454,26 @@ class TestEvalMetrics(unittest.TestCase):
             ORPHANED_DOCS.pop(sid, None)
 
             with patch("app.ORPHAN_LOG_PATH", temp_log):
-                rec = _record_orphaned_doc(sid, doc_id, "file_res.pdf", "Vector rollback failed")
+                rec = _record_orphaned_doc(
+                    sid, doc_id, "file_res.pdf", "Vector rollback failed"
+                )
                 self.assertFalse(rec.get("reconciliation_persistence_failed"))
                 self.assertEqual(len(ORPHANED_DOCS[sid]), 1)
 
                 # Simulate disk write failure specifically during resolution append
                 orig_open = Path.open
+
                 def failing_resolution_open(self_path, *args, **kwargs):
                     mode = args[0] if args else kwargs.get("mode", "r")
                     if "orphans.jsonl" in str(self_path) and "a" in mode:
                         raise OSError("Disk write failure during resolution append")
                     return orig_open(self_path, *args, **kwargs)
 
-                with patch("pathlib.Path.open", side_effect=failing_resolution_open, autospec=True):
+                with patch(
+                    "pathlib.Path.open",
+                    side_effect=failing_resolution_open,
+                    autospec=True,
+                ):
                     resolved = _resolve_orphaned_doc(sid, doc_id)
                     # Must report failure, not false success
                     self.assertFalse(resolved)
@@ -1250,6 +1498,7 @@ class TestEvalMetrics(unittest.TestCase):
                 # Simulate restart again: must remain resolved permanently
                 ORPHANED_DOCS.clear()
                 _load_orphaned_docs()
+
     def test_multi_worker_session_manifest_and_store_sync(self):
         """Verify cross-worker session synchronization: Worker 2 reloads when Worker 1 updates session manifest and vector store."""
         import tempfile
@@ -1257,14 +1506,21 @@ class TestEvalMetrics(unittest.TestCase):
         from unittest.mock import patch
         from pathlib import Path
         import json
-        from app import _save_session_manifest, _get_store, SESSION_FILES, VECTOR_STORE, _MANIFEST_MTIMES, _manifest_path
+        from app import (
+            _save_session_manifest,
+            _get_store,
+            SESSION_FILES,
+            VECTOR_STORE,
+            _MANIFEST_MTIMES,
+            _manifest_path,
+        )
 
         sid = "test_multi_worker_sync_sess"
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
-            with patch("app.UPLOAD_FOLDER", tmp_path), \
-                 patch("app.VECTOR_FOLDER", tmp_path), \
-                 patch("app.VECTOR_BACKEND", "memory"):
+            with patch("app.UPLOAD_FOLDER", tmp_path), patch(
+                "app.VECTOR_FOLDER", tmp_path
+            ), patch("app.VECTOR_BACKEND", "memory"):
 
                 # Clean slate
                 SESSION_FILES.pop(sid, None)
@@ -1277,13 +1533,23 @@ class TestEvalMetrics(unittest.TestCase):
                 SESSION_FILES[sid] = {"doc1": {"path": doc1_file, "name": "doc1.txt"}}
                 _save_session_manifest(sid)
                 store1 = _get_store(sid)
-                store1.add([{"id": "c1", "doc_id": "doc1", "text": "chunk1", "method": "structured"}], [])
+                store1.add(
+                    [
+                        {
+                            "id": "c1",
+                            "doc_id": "doc1",
+                            "text": "chunk1",
+                            "method": "structured",
+                        }
+                    ],
+                    [],
+                )
                 store1.save()
 
                 # Simulate Worker 2: has its own in-memory caches
-                with patch.dict("app.SESSION_FILES", {}, clear=True), \
-                     patch.dict("app.VECTOR_STORE", {}, clear=True), \
-                     patch.dict("app._MANIFEST_MTIMES", {}, clear=True):
+                with patch.dict("app.SESSION_FILES", {}, clear=True), patch.dict(
+                    "app.VECTOR_STORE", {}, clear=True
+                ), patch.dict("app._MANIFEST_MTIMES", {}, clear=True):
 
                     # Worker 2 loads session for the first time
                     store2 = _get_store(sid)
@@ -1303,7 +1569,17 @@ class TestEvalMetrics(unittest.TestCase):
                         "doc2": {"path": str(doc2_file), "name": "doc2.txt"},
                     }
                     mpath.write_text(json.dumps(mdata), encoding="utf-8")
-                    store1.add([{"id": "c2", "doc_id": "doc2", "text": "chunk2", "method": "structured"}], [])
+                    store1.add(
+                        [
+                            {
+                                "id": "c2",
+                                "doc_id": "doc2",
+                                "text": "chunk2",
+                                "method": "structured",
+                            }
+                        ],
+                        [],
+                    )
                     store1.save()
 
                     # Worker 2 receives subsequent request: _get_store detects updated disk mtime and reloads
@@ -1327,7 +1603,9 @@ class TestFastAPIMigration(unittest.TestCase):
 
         client = make_client(app)
         oversized = b"x" * (MAX_CONTENT_LENGTH + 1024)
-        resp = client.post("/upload", files={"files": ("big.txt", io.BytesIO(oversized), "text/plain")})
+        resp = client.post(
+            "/upload", files={"files": ("big.txt", io.BytesIO(oversized), "text/plain")}
+        )
         self.assertEqual(resp.status_code, 413)
         self.assertEqual(resp.json(), {"error": "File too large (max 50 MB)"})
 
@@ -1395,17 +1673,23 @@ class TestFastAPIMigration(unittest.TestCase):
 
         client = make_client(app)
         set_session(client, "test_under_limit_sess")
-        body = (b"Section One\n\nThe quick brown fox jumps over the lazy dog. " * 40_000)[: 2 * 1024 * 1024]
+        body = (
+            b"Section One\n\nThe quick brown fox jumps over the lazy dog. " * 40_000
+        )[: 2 * 1024 * 1024]
 
-        with tempfile.TemporaryDirectory() as tmpdir, \
-             patch("app.UPLOAD_FOLDER", Path(tmpdir)), \
-             patch("app._get_store") as mock_get_store, \
-             patch("app._embeddings_configured", return_value=False):
+        with tempfile.TemporaryDirectory() as tmpdir, patch(
+            "app.UPLOAD_FOLDER", Path(tmpdir)
+        ), patch("app._get_store") as mock_get_store, patch(
+            "app._embeddings_configured", return_value=False
+        ):
             mock_store = MagicMock()
             mock_store.chunks = []
             mock_get_store.return_value = mock_store
 
-            resp = client.post("/upload", files={"files": ("under_limit.txt", io.BytesIO(body), "text/plain")})
+            resp = client.post(
+                "/upload",
+                files={"files": ("under_limit.txt", io.BytesIO(body), "text/plain")},
+            )
             self.assertEqual(resp.status_code, 200)
             self.assertTrue(resp.json().get("ok"))
 
@@ -1453,7 +1737,6 @@ class TestFastAPIMigration(unittest.TestCase):
         resp = client.get("/file/testdoc123")
         self.assertEqual(resp.status_code, 404)  # no doc yet -> 404
 
-
     def test_every_documented_route_is_registered(self):
         """The frontend calls these paths by hard-coded string; a renamed or
         dropped path during the migration must fail here, not in the browser."""
@@ -1463,7 +1746,9 @@ class TestFastAPIMigration(unittest.TestCase):
         for route in app.routes:
             if hasattr(route, "routes") and route.routes:
                 all_routes.extend(route.routes)
-            elif hasattr(route, "original_router") and hasattr(route.original_router, "routes"):
+            elif hasattr(route, "original_router") and hasattr(
+                route.original_router, "routes"
+            ):
                 all_routes.extend(route.original_router.routes)
             else:
                 all_routes.append(route)
@@ -1475,14 +1760,26 @@ class TestFastAPIMigration(unittest.TestCase):
             if getattr(route, "path", None)
         }
         expected = [
-            ("/", "GET"), ("/upload", "POST"), ("/upload-cancel", "POST"),
-            ("/load-url", "POST"), ("/ask", "POST"), ("/status", "GET"),
-            ("/remove", "POST"), ("/clear", "POST"), ("/eval", "GET"),
-            ("/eval/run", "POST"), ("/eval/parse-qa-pdf", "POST"),
-            ("/file/{doc_id}", "GET"), ("/file/{doc_id}/raw", "GET"),
-            ("/file/{doc_id}/pages", "GET"), ("/healthz", "GET"),
-            ("/readyz", "GET"), ("/orphans", "GET"), ("/traces", "GET"),
-            ("/replay/{trace_id}", "POST"), ("/favicon.ico", "GET"),
+            ("/", "GET"),
+            ("/upload", "POST"),
+            ("/upload-cancel", "POST"),
+            ("/load-url", "POST"),
+            ("/ask", "POST"),
+            ("/status", "GET"),
+            ("/remove", "POST"),
+            ("/clear", "POST"),
+            ("/eval", "GET"),
+            ("/eval/run", "POST"),
+            ("/eval/parse-qa-pdf", "POST"),
+            ("/file/{doc_id}", "GET"),
+            ("/file/{doc_id}/raw", "GET"),
+            ("/file/{doc_id}/pages", "GET"),
+            ("/healthz", "GET"),
+            ("/readyz", "GET"),
+            ("/orphans", "GET"),
+            ("/traces", "GET"),
+            ("/replay/{trace_id}", "POST"),
+            ("/favicon.ico", "GET"),
         ]
         for path, method in expected:
             with self.subTest(route=f"{method} {path}"):
@@ -1535,7 +1832,9 @@ class TestFastAPIMigration(unittest.TestCase):
 
         client = make_client(app)
         set_session(client, "test_clamping_sess")
-        resp = client.post("/ask", json={"query": "hi", "top_k": 999, "temperature": 7.5})
+        resp = client.post(
+            "/ask", json={"query": "hi", "top_k": 999, "temperature": 7.5}
+        )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["top_k"], 20)
         self.assertEqual(resp.json()["temperature"], 1.0)
@@ -1571,7 +1870,9 @@ class TestFastAPIMigration(unittest.TestCase):
             self.assertEqual(resp.status_code, 200)
             self.assertIn('<div id="root"></div>', resp.text)
             match_js = re.search(r'src="(/assets/[^"]+\.js)"', resp.text)
-            self.assertIsNotNone(match_js, "Vite JS asset tag must be present in index.html")
+            self.assertIsNotNone(
+                match_js, "Vite JS asset tag must be present in index.html"
+            )
             if match_js:
                 asset_resp = client.get(match_js.group(1))
                 self.assertEqual(asset_resp.status_code, 200)
@@ -1591,8 +1892,9 @@ class TestFastAPIMigration(unittest.TestCase):
         from app import ensure_frontend_built
         from unittest.mock import patch
 
-        with patch("pathlib.Path.exists", return_value=True), \
-             patch("subprocess.run") as mock_sub:
+        with patch("pathlib.Path.exists", return_value=True), patch(
+            "subprocess.run"
+        ) as mock_sub:
             res = ensure_frontend_built(force=False)
             self.assertTrue(res)
             mock_sub.assert_not_called()
@@ -1610,8 +1912,9 @@ class TestFastAPIMigration(unittest.TestCase):
         # Initial check (index.html missing) -> package.json (present) -> post-build index.html (present) -> assets (present)
         exists_side_effects = [False, True, True, True]
 
-        with patch("pathlib.Path.exists", side_effect=exists_side_effects), \
-             patch("subprocess.run", return_value=mock_res) as mock_sub:
+        with patch("pathlib.Path.exists", side_effect=exists_side_effects), patch(
+            "subprocess.run", return_value=mock_res
+        ) as mock_sub:
             res = ensure_frontend_built(force=False)
             self.assertTrue(res)
             mock_sub.assert_called_once()
@@ -1633,8 +1936,9 @@ class TestFastAPIMigration(unittest.TestCase):
         # exists returns False for index.html, True for package.json
         exists_side_effects = [False, True]
 
-        with patch("pathlib.Path.exists", side_effect=exists_side_effects), \
-             patch("subprocess.run", return_value=mock_res):
+        with patch("pathlib.Path.exists", side_effect=exists_side_effects), patch(
+            "subprocess.run", return_value=mock_res
+        ):
             with self.assertRaises(SystemExit) as ctx:
                 ensure_frontend_built(force=False)
             self.assertEqual(ctx.exception.code, 1)
@@ -1652,8 +1956,9 @@ class TestFastAPIMigration(unittest.TestCase):
         # exists returns False for index.html, True for package.json, False for post-build index.html
         exists_side_effects = [False, True, False]
 
-        with patch("pathlib.Path.exists", side_effect=exists_side_effects), \
-             patch("subprocess.run", return_value=mock_res):
+        with patch("pathlib.Path.exists", side_effect=exists_side_effects), patch(
+            "subprocess.run", return_value=mock_res
+        ):
             with self.assertRaises(SystemExit) as ctx:
                 ensure_frontend_built(force=False)
             self.assertEqual(ctx.exception.code, 1)
@@ -1679,12 +1984,12 @@ class TestFastAPIMigration(unittest.TestCase):
         # exists returns False for index.html, True for package.json
         exists_side_effects = [False, True]
 
-        with patch("pathlib.Path.exists", side_effect=exists_side_effects), \
-             patch("subprocess.run", side_effect=FileNotFoundError("npm not found")):
+        with patch("pathlib.Path.exists", side_effect=exists_side_effects), patch(
+            "subprocess.run", side_effect=FileNotFoundError("npm not found")
+        ):
             with self.assertRaises(SystemExit) as ctx:
                 ensure_frontend_built(force=False)
             self.assertEqual(ctx.exception.code, 1)
-
 
 
 def _decode_session_cookie(cookie_value: str) -> dict:
@@ -1695,8 +2000,5 @@ def _decode_session_cookie(cookie_value: str) -> dict:
     return json.loads(base64.b64decode(signer.unsign(cookie_value.encode("utf-8"))))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
-
-
-

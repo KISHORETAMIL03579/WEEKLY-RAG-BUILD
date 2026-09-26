@@ -72,13 +72,22 @@ def _xai_chat_call(
                 logger.warning("⚠️ xAI response has no choices (raw: %s)", data)
                 return ""
             result_text = (choices[0].get("message", {}).get("content") or "").strip()
-            logger.info("🤖 xAI (Grok) LLM call succeeded in %.2fs (model: %s)", elapsed, target_model)
+            logger.info(
+                "🤖 xAI (Grok) LLM call succeeded in %.2fs (model: %s)",
+                elapsed,
+                target_model,
+            )
             return result_text
         except urllib.error.HTTPError as exc:
             if exc.code in (429, 500, 503) and attempt < max_retries:
                 delay = base_delay * (2 ** (attempt - 1))
-                logger.warning("⏳ xAI LLM rate-limited (HTTP %d). Retrying in %.1fs (attempt %d/%d)...",
-                               exc.code, delay, attempt, max_retries)
+                logger.warning(
+                    "⏳ xAI LLM rate-limited (HTTP %d). Retrying in %.1fs (attempt %d/%d)...",
+                    exc.code,
+                    delay,
+                    attempt,
+                    max_retries,
+                )
                 time.sleep(delay)
             else:
                 logger.error("❌ xAI LLM call failed with HTTP %d: %s", exc.code, exc)
@@ -86,11 +95,20 @@ def _xai_chat_call(
         except (urllib.error.URLError, socket.timeout, TimeoutError, OSError) as exc:
             if attempt < max_retries:
                 delay = base_delay * (2 ** (attempt - 1))
-                logger.warning("⏳ xAI LLM network timeout (%s). Retrying in %.1fs (attempt %d/%d)...",
-                               exc, delay, attempt, max_retries)
+                logger.warning(
+                    "⏳ xAI LLM network timeout (%s). Retrying in %.1fs (attempt %d/%d)...",
+                    exc,
+                    delay,
+                    attempt,
+                    max_retries,
+                )
                 time.sleep(delay)
             else:
-                logger.error("❌ xAI LLM network call timed out after %d attempts: %s", max_retries, exc)
+                logger.error(
+                    "❌ xAI LLM network call timed out after %d attempts: %s",
+                    max_retries,
+                    exc,
+                )
                 raise
         except Exception as exc:
             logger.error("❌ xAI LLM call exception: %s", exc, exc_info=True)
@@ -136,7 +154,9 @@ def _ollama_chat_call(
     except urllib.error.URLError as exc:
         logger.error(
             "❌ Could not reach Ollama at %s — is `ollama serve` running and `%s` pulled? (%s)",
-            OLLAMA_URL, target_model, exc,
+            OLLAMA_URL,
+            target_model,
+            exc,
         )
         raise
     except Exception as exc:
@@ -153,8 +173,12 @@ def chat_call(
 ) -> str:
     """Single entry point for chat generation — routes to xAI or Ollama per CHAT_BACKEND."""
     if CHAT_BACKEND == "ollama":
-        return _ollama_chat_call(system, user, temperature=temperature, max_tokens=max_tokens, model=model)
-    return _xai_chat_call(system, user, temperature=temperature, max_tokens=max_tokens, model=model)
+        return _ollama_chat_call(
+            system, user, temperature=temperature, max_tokens=max_tokens, model=model
+        )
+    return _xai_chat_call(
+        system, user, temperature=temperature, max_tokens=max_tokens, model=model
+    )
 
 
 def chat_configured() -> bool:
@@ -166,4 +190,3 @@ def chat_configured() -> bool:
 
 _chat_call = chat_call
 _chat_configured = chat_configured
-

@@ -154,7 +154,14 @@ HANDBOOK_CLAUSES: List[Dict[str, Any]] = [
     {
         "section": "Section 5.2.1",
         "title": "Annual Leave Entitlement & Accrual",
-        "keywords": ["annual leave", "entitlement", "accrual", "24 working days", "2 days", "working days"],
+        "keywords": [
+            "annual leave",
+            "entitlement",
+            "accrual",
+            "24 working days",
+            "2 days",
+            "working days",
+        ],
         "content": (
             "5.2.1 Full-time staff members are entitled to annual leave of 24 working days per annum, "
             "which shall accrue at the rate of 2 working days per month of completed service."
@@ -163,7 +170,14 @@ HANDBOOK_CLAUSES: List[Dict[str, Any]] = [
     {
         "section": "Section 5.2.7",
         "title": "Annual Leave Carry Forward & Year-End Cap",
-        "keywords": ["carry forward", "carryover", "unused leave", "5 days", "december 31", "june 30"],
+        "keywords": [
+            "carry forward",
+            "carryover",
+            "unused leave",
+            "5 days",
+            "december 31",
+            "june 30",
+        ],
         "content": (
             "5.2.7 A staff member may not carry forward more than five (5) days of accrued unused annual leave "
             "from one calendar year into the next without the prior written approval of the Chief Executive Officer (CEO). "
@@ -173,7 +187,15 @@ HANDBOOK_CLAUSES: List[Dict[str, Any]] = [
     {
         "section": "Section 10.1 & Section 3.6.4",
         "title": "Resignation Notice Requirements (Probation vs Confirmed)",
-        "keywords": ["resignation", "notice", "probation", "1 week", "7 days", "written notice", "resign"],
+        "keywords": [
+            "resignation",
+            "notice",
+            "probation",
+            "1 week",
+            "7 days",
+            "written notice",
+            "resign",
+        ],
         "content": (
             "10.1 Notice of Resignation: Staff members on probation may terminate their employment by giving "
             "one (1) week (7 calendar days) written notice. Confirmed staff members are required to give four (4) "
@@ -183,7 +205,16 @@ HANDBOOK_CLAUSES: List[Dict[str, Any]] = [
     {
         "section": "Section 5.3.2",
         "title": "Paid Sick Leave Eligibility & Accrual",
-        "keywords": ["sick leave", "paid sick leave", "2 consecutive months", "two consecutive months", "2 working days", "full pay", "half pay", "7 days"],
+        "keywords": [
+            "sick leave",
+            "paid sick leave",
+            "2 consecutive months",
+            "two consecutive months",
+            "2 working days",
+            "full pay",
+            "half pay",
+            "7 days",
+        ],
         "content": (
             "5.3.2 A staff member who has completed at least two (2) consecutive months of service and is incapacitated "
             "by illness or injury is entitled to paid sick leave. Paid sick leave accrues at the rate of two (2) working days "
@@ -194,7 +225,14 @@ HANDBOOK_CLAUSES: List[Dict[str, Any]] = [
     {
         "section": "Section 10.5.1",
         "title": "Redundancy Notice & Severance Entitlement",
-        "keywords": ["redundancy", "severance", "15 days", "completed years", "notice period", "1 month"],
+        "keywords": [
+            "redundancy",
+            "severance",
+            "15 days",
+            "completed years",
+            "notice period",
+            "1 month",
+        ],
         "content": (
             "10.5.1 In the event of separation due to redundancy, the employee shall receive one (1) month written notice "
             "(or payment in lieu of notice) plus severance pay calculated as fifteen (15) days' basic pay for each completed year of service."
@@ -203,7 +241,13 @@ HANDBOOK_CLAUSES: List[Dict[str, Any]] = [
     {
         "section": "Section 10.5.2",
         "title": "Termination for Unsatisfactory Performance",
-        "keywords": ["unsatisfactory performance", "performance", "severance", "0 severance", "not entitled"],
+        "keywords": [
+            "unsatisfactory performance",
+            "performance",
+            "severance",
+            "0 severance",
+            "not entitled",
+        ],
         "content": (
             "10.5.2 Staff members separated from service due to unsatisfactory performance are not entitled to severance payments. "
             "The employee shall receive only accrued unused annual leave and payment for days worked up to the date of separation."
@@ -212,7 +256,14 @@ HANDBOOK_CLAUSES: List[Dict[str, Any]] = [
     {
         "section": "Section 4.4.1",
         "title": "Pension Contribution & Post-Probation Eligibility",
-        "keywords": ["pension", "probation", "allowance", "10%", "contribution", "eligibility"],
+        "keywords": [
+            "pension",
+            "probation",
+            "allowance",
+            "10%",
+            "contribution",
+            "eligibility",
+        ],
         "content": (
             "4.4.1 Staff members on probation are not eligible for the 10% pension contribution allowance. Upon successful "
             "completion and confirmation of probation, the organization shall provide a pension contribution allowance equal to "
@@ -222,7 +273,14 @@ HANDBOOK_CLAUSES: List[Dict[str, Any]] = [
     {
         "section": "Section 10.7",
         "title": "Commutation of Accrued Annual Leave upon Separation",
-        "keywords": ["commutation", "cash", "separation", "10 working days", "accrued leave", "gross salary"],
+        "keywords": [
+            "commutation",
+            "cash",
+            "separation",
+            "10 working days",
+            "accrued leave",
+            "gross salary",
+        ],
         "content": (
             "10.7 Upon separation from service, a staff member may commute accrued unused annual leave to cash up to a maximum "
             "of ten (10) working days, calculated based on gross salary."
@@ -276,6 +334,7 @@ JURISDICTION_RULES: Dict[str, Dict[str, str]] = {
 # Tool 1: get_employee_record
 # ---------------------------------------------------------------------------
 
+
 def get_employee_record(employee_id: str) -> Dict[str, Any]:
     """
     Retrieve employee profile details (tenure, employment status, salary, department, jurisdiction).
@@ -283,7 +342,10 @@ def get_employee_record(employee_id: str) -> Dict[str, Any]:
     emp_id = (employee_id or "").strip().upper()
     record = CANONICAL_EMPLOYEES.get(emp_id)
     if not record:
-        return {"found": False, "error": f"Employee record '{employee_id}' not found in canonical database."}
+        return {
+            "found": False,
+            "error": f"Employee record '{employee_id}' not found in canonical database.",
+        }
     return {
         "found": True,
         "employee_id": record.employee_id,
@@ -299,19 +361,33 @@ def get_employee_record(employee_id: str) -> Dict[str, Any]:
         "separation_reason": record.separation_reason,
     }
 
+
 # ---------------------------------------------------------------------------
 # Tool 2: search_handbook
 # ---------------------------------------------------------------------------
+
 
 def search_handbook(query: str, top_k: int = 2) -> List[Dict[str, Any]]:
     """
     Search the organizational Human Resources Policy Manual (HRPolicy.pdf) for relevant policy clauses.
     """
-    q_words = [w.lower() for w in query.replace(",", " ").replace("?", " ").split() if len(w) > 2]
+    q_words = [
+        w.lower()
+        for w in query.replace(",", " ").replace("?", " ").split()
+        if len(w) > 2
+    ]
     scored_clauses = []
     for clause in HANDBOOK_CLAUSES:
         score = 0
-        text = (clause["section"] + " " + clause["title"] + " " + clause["content"] + " " + " ".join(clause["keywords"])).lower()
+        text = (
+            clause["section"]
+            + " "
+            + clause["title"]
+            + " "
+            + clause["content"]
+            + " "
+            + " ".join(clause["keywords"])
+        ).lower()
         for kw in clause["keywords"]:
             if kw.lower() in query.lower():
                 score += 5
@@ -327,25 +403,41 @@ def search_handbook(query: str, top_k: int = 2) -> List[Dict[str, Any]]:
         top_results = [HANDBOOK_CLAUSES[0]]
     return top_results
 
+
 # ---------------------------------------------------------------------------
 # Tool 3: get_jurisdiction_rules
 # ---------------------------------------------------------------------------
 
-def get_jurisdiction_rules(jurisdiction: JurisdictionEnum, policy_category: PolicyCategoryEnum) -> Dict[str, Any]:
+
+def get_jurisdiction_rules(
+    jurisdiction: JurisdictionEnum, policy_category: PolicyCategoryEnum
+) -> Dict[str, Any]:
     """
     Retrieve statutory duty-station guidelines and public holiday frameworks for a specific jurisdiction.
     """
-    jur_key = jurisdiction.value if isinstance(jurisdiction, JurisdictionEnum) else str(jurisdiction)
-    cat_key = policy_category.value if isinstance(policy_category, PolicyCategoryEnum) else str(policy_category)
+    jur_key = (
+        jurisdiction.value
+        if isinstance(jurisdiction, JurisdictionEnum)
+        else str(jurisdiction)
+    )
+    cat_key = (
+        policy_category.value
+        if isinstance(policy_category, PolicyCategoryEnum)
+        else str(policy_category)
+    )
 
     jur_dict = JURISDICTION_RULES.get(jur_key, JURISDICTION_RULES["Global"])
-    guideline = jur_dict.get(cat_key, f"Standard organizational policy applies for {jur_key} under {cat_key}.")
+    guideline = jur_dict.get(
+        cat_key,
+        f"Standard organizational policy applies for {jur_key} under {cat_key}.",
+    )
 
     return {
         "jurisdiction": jur_key,
         "policy_category": cat_key,
         "statutory_guideline": guideline,
     }
+
 
 # ---------------------------------------------------------------------------
 # Tool Registry & JSON Schema Definitions (For ReAct Agent)
@@ -358,7 +450,10 @@ POLICY_TOOL_DEFINITIONS = [
         "parameters": {
             "type": "object",
             "properties": {
-                "employee_id": {"type": "string", "description": "The unique employee ID, e.g. EMP001"}
+                "employee_id": {
+                    "type": "string",
+                    "description": "The unique employee ID, e.g. EMP001",
+                }
             },
             "required": ["employee_id"],
         },
@@ -369,8 +464,14 @@ POLICY_TOOL_DEFINITIONS = [
         "parameters": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "The policy search query, e.g. 'annual leave entitlement'"},
-                "top_k": {"type": "integer", "description": "Number of top matching sections to return (default 2)"}
+                "query": {
+                    "type": "string",
+                    "description": "The policy search query, e.g. 'annual leave entitlement'",
+                },
+                "top_k": {
+                    "type": "integer",
+                    "description": "Number of top matching sections to return (default 2)",
+                },
             },
             "required": ["query"],
         },
@@ -388,7 +489,13 @@ POLICY_TOOL_DEFINITIONS = [
                 },
                 "policy_category": {
                     "type": "string",
-                    "enum": ["leave", "notice_and_separation", "benefits_and_pension", "holidays_and_working_hours", "conduct_and_discipline"],
+                    "enum": [
+                        "leave",
+                        "notice_and_separation",
+                        "benefits_and_pension",
+                        "holidays_and_working_hours",
+                        "conduct_and_discipline",
+                    ],
                     "description": "The specific policy category to retrieve.",
                 },
             },
@@ -397,12 +504,15 @@ POLICY_TOOL_DEFINITIONS = [
     },
 ]
 
+
 def execute_tool_call(tool_name: str, arguments: Dict[str, Any]) -> Any:
     """Dispatches tool execution by name."""
     if tool_name == "get_employee_record":
         return get_employee_record(arguments.get("employee_id", ""))
     elif tool_name == "search_handbook":
-        return search_handbook(arguments.get("query", ""), top_k=arguments.get("top_k", 2))
+        return search_handbook(
+            arguments.get("query", ""), top_k=arguments.get("top_k", 2)
+        )
     elif tool_name == "get_jurisdiction_rules":
         jur = arguments.get("jurisdiction", "Global")
         cat = arguments.get("policy_category", "leave")

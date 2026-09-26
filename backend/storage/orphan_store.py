@@ -14,7 +14,9 @@ from fastapi import Request
 from backend.config import ORPHAN_LOG_PATH, ADMIN_API_KEY, get_app_symbol, logger
 
 _ORPHAN_LOCK = threading.Lock()
-ORPHANED_DOCS: Dict[str, List[dict]] = {}  # In-memory index: sid -> list of orphan records
+ORPHANED_DOCS: Dict[str, List[dict]] = (
+    {}
+)  # In-memory index: sid -> list of orphan records
 
 
 def is_admin_request(req: Request) -> bool:
@@ -46,7 +48,13 @@ def get_orphan_lock(path: Optional[Path] = None) -> FileLock:
 _get_orphan_lock = get_orphan_lock
 
 
-def record_orphaned_doc(sid: str, doc_id: str, filename: str, error: str, stored_path: Optional[Path | str] = None) -> dict:
+def record_orphaned_doc(
+    sid: str,
+    doc_id: str,
+    filename: str,
+    error: str,
+    stored_path: Optional[Path | str] = None,
+) -> dict:
     """Durably record an orphaned document in orphans.jsonl and in-memory registry."""
     log_path = get_app_symbol("ORPHAN_LOG_PATH", ORPHAN_LOG_PATH)
     orphans_map = get_app_symbol("ORPHANED_DOCS", ORPHANED_DOCS)
@@ -71,13 +79,19 @@ def record_orphaned_doc(sid: str, doc_id: str, filename: str, error: str, stored
                         try:
                             os.fsync(f.fileno())
                         except OSError as fsync_err:
-                            raise OSError(f"Orphan log fsync failed: {fsync_err}") from fsync_err
+                            raise OSError(
+                                f"Orphan log fsync failed: {fsync_err}"
+                            ) from fsync_err
         except Exception as exc:
             record["reconciliation_persistence_failed"] = True
             logger.critical(
                 "❌ CRITICAL OPERATIONAL FAILURE: Failed to write orphan reconciliation record to %s "
                 "for doc %s (session %s): %s.",
-                log_path, doc_id, sid, exc, exc_info=True,
+                log_path,
+                doc_id,
+                sid,
+                exc,
+                exc_info=True,
             )
 
         orphans_map.setdefault(sid, []).append(record)
@@ -90,7 +104,9 @@ def resolve_orphaned_doc(sid: str, doc_id: str) -> bool:
     orphans_map = get_app_symbol("ORPHANED_DOCS", ORPHANED_DOCS)
 
     with _ORPHAN_LOCK:
-        in_memory_match = any(o.get("doc_id") == doc_id for o in orphans_map.get(sid, []))
+        in_memory_match = any(
+            o.get("doc_id") == doc_id for o in orphans_map.get(sid, [])
+        )
         if not in_memory_match:
             durable_records = read_durable_orphans(log_path)
             if not any(o.get("doc_id") == doc_id for o in durable_records.get(sid, [])):
@@ -113,16 +129,24 @@ def resolve_orphaned_doc(sid: str, doc_id: str) -> bool:
                         try:
                             os.fsync(f.fileno())
                         except OSError as fsync_err:
-                            raise OSError(f"Orphan log fsync failed during resolution: {fsync_err}") from fsync_err
+                            raise OSError(
+                                f"Orphan log fsync failed during resolution: {fsync_err}"
+                            ) from fsync_err
         except Exception as exc:
             logger.critical(
                 "❌ CRITICAL OPERATIONAL FAILURE: Failed to write orphan resolution to %s for doc %s (session %s): %s.",
-                log_path, doc_id, sid, exc, exc_info=True,
+                log_path,
+                doc_id,
+                sid,
+                exc,
+                exc_info=True,
             )
             return False
 
         if sid in orphans_map:
-            orphans_map[sid] = [o for o in orphans_map[sid] if o.get("doc_id") != doc_id]
+            orphans_map[sid] = [
+                o for o in orphans_map[sid] if o.get("doc_id") != doc_id
+            ]
 
         return True
 
@@ -144,7 +168,12 @@ def read_durable_orphans(path: Optional[Path] = None) -> Dict[str, List[dict]]:
                     try:
                         record = json.loads(line)
                     except json.JSONDecodeError as err:
-                        logger.warning("Corrupted orphan log line %d in %s: %s", line_no, log_path, err)
+                        logger.warning(
+                            "Corrupted orphan log line %d in %s: %s",
+                            line_no,
+                            log_path,
+                            err,
+                        )
                         continue
 
                     if not isinstance(record, dict):
@@ -154,16 +183,30 @@ def read_durable_orphans(path: Optional[Path] = None) -> Dict[str, List[dict]]:
                     doc_id = record.get("doc_id")
                     status = record.get("status")
 
-                    if not isinstance(sid, str) or not sid.strip() or not isinstance(doc_id, str) or not doc_id.strip():
+                    if (
+                        not isinstance(sid, str)
+                        or not sid.strip()
+                        or not isinstance(doc_id, str)
+                        or not doc_id.strip()
+                    ):
                         continue
 
                     if status == "resolved":
                         if sid in orphans_by_sid:
-                            orphans_by_sid[sid] = [o for o in orphans_by_sid[sid] if o.get("doc_id") != doc_id]
+                            orphans_by_sid[sid] = [
+                                o
+                                for o in orphans_by_sid[sid]
+                                if o.get("doc_id") != doc_id
+                            ]
                     elif status == "orphaned":
                         orphans_by_sid.setdefault(sid, []).append(record)
     except Exception as exc:
-        logger.error("Failed to read durable orphan records from %s: %s", log_path, exc, exc_info=True)
+        logger.error(
+            "Failed to read durable orphan records from %s: %s",
+            log_path,
+            exc,
+            exc_info=True,
+        )
 
     return orphans_by_sid
 
@@ -187,4 +230,3 @@ _read_durable_orphans = read_durable_orphans
 
 # Initialize in-memory cache on module load
 load_orphaned_docs()
-

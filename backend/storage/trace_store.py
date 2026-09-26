@@ -20,15 +20,26 @@ _PATTERNS = [
     # Employee ID formats: EMP-1234, E00123, employee id 88231
     (re.compile(r"\b(?:EMP|emp)[-_ ]?\d{3,8}\b"), "[REDACTED_EMP_ID]"),
     (re.compile(r"\b[Ee]\d{5,8}\b"), "[REDACTED_EMP_ID]"),
-    (re.compile(r"(?i)\bemployee\s*(?:id|number|no\.?)\s*[:#]?\s*\d{3,8}\b"), "[REDACTED_EMP_ID]"),
+    (
+        re.compile(r"(?i)\bemployee\s*(?:id|number|no\.?)\s*[:#]?\s*\d{3,8}\b"),
+        "[REDACTED_EMP_ID]",
+    ),
     # SSN-shaped
     (re.compile(r"\b\d{3}-\d{2}-\d{4}\b"), "[REDACTED_SSN]"),
     # Emails
     (re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b"), "[REDACTED_EMAIL]"),
     # Phone numbers (loose, US-ish + generic)
-    (re.compile(r"\b(?:\+?\d{1,2}[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b"), "[REDACTED_PHONE]"),
+    (
+        re.compile(r"\b(?:\+?\d{1,2}[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b"),
+        "[REDACTED_PHONE]",
+    ),
     # "Name: John Smith" / "Employee: John Smith" style labeled fields
-    (re.compile(r"(?i)\b(?:name|employee|staff)\s*:\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+"), lambda m: m.group(0).split(":")[0] + ": [REDACTED_NAME]"),
+    (
+        re.compile(
+            r"(?i)\b(?:name|employee|staff)\s*:\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+"
+        ),
+        lambda m: m.group(0).split(":")[0] + ": [REDACTED_NAME]",
+    ),
 ]
 
 
@@ -116,7 +127,9 @@ class TraceStore:
         if "prompt_version" in record and "prompt_hash" not in record:
             p_text = get_prompt(record["prompt_version"])
             if p_text:
-                record["prompt_hash"] = "sha256:" + hashlib.sha256(p_text.encode("utf-8")).hexdigest()
+                record["prompt_hash"] = (
+                    "sha256:" + hashlib.sha256(p_text.encode("utf-8")).hexdigest()
+                )
 
         line = json.dumps(record, ensure_ascii=False)
         with self._lock:
@@ -139,7 +152,10 @@ class TraceStore:
                 except json.JSONDecodeError as err:
                     logger.warning(
                         "Skipping corrupted trace line %d in %s: %s (Error: %s)",
-                        line_no, self.path, line[:60], err
+                        line_no,
+                        self.path,
+                        line[:60],
+                        err,
                     )
         return out
 
@@ -178,4 +194,3 @@ class TraceStore:
 
 # Singleton default trace store
 TRACES = TraceStore(TRACE_LOG_PATH)
-

@@ -37,7 +37,9 @@ class PolicyBenchmarkRunState:
         self.total_cases: int = len(cases)
         self.completed_cases: int = 0
         self.current_case_id: Optional[str] = cases[0].get("case_id") if cases else None
-        self.current_question: Optional[str] = cases[0].get("question") if cases else None
+        self.current_question: Optional[str] = (
+            cases[0].get("question") if cases else None
+        )
         self.current_agent_stage: Optional[str] = "Calling Ollama"
         self.current_workflow_stage: Optional[str] = "Step 1: Employee lookup"
         self.agent_completed_count: int = 0
@@ -51,33 +53,41 @@ class PolicyBenchmarkRunState:
         # Per-case live state array
         self.cases_status: List[Dict[str, Any]] = []
         for c in cases:
-            self.cases_status.append({
-                "case_id": c.get("case_id", ""),
-                "employee_id": c.get("employee_id") or "EMP001",
-                "question": c.get("question", ""),
-                "ground_truth": c.get("expected_value") or c.get("expected_answer", ""),
-                "source_section": c.get("source_section", ""),
-                "pass_criteria": c.get("deterministic_pass_criteria") or ([c.get("expected_value") or c.get("expected_answer")] if (c.get("expected_value") or c.get("expected_answer")) else []),
-                "status": "WAITING",  # WAITING | RUNNING | PASS | FAIL | ERROR
-                "agent_status": "WAITING",
-                "workflow_status": "WAITING",
-                "agent_entitlement": None,
-                "workflow_entitlement": None,
-                "agent_rule": None,
-                "workflow_rule": None,
-                "agent_explanation": None,
-                "workflow_explanation": None,
-                "agent_passed": None,
-                "workflow_passed": None,
-                "agent_latency_ms": None,
-                "workflow_latency_ms": None,
-                "agent_tokens": None,
-                "workflow_tokens": None,
-                "agent_cost_usd": None,
-                "workflow_cost_usd": None,
-                "agent_result": None,
-                "workflow_result": None,
-            })
+            self.cases_status.append(
+                {
+                    "case_id": c.get("case_id", ""),
+                    "employee_id": c.get("employee_id") or "EMP001",
+                    "question": c.get("question", ""),
+                    "ground_truth": c.get("expected_value")
+                    or c.get("expected_answer", ""),
+                    "source_section": c.get("source_section", ""),
+                    "pass_criteria": c.get("deterministic_pass_criteria")
+                    or (
+                        [c.get("expected_value") or c.get("expected_answer")]
+                        if (c.get("expected_value") or c.get("expected_answer"))
+                        else []
+                    ),
+                    "status": "WAITING",  # WAITING | RUNNING | PASS | FAIL | ERROR
+                    "agent_status": "WAITING",
+                    "workflow_status": "WAITING",
+                    "agent_entitlement": None,
+                    "workflow_entitlement": None,
+                    "agent_rule": None,
+                    "workflow_rule": None,
+                    "agent_explanation": None,
+                    "workflow_explanation": None,
+                    "agent_passed": None,
+                    "workflow_passed": None,
+                    "agent_latency_ms": None,
+                    "workflow_latency_ms": None,
+                    "agent_tokens": None,
+                    "workflow_tokens": None,
+                    "agent_cost_usd": None,
+                    "workflow_cost_usd": None,
+                    "agent_result": None,
+                    "workflow_result": None,
+                }
+            )
 
         self.summary: Optional[Dict[str, Any]] = None
         self.raw_agent_results: List[PolicyOutputContract] = []
@@ -85,8 +95,16 @@ class PolicyBenchmarkRunState:
 
     def to_dict(self) -> Dict[str, Any]:
         with self.lock:
-            elapsed = time.time() - self.start_time if self.status == "RUNNING" else self.elapsed_seconds
-            progress_pct = round((self.completed_cases / self.total_cases * 100), 1) if self.total_cases > 0 else 0.0
+            elapsed = (
+                time.time() - self.start_time
+                if self.status == "RUNNING"
+                else self.elapsed_seconds
+            )
+            progress_pct = (
+                round((self.completed_cases / self.total_cases * 100), 1)
+                if self.total_cases > 0
+                else 0.0
+            )
             return {
                 "run_id": self.run_id,
                 "status": self.status,
@@ -149,7 +167,9 @@ class PolicyBenchmarkRunManager:
                     run.cancellation_requested = True
                     run.status = "CANCELLED"
                     run.elapsed_seconds = time.time() - run.start_time
-                    logger.info(f"Cancellation requested for policy benchmark run {run_id}")
+                    logger.info(
+                        f"Cancellation requested for policy benchmark run {run_id}"
+                    )
                     return True
             return False
 
@@ -196,19 +216,30 @@ class PolicyBenchmarkRunManager:
         cases: List[Dict[str, Any]],
     ) -> None:
         """Executes the benchmark across all 10 cases sequentially with atomic updates."""
-        logger.info(f"Starting policy benchmark worker run {run_state.run_id} ({len(cases)} cases)")
+        logger.info(
+            f"Starting policy benchmark worker run {run_state.run_id} ({len(cases)} cases)"
+        )
         try:
             for idx, c in enumerate(cases):
                 # Check cancellation
                 with run_state.lock:
-                    if run_state.cancellation_requested or run_state.status == "CANCELLED":
-                        logger.info(f"Policy benchmark run {run_state.run_id} cancelled at case {idx+1}")
+                    if (
+                        run_state.cancellation_requested
+                        or run_state.status == "CANCELLED"
+                    ):
+                        logger.info(
+                            f"Policy benchmark run {run_state.run_id} cancelled at case {idx+1}"
+                        )
                         break
 
                     cid = c.get("case_id", f"case_{idx+1}")
                     empid = c.get("employee_id") or "EMP001"
                     q = c.get("question", "")
-                    crit = c.get("deterministic_pass_criteria") or ([c.get("expected_value") or c.get("expected_answer")] if (c.get("expected_value") or c.get("expected_answer")) else [])
+                    crit = c.get("deterministic_pass_criteria") or (
+                        [c.get("expected_value") or c.get("expected_answer")]
+                        if (c.get("expected_value") or c.get("expected_answer"))
+                        else []
+                    )
 
                     run_state.current_case_id = cid
                     run_state.current_question = q
@@ -221,12 +252,14 @@ class PolicyBenchmarkRunManager:
                     def cb(stage: str):
                         with run_state.lock:
                             run_state.current_agent_stage = stage
+
                     return cb
 
                 def make_wf_stage_cb(case_idx: int):
                     def cb(stage: str):
                         with run_state.lock:
                             run_state.current_workflow_stage = stage
+
                     return cb
 
                 # 1. Run Agent
@@ -267,8 +300,16 @@ class PolicyBenchmarkRunManager:
 
                 with run_state.lock:
                     run_state.agent_completed_count += 1
-                    run_state.cases_status[idx]["agent_status"] = "PASS" if a_res.passed else ("ERROR" if a_res.termination_reason == "ERROR" else "FAIL")
-                    run_state.cases_status[idx]["agent_entitlement"] = a_res.entitlement_value
+                    run_state.cases_status[idx]["agent_status"] = (
+                        "PASS"
+                        if a_res.passed
+                        else (
+                            "ERROR" if a_res.termination_reason == "ERROR" else "FAIL"
+                        )
+                    )
+                    run_state.cases_status[idx][
+                        "agent_entitlement"
+                    ] = a_res.entitlement_value
                     run_state.cases_status[idx]["agent_rule"] = a_res.rule_cited
                     run_state.cases_status[idx]["agent_explanation"] = a_res.explanation
                     run_state.cases_status[idx]["agent_passed"] = a_res.passed
@@ -280,7 +321,10 @@ class PolicyBenchmarkRunManager:
 
                 # Check cancellation between agent and workflow
                 with run_state.lock:
-                    if run_state.cancellation_requested or run_state.status == "CANCELLED":
+                    if (
+                        run_state.cancellation_requested
+                        or run_state.status == "CANCELLED"
+                    ):
                         break
 
                 # 2. Run Workflow
@@ -320,24 +364,41 @@ class PolicyBenchmarkRunManager:
                 with run_state.lock:
                     run_state.workflow_completed_count += 1
                     run_state.completed_cases += 1
-                    run_state.cases_status[idx]["workflow_status"] = "PASS" if w_res.passed else ("ERROR" if w_res.termination_reason == "ERROR" else "FAIL")
-                    run_state.cases_status[idx]["workflow_entitlement"] = w_res.entitlement_value
+                    run_state.cases_status[idx]["workflow_status"] = (
+                        "PASS"
+                        if w_res.passed
+                        else (
+                            "ERROR" if w_res.termination_reason == "ERROR" else "FAIL"
+                        )
+                    )
+                    run_state.cases_status[idx][
+                        "workflow_entitlement"
+                    ] = w_res.entitlement_value
                     run_state.cases_status[idx]["workflow_rule"] = w_res.rule_cited
-                    run_state.cases_status[idx]["workflow_explanation"] = w_res.explanation
+                    run_state.cases_status[idx][
+                        "workflow_explanation"
+                    ] = w_res.explanation
                     run_state.cases_status[idx]["workflow_passed"] = w_res.passed
-                    run_state.cases_status[idx]["workflow_latency_ms"] = w_res.latency_ms
+                    run_state.cases_status[idx][
+                        "workflow_latency_ms"
+                    ] = w_res.latency_ms
                     run_state.cases_status[idx]["workflow_tokens"] = w_res.total_tokens
                     run_state.cases_status[idx]["workflow_cost_usd"] = w_res.cost_usd
                     run_state.cases_status[idx]["workflow_result"] = w_res.model_dump()
                     run_state.raw_workflow_results.append(w_res)
 
                     # Overall case status: PASS if both passed, FAIL if either failed, ERROR if either errored
-                    if a_res.termination_reason == "ERROR" or w_res.termination_reason == "ERROR":
+                    if (
+                        a_res.termination_reason == "ERROR"
+                        or w_res.termination_reason == "ERROR"
+                    ):
                         run_state.cases_status[idx]["status"] = "ERROR"
                     elif a_res.passed and w_res.passed:
                         run_state.cases_status[idx]["status"] = "PASS"
                     elif not a_res.passed or not w_res.passed:
-                        run_state.cases_status[idx]["status"] = "FAIL" if (a_res.passed or w_res.passed) else "FAIL"
+                        run_state.cases_status[idx]["status"] = (
+                            "FAIL" if (a_res.passed or w_res.passed) else "FAIL"
+                        )
 
             # Finalize summary
             with run_state.lock:
@@ -353,10 +414,14 @@ class PolicyBenchmarkRunManager:
             if run_state.status == "COMPLETED":
                 self._save_results_csv(run_state)
 
-            logger.info(f"Policy benchmark run {run_state.run_id} finished with status={run_state.status}")
+            logger.info(
+                f"Policy benchmark run {run_state.run_id} finished with status={run_state.status}"
+            )
 
         except Exception as exc:
-            logger.exception(f"Policy benchmark worker encountered unhandled error: {exc}")
+            logger.exception(
+                f"Policy benchmark worker encountered unhandled error: {exc}"
+            )
             with run_state.lock:
                 run_state.status = "ERROR"
                 run_state.error_message = str(exc)
@@ -437,7 +502,11 @@ class PolicyBenchmarkRunManager:
                         "cost_usd": r.cost_usd,
                         "termination_reason": r.termination_reason,
                         "top_k": r.top_k or run_state.top_k,
-                        "temperature": r.temperature if r.temperature is not None else run_state.temperature,
+                        "temperature": (
+                            r.temperature
+                            if r.temperature is not None
+                            else run_state.temperature
+                        ),
                         "model": r.model or run_state.model,
                     }
                     writer.writerow(row)

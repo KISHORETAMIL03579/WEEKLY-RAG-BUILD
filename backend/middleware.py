@@ -141,12 +141,19 @@ def ensure_frontend_built(force: bool = False) -> bool:
 
     package_json = FRONTEND_DIR / "package.json"
     if not package_json.exists():
-        print(f"[ERROR] frontend/package.json not found at {FRONTEND_DIR}", file=sys.stderr)
+        print(
+            f"[ERROR] frontend/package.json not found at {FRONTEND_DIR}",
+            file=sys.stderr,
+        )
         logger.error("frontend/package.json not found at %s", FRONTEND_DIR)
         raise SystemExit(1)
 
     npm_cmd = "npm.cmd" if sys.platform.startswith("win") else "npm"
-    logger.info("[BUILD] React frontend not built. Executing '%s run build' in %s...", npm_cmd, FRONTEND_DIR)
+    logger.info(
+        "[BUILD] React frontend not built. Executing '%s run build' in %s...",
+        npm_cmd,
+        FRONTEND_DIR,
+    )
     print(f"\n[BUILD] Building React 18 + Vite frontend ({npm_cmd} run build)...")
 
     try:
@@ -158,7 +165,10 @@ def ensure_frontend_built(force: bool = False) -> bool:
             check=False,
         )
         if res.returncode != 0:
-            print(f"[ERROR] Frontend build failed (exit code {res.returncode}):\n", file=sys.stderr)
+            print(
+                f"[ERROR] Frontend build failed (exit code {res.returncode}):\n",
+                file=sys.stderr,
+            )
             if res.stdout:
                 print(res.stdout, file=sys.stderr)
             if res.stderr:
@@ -167,7 +177,10 @@ def ensure_frontend_built(force: bool = False) -> bool:
             raise SystemExit(1)
 
         if not index_html.exists():
-            print("[ERROR] Frontend build finished with code 0 but frontend/dist/index.html was not generated.", file=sys.stderr)
+            print(
+                "[ERROR] Frontend build finished with code 0 but frontend/dist/index.html was not generated.",
+                file=sys.stderr,
+            )
             logger.error("Frontend build did not create %s", index_html)
             raise SystemExit(1)
 
@@ -186,7 +199,9 @@ def ensure_frontend_built(force: bool = False) -> bool:
     except SystemExit:
         raise
     except Exception as exc:
-        print(f"[ERROR] Unexpected error while building frontend: {exc}", file=sys.stderr)
+        print(
+            f"[ERROR] Unexpected error while building frontend: {exc}", file=sys.stderr
+        )
         logger.error("Unexpected error during frontend build: %s", exc, exc_info=True)
         raise SystemExit(1)
 

@@ -11,6 +11,7 @@ explicitly annotated as proxy estimates where Ollama is unavailable.
 
 DO NOT fabricate latency, token counts, or pass results.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,10 +27,18 @@ from backend.services.policy_agent import run_agent_case, check_ollama_available
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="HR Policy ReAct Agent Benchmark Runner")
-    parser.add_argument("--top-k", type=int, default=5, help="Top-K handbook retrieval (default: 5)")
-    parser.add_argument("--temperature", type=float, default=0.3, help="LLM temperature (default: 0.3)")
-    parser.add_argument("--model", type=str, default="llama3.1:8b", help="Ollama model name")
+    parser = argparse.ArgumentParser(
+        description="HR Policy ReAct Agent Benchmark Runner"
+    )
+    parser.add_argument(
+        "--top-k", type=int, default=5, help="Top-K handbook retrieval (default: 5)"
+    )
+    parser.add_argument(
+        "--temperature", type=float, default=0.3, help="LLM temperature (default: 0.3)"
+    )
+    parser.add_argument(
+        "--model", type=str, default="llama3.1:8b", help="Ollama model name"
+    )
     parser.add_argument(
         "--cases",
         type=str,
@@ -47,12 +56,18 @@ def main() -> None:
         cases = json.load(f)
 
     ollama_live = check_ollama_available()
-    token_note = "(live Ollama tokens)" if ollama_live else "(proxy token estimates — Ollama unavailable)"
+    token_note = (
+        "(live Ollama tokens)"
+        if ollama_live
+        else "(proxy token estimates — Ollama unavailable)"
+    )
 
     print("=" * 80)
     print("HR POLICY AGENT BENCHMARK: Dynamic ReAct Agent")
     print("=" * 80)
-    print(f"  Configuration: top_k={args.top_k}  temperature={args.temperature}  model={args.model}")
+    print(
+        f"  Configuration: top_k={args.top_k}  temperature={args.temperature}  model={args.model}"
+    )
     print(f"  Ollama available: {ollama_live}")
     print(f"  Token accounting: {token_note}")
     print(f"  Cases loaded: {len(cases)} from {cases_file}")
@@ -107,7 +122,9 @@ def main() -> None:
     print(f"  p50 Latency    : {p50:.3f} ms  (real time.perf_counter())")
     print(f"  p95 Latency    : {p95:.3f} ms")
     print(f"  Total Tokens   : {total_tokens:,} {token_note}")
-    print(f"  Cost / Question: ${cost_per_q:.6f}  (token-cost proxy rate: $0.50/1M tokens)")
+    print(
+        f"  Cost / Question: ${cost_per_q:.6f}  (token-cost proxy rate: $0.50/1M tokens)"
+    )
     print(f"  Total Wall Time: {overall_elapsed_ms:.1f} ms")
     print("=" * 80)
     print(f"\nAgent run complete. Token accounting: {token_note}")

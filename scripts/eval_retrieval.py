@@ -18,10 +18,21 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app import (
-    chunk_text, embed_texts, embed_text, VectorStore, cosine,
-    build_index, tokenize, compute_tf, tfidf_vector, cosine_sim,
-    extract_pdf_pages, extract_txt_pages, GEMINI_API_KEY,
-    EVAL_PRESETS, _run_eval_preset
+    chunk_text,
+    embed_texts,
+    embed_text,
+    VectorStore,
+    cosine,
+    build_index,
+    tokenize,
+    compute_tf,
+    tfidf_vector,
+    cosine_sim,
+    extract_pdf_pages,
+    extract_txt_pages,
+    GEMINI_API_KEY,
+    EVAL_PRESETS,
+    _run_eval_preset,
 )
 
 TOP_K = int(os.environ.get("TOP_K", "3"))
@@ -67,14 +78,24 @@ def build_eval_store() -> VectorStore:
     else:
         store.vectors = []
         if not GEMINI_API_KEY:
-            print("⚠ GEMINI_API_KEY not set — dense retrieval will fall back to TF-IDF.")
+            print(
+                "⚠ GEMINI_API_KEY not set — dense retrieval will fall back to TF-IDF."
+            )
 
     return store
 
 
-def evaluate_preset(store: VectorStore, questions: list[dict], k: int, preset_name: str) -> dict:
+def evaluate_preset(
+    store: VectorStore, questions: list[dict], k: int, preset_name: str
+) -> dict:
     if not store.chunks:
-        return {"hit_rate": 0.0, "mrr": 0.0, "hits": 0, "total": len(questions), "results": []}
+        return {
+            "hit_rate": 0.0,
+            "mrr": 0.0,
+            "hits": 0,
+            "total": len(questions),
+            "results": [],
+        }
 
     preset = EVAL_PRESETS.get(preset_name)
     if not preset:
@@ -119,8 +140,10 @@ def main():
         questions = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 
     if not DOCS or not questions:
-        print("Fill in DOCS and QUESTIONS at the top of this script "
-              "(or pass a questions.json path as an argument) first.")
+        print(
+            "Fill in DOCS and QUESTIONS at the top of this script "
+            "(or pass a questions.json path as an argument) first."
+        )
         return
 
     store = build_eval_store()
@@ -152,7 +175,9 @@ def main():
     baseline = results_by_mode.get("tfidf", {}).get("hit_rate", 0.0)
     final = results_by_mode.get("rrf-rerank-rewrite", {}).get("hit_rate", 0.0)
     delta = final - baseline
-    print(f"\nBaseline (TF-IDF) -> Full Pipeline (Rewrite+RRF+Rerank): {baseline:.0%} -> {final:.0%} ({'+' if delta >= 0 else ''}{delta:.0%})")
+    print(
+        f"\nBaseline (TF-IDF) -> Full Pipeline (Rewrite+RRF+Rerank): {baseline:.0%} -> {final:.0%} ({'+' if delta >= 0 else ''}{delta:.0%})"
+    )
 
     print("\nPer-question breakdown (Final Pipeline):")
     for r in results_by_mode.get("rrf-rerank-rewrite", {}).get("results", []):

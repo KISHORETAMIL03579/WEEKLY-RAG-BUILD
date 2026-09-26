@@ -47,11 +47,15 @@ def replay_trace(trace_id: str, current_sid: OptionalSessionId):
 
     record = traces_store.get(trace_id)
     if not record:
-        return JSONResponse({"error": f"No trace found for trace_id={trace_id}"}, status_code=404)
+        return JSONResponse(
+            {"error": f"No trace found for trace_id={trace_id}"}, status_code=404
+        )
 
     expected_hash = hashlib.sha256(current_sid.encode()).hexdigest()[:16]
     if record.get("session_id_hash") != expected_hash:
-        return JSONResponse({"error": "Unauthorized: trace belongs to another session"}, status_code=403)
+        return JSONResponse(
+            {"error": "Unauthorized: trace belongs to another session"}, status_code=403
+        )
 
     missing = []
     for field in ("prompt_version", "model", "retrieved", "raw_output"):
@@ -77,23 +81,26 @@ def replay_trace(trace_id: str, current_sid: OptionalSessionId):
 
     prompt_text = fn_get_prompt(record["prompt_version"])
     if prompt_text is None:
-        return JSONResponse({
-            "trace_id": trace_id,
-            "replayable": False,
-            "reason": (
-                f"Durable prompt artifact for prompt_version {record['prompt_version']!r} "
-                f"is missing from registry. Exact prompt version required to replay."
-            ),
-            "original": {
-                "question": record.get("question"),
-                "model": record.get("model"),
-                "prompt_version": record.get("prompt_version"),
-                "raw_output": record.get("raw_output"),
+        return JSONResponse(
+            {
+                "trace_id": trace_id,
+                "replayable": False,
+                "reason": (
+                    f"Durable prompt artifact for prompt_version {record['prompt_version']!r} "
+                    f"is missing from registry. Exact prompt version required to replay."
+                ),
+                "original": {
+                    "question": record.get("question"),
+                    "model": record.get("model"),
+                    "prompt_version": record.get("prompt_version"),
+                    "raw_output": record.get("raw_output"),
+                },
+                "replayed": None,
+                "outputs_match_exactly": None,
+                "fields_missing_from_trace": missing,
             },
-            "replayed": None,
-            "outputs_match_exactly": None,
-            "fields_missing_from_trace": missing,
-        }, status_code=400)
+            status_code=400,
+        )
 
     results_for_prompt = [
         {
@@ -134,7 +141,10 @@ def replay_trace(trace_id: str, current_sid: OptionalSessionId):
             "raw_output": replayed_raw,
             "error": replay_error,
         },
-        "outputs_match_exactly": (replayed_raw == record.get("raw_output")) if replayed_raw is not None else None,
+        "outputs_match_exactly": (
+            (replayed_raw == record.get("raw_output"))
+            if replayed_raw is not None
+            else None
+        ),
         "fields_missing_from_trace": missing,
     }
-

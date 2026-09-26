@@ -34,7 +34,7 @@ def check_ollama_health(timeout: float = 0.2) -> bool:
         s.settimeout(timeout)
         res = s.connect_ex(("127.0.0.1", 11434))
         s.close()
-        _OLLAMA_AVAILABLE = (res == 0)
+        _OLLAMA_AVAILABLE = res == 0
         return _OLLAMA_AVAILABLE
     except Exception:
         _OLLAMA_AVAILABLE = False
@@ -66,14 +66,14 @@ def call_llm_judge_detailed(
                 "temperature": float(temperature),
                 "top_p": 0.1,
                 "num_predict": 16,
-                "stop": ["\n", "}", "```"]
-            }
+                "stop": ["\n", "}", "```"],
+            },
         }
         encoded_data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
             ollama_endpoint,
             data=encoded_data,
-            headers={"Content-Type": "application/json"}
+            headers={"Content-Type": "application/json"},
         )
 
         for attempt in range(1, retries + 1):
@@ -95,12 +95,13 @@ def call_llm_judge_detailed(
     try:
         from backend.config import CHAT_BACKEND
         from backend.services.llm import chat_configured, chat_call
+
         if CHAT_BACKEND != "ollama" and chat_configured():
             res = chat_call(
-                system="You are an impartial and rigorous HR Policy evaluation judge. Return ONLY the single JSON object: {\"verdict\": 1} or {\"verdict\": 0}.",
+                system='You are an impartial and rigorous HR Policy evaluation judge. Return ONLY the single JSON object: {"verdict": 1} or {"verdict": 0}.',
                 user=prompt,
                 temperature=float(temperature),
-                max_tokens=16
+                max_tokens=16,
             )
             if res and res.strip():
                 latency_ms = (time.perf_counter() - t_start) * 1000
@@ -109,7 +110,11 @@ def call_llm_judge_detailed(
         pass
 
     latency_ms = (time.perf_counter() - t_start) * 1000
-    return "OFFLINE_FALLBACK: LLM judge daemon not running; deterministic rule assertions active.", "FALLBACK", latency_ms
+    return (
+        "OFFLINE_FALLBACK: LLM judge daemon not running; deterministic rule assertions active.",
+        "FALLBACK",
+        latency_ms,
+    )
 
 
 def call_llm_judge(prompt: str, timeout: int = 180, retries: int = 1) -> str:
@@ -134,12 +139,16 @@ def parse_judge_output(output_str: str) -> int:
         return int(json_match.group(1))
 
     # 2. Look for explicit labeled output (e.g. 'Verdict: 1', 'Output: 0')
-    label_match = re.search(r'(?:verdict|output|score|result|grade)\s*[:\-=\s]\s*([01])\b', clean, re.IGNORECASE)
+    label_match = re.search(
+        r"(?:verdict|output|score|result|grade)\s*[:\-=\s]\s*([01])\b",
+        clean,
+        re.IGNORECASE,
+    )
     if label_match:
         return int(label_match.group(1))
 
     # 3. Look for standalone binary digit with word boundaries or bolding
-    standalone_match = re.search(r'(?:\*\*|\b)([01])(?:\*\*|\b)', clean)
+    standalone_match = re.search(r"(?:\*\*|\b)([01])(?:\*\*|\b)", clean)
     if standalone_match:
         return int(standalone_match.group(1))
 
@@ -152,7 +161,9 @@ def parse_judge_output(output_str: str) -> int:
     return 0
 
 
-def evaluate_case_deterministically(case: Dict[str, Any], is_strict_section: bool = False) -> int:
+def evaluate_case_deterministically(
+    case: Dict[str, Any], is_strict_section: bool = False
+) -> int:
     """
     Pure dynamic evaluation using 5 deterministic assertions without any hardcoded case IDs.
     - If question is out of jurisdiction: requires proper refusal.
@@ -200,16 +211,24 @@ def evaluate_case_with_judge_detailed(
     where source is 'LLM', 'FALLBACK', or 'ERROR'.
     """
     is_v1 = "v1" in prompt_template.lower() or "judge_v1" in prompt_template.lower()
-    
+
     # Safe template substitution without breaking on literal JSON braces
     # STRICT DATA INTEGRITY: ONLY question, retrieved_context, and answer are substituted.
     # NO human labels, expected verdicts, or numeric targets are EVER passed into the prompt.
     formatted_prompt = prompt_template
-    formatted_prompt = formatted_prompt.replace("{question}", str(case.get("question", "")).strip())
-    formatted_prompt = formatted_prompt.replace("{context}", str(case.get("retrieved_context", "")).strip())
-    formatted_prompt = formatted_prompt.replace("{answer}", str(case.get("answer", "")).strip())
+    formatted_prompt = formatted_prompt.replace(
+        "{question}", str(case.get("question", "")).strip()
+    )
+    formatted_prompt = formatted_prompt.replace(
+        "{context}", str(case.get("retrieved_context", "")).strip()
+    )
+    formatted_prompt = formatted_prompt.replace(
+        "{answer}", str(case.get("answer", "")).strip()
+    )
 
-    raw_output, source, latency_ms = call_llm_judge_detailed(formatted_prompt, temperature=temperature, model=model)
+    raw_output, source, latency_ms = call_llm_judge_detailed(
+        formatted_prompt, temperature=temperature, model=model
+    )
 
     if source == "LLM":
         verdict = parse_judge_output(raw_output)
@@ -218,28 +237,43 @@ def evaluate_case_with_judge_detailed(
         verdict = evaluate_case_deterministically(case, is_strict_section=is_v1)
         annotated_raw = f"FALLBACK_DETERMINISTIC (LLM Offline): Evaluated dynamically (verdict={verdict})"
         return verdict, annotated_raw, "FALLBACK", latency_ms, False
-    else: # ERROR
+    else:  # ERROR
         verdict = evaluate_case_deterministically(case, is_strict_section=is_v1)
-        annotated_raw = f"ERROR_FALLBACK ({raw_output}): Evaluated dynamically (verdict={verdict})"
+        annotated_raw = (
+            f"ERROR_FALLBACK ({raw_output}): Evaluated dynamically (verdict={verdict})"
+        )
         return verdict, annotated_raw, "ERROR", latency_ms, False
 
 
-def evaluate_case_with_judge(case: Dict[str, Any], prompt_template: str) -> Tuple[int, str]:
+def evaluate_case_with_judge(
+    case: Dict[str, Any], prompt_template: str
+) -> Tuple[int, str]:
     """
     Evaluates a single policy QA case using the specified judge prompt template.
     Returns a tuple of (binary_verdict, raw_llm_response).
     """
-    verdict, raw_output, _, _, _ = evaluate_case_with_judge_detailed(case, prompt_template)
+    verdict, raw_output, _, _, _ = evaluate_case_with_judge_detailed(
+        case, prompt_template
+    )
     return verdict, raw_output
 
 
-def run_judge_suite(cases: List[Dict[str, Any]], prompt_path: str, labels: Dict[str, int], use_live_llm: Optional[bool] = None) -> Dict[str, Any]:
+def run_judge_suite(
+    cases: List[Dict[str, Any]],
+    prompt_path: str,
+    labels: Dict[str, int],
+    use_live_llm: Optional[bool] = None,
+) -> Dict[str, Any]:
     """
     Executes a complete evaluation suite run across all benchmark cases and computes agreement metrics.
     Supports both dynamic deterministic rule evaluation and live LLM model inference with ZERO hardcoding.
     """
     if use_live_llm is None:
-        use_live_llm = os.environ.get("WEEK6_LIVE_LLM", "0").lower() in ("1", "true", "yes")
+        use_live_llm = os.environ.get("WEEK6_LIVE_LLM", "0").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
 
     prompt_template = pathlib.Path(prompt_path).read_text(encoding="utf-8")
     is_v1 = "v1" in prompt_path.lower()
@@ -263,40 +297,48 @@ def run_judge_suite(cases: List[Dict[str, Any]], prompt_path: str, labels: Dict[
         if use_live_llm:
             judge_verdict, raw_resp = evaluate_case_with_judge(case, prompt_template)
         else:
-            raw_resp = "OFFLINE_DETERMINISTIC: Evaluated via deterministic policy assertions."
-            judge_verdict = evaluate_case_deterministically(case, is_strict_section=is_v1)
+            raw_resp = (
+                "OFFLINE_DETERMINISTIC: Evaluated via deterministic policy assertions."
+            )
+            judge_verdict = evaluate_case_deterministically(
+                case, is_strict_section=is_v1
+            )
 
         if judge_verdict == 1:
             judge_correct += 1
         else:
             judge_incorrect += 1
 
-        is_agreed = (judge_verdict == expected_human)
+        is_agreed = judge_verdict == expected_human
         if is_agreed:
             agreements += 1
         else:
-            disagreements.append({
+            disagreements.append(
+                {
+                    "case_id": cid,
+                    "trace_id": case.get("trace_id"),
+                    "question": case.get("question"),
+                    "answer": case.get("answer"),
+                    "retrieved_context": case.get("retrieved_context"),
+                    "human_label": expected_human,
+                    "judge_label": judge_verdict,
+                    "raw_response": raw_resp,
+                    "taxonomy_mode": case.get("taxonomy_mode"),
+                }
+            )
+
+        results.append(
+            {
                 "case_id": cid,
                 "trace_id": case.get("trace_id"),
                 "question": case.get("question"),
-                "answer": case.get("answer"),
-                "retrieved_context": case.get("retrieved_context"),
                 "human_label": expected_human,
                 "judge_label": judge_verdict,
+                "agreed": is_agreed,
                 "raw_response": raw_resp,
-                "taxonomy_mode": case.get("taxonomy_mode")
-            })
-
-        results.append({
-            "case_id": cid,
-            "trace_id": case.get("trace_id"),
-            "question": case.get("question"),
-            "human_label": expected_human,
-            "judge_label": judge_verdict,
-            "agreed": is_agreed,
-            "raw_response": raw_resp,
-            "taxonomy_mode": case.get("taxonomy_mode")
-        })
+                "taxonomy_mode": case.get("taxonomy_mode"),
+            }
+        )
 
     total = len(cases)
     agreement_pct = (agreements / total * 100.0) if total > 0 else 0.0
@@ -310,5 +352,5 @@ def run_judge_suite(cases: List[Dict[str, Any]], prompt_path: str, labels: Dict[
         "agreements": agreements,
         "agreement_pct": agreement_pct,
         "disagreements": disagreements,
-        "results": results
+        "results": results,
     }

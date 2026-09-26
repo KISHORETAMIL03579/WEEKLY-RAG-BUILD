@@ -36,7 +36,9 @@ class TestEvaluationLifecycle(unittest.TestCase):
         cases = res_bm.json().get("cases", [])
 
         # 2. Start background evaluation run (deterministic fast mode)
-        res_start = self.client.post("/api/evaluation/runs", json={"cases": cases, "run_llm": False})
+        res_start = self.client.post(
+            "/api/evaluation/runs", json={"cases": cases, "run_llm": False}
+        )
         self.assertEqual(res_start.status_code, 200)
         run_data = res_start.json()
         run_id = run_data.get("evaluation_run_id")
@@ -79,7 +81,9 @@ class TestEvaluationLifecycle(unittest.TestCase):
         """Verify POST /api/evaluation/runs/{run_id}/cancel cancels an active or queued run."""
         res_bm = self.client.get("/api/evaluation/benchmark")
         cases = res_bm.json().get("cases", [])[:5]
-        res_start = self.client.post("/api/evaluation/runs", json={"cases": cases, "run_llm": False})
+        res_start = self.client.post(
+            "/api/evaluation/runs", json={"cases": cases, "run_llm": False}
+        )
         run_id = res_start.json().get("evaluation_run_id")
 
         res_cancel = self.client.post(f"/api/evaluation/runs/{run_id}/cancel")
@@ -107,7 +111,9 @@ class TestEvaluationLifecycle(unittest.TestCase):
         # 1. Start a judge run
         res_bm = self.client.get("/api/evaluation/benchmark")
         cases = res_bm.json().get("cases", [])[:2]
-        res_start = self.client.post("/api/evaluation/runs", json={"cases": cases, "run_llm": False})
+        res_start = self.client.post(
+            "/api/evaluation/runs", json={"cases": cases, "run_llm": False}
+        )
         self.assertEqual(res_start.status_code, 200)
         judge_run_id = res_start.json().get("evaluation_run_id")
 
@@ -125,7 +131,10 @@ class TestEvaluationLifecycle(unittest.TestCase):
     def test_07_frontend_source_contains_zero_legacy_week6_calls(self):
         """Verify frontend source files do not contain any legacy /api/week6/runs calls."""
         import os
-        frontend_src = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "src")
+
+        frontend_src = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "frontend", "src"
+        )
         legacy_occurrences = []
         for root, _, files in os.walk(frontend_src):
             for file in files:
@@ -134,14 +143,22 @@ class TestEvaluationLifecycle(unittest.TestCase):
                     with open(path, "r", encoding="utf-8", errors="ignore") as f:
                         for line_idx, line in enumerate(f, 1):
                             if "week6/runs" in line:
-                                legacy_occurrences.append(f"{file}:{line_idx}: {line.strip()}")
-        self.assertEqual(len(legacy_occurrences), 0, f"Found legacy week6 calls in frontend: {legacy_occurrences}")
+                                legacy_occurrences.append(
+                                    f"{file}:{line_idx}: {line.strip()}"
+                                )
+        self.assertEqual(
+            len(legacy_occurrences),
+            0,
+            f"Found legacy week6 calls in frontend: {legacy_occurrences}",
+        )
 
     def test_08_benchmark_progress_and_completion_invariants(self):
         """Verify progress counters increment monotonically and complete at 100%."""
         res_bm = self.client.get("/api/evaluation/benchmark")
         cases = res_bm.json().get("cases", [])[:3]
-        res_start = self.client.post("/api/evaluation/runs", json={"cases": cases, "run_llm": False})
+        res_start = self.client.post(
+            "/api/evaluation/runs", json={"cases": cases, "run_llm": False}
+        )
         run_id = res_start.json().get("evaluation_run_id")
 
         for _ in range(30):
@@ -157,4 +174,3 @@ class TestEvaluationLifecycle(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -34,8 +34,14 @@ except Exception:
 # Data directories
 UPLOAD_FOLDER = BASE_DIR / "uploads"
 VECTOR_FOLDER = BASE_DIR / "vectorstore"
-TRACE_LOG_PATH = os.environ.get("TRACE_LOG_PATH", str(BASE_DIR / "traces" / "traces.jsonl"))
-ORPHAN_LOG_PATH = Path(os.environ.get("ORPHAN_LOG_PATH", str(BASE_DIR / "vectorstore" / "orphaned_docs.jsonl")))
+TRACE_LOG_PATH = os.environ.get(
+    "TRACE_LOG_PATH", str(BASE_DIR / "traces" / "traces.jsonl")
+)
+ORPHAN_LOG_PATH = Path(
+    os.environ.get(
+        "ORPHAN_LOG_PATH", str(BASE_DIR / "vectorstore" / "orphaned_docs.jsonl")
+    )
+)
 
 UPLOAD_FOLDER.mkdir(exist_ok=True)
 VECTOR_FOLDER.mkdir(exist_ok=True)
@@ -92,15 +98,27 @@ DEFAULT_CHUNK_SIZE = int(os.environ.get("DEFAULT_CHUNK_SIZE", "512"))
 EMBED_BATCH = int(os.environ.get("EMBED_BATCH", "32"))
 
 # Reranking & Query Rewriting
-RERANK_ENABLED = os.environ.get("RERANK_ENABLED", "false").lower() in ("1", "true", "yes")
+RERANK_ENABLED = os.environ.get("RERANK_ENABLED", "false").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 RERANK_TOP_N = int(os.environ.get("RERANK_TOP_N", "8"))
 RERANK_MIN_RELEVANCE = float(os.environ.get("RERANK_MIN_RELEVANCE", "5"))
-QUERY_REWRITE_ENABLED = os.environ.get("QUERY_REWRITE_ENABLED", "false").lower() in ("1", "true", "yes")
+QUERY_REWRITE_ENABLED = os.environ.get("QUERY_REWRITE_ENABLED", "false").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 
 # Security and Server settings
 MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50 MB
 SESSION_COOKIE_MAX_AGE = 14 * 24 * 60 * 60  # 14 days
-SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "").lower() in ("1", "true", "yes")
+SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 ADMIN_API_KEY = os.environ.get("ADMIN_API_KEY", "")
 PORT = int(os.environ.get("PORT", 5000))
 HOST = os.environ.get("HOST", "127.0.0.1")
@@ -123,7 +141,9 @@ if _raw_secret:
     SECRET_KEY = _raw_secret
 elif _is_prod:
     logger.critical("SECRET_KEY is required in production! Aborting startup.")
-    raise SystemExit("CRITICAL: SECRET_KEY environment variable is missing in production.")
+    raise SystemExit(
+        "CRITICAL: SECRET_KEY environment variable is missing in production."
+    )
 else:
     SECRET_KEY = secrets.token_hex(32)
     logger.warning("SECRET_KEY not set — using ephemeral per-process key.")
@@ -135,4 +155,3 @@ def get_app_symbol(name: str, default: Any = None) -> Any:
     if app_mod is not None and hasattr(app_mod, name):
         return getattr(app_mod, name)
     return default
-

@@ -11,6 +11,7 @@ Every model call in the pipeline — embeddings, image OCR, and chat/answer gene
 The repository follows **Clean Architecture** and layered-architecture principles, structured into four distinct categories:
 
 ### 1. Application Source Code
+
 - **`backend/`**: Authoritative FastAPI backend (`backend.main:app`).
   - **`backend/routes/`**: Handles REST API concerns, request validation, and HTTP serialization (`chat.py`, `documents.py`, `ingestion.py`, `evaluation.py`, `traces.py`).
   - **`backend/services/`**: Application workflows, embedding/LLM integrations, hybrid search, RRF fusion, and background worker runners (`EvaluationRunManager`).
@@ -20,17 +21,20 @@ The repository follows **Clean Architecture** and layered-architecture principle
 - **`frontend/`**: Modern React 18 + TypeScript + Vite single-page application (`frontend/src/`).
 
 ### 2. Testing & Evaluation
+
 - **`tests/`**: Automated test suite (`test_eval_lifecycle.py`, `test_eval_metrics.py`, `test_week6.py`) with 86 passing unit and regression tests.
 - **`week6/`**: Benchmark datasets (`eval_cases_25.json`), human ground-truth labels (`labels_25.json`), and calibrated judge prompts (`judge_v1.txt`, `judge_v2.txt`), cleanly separating benchmark assets from production RAG code.
 - **`scripts/`**: Standalone evaluation runners, audit scripts, and diagnostic tools.
 
 ### 3. Runtime & Persistence (Local State & Reference Material)
+
 - **`traces/`**: Durable runtime execution trace logs (`traces.jsonl`).
 - **`uploads/`**: Uploaded document cache for PDF/TXT/DOCX files.
 - **`vectorstore/`**: Local disk vector index storage.
 - **`WEEKLY_RAG_TASK/`**: Project reference and course training material.
 
 ### 4. Project & Tooling Configuration
+
 - **`app.py`**: **Backward-compatible facade** — maintained as a migration entry point re-exporting `backend.main:app` for legacy test runners. All authoritative application logic resides exclusively in `backend/`.
 - **`Dockerfile` & `docker-compose.yml`**: Production container build and multi-service orchestration (FastAPI + Qdrant + Ollama).
 - **`requirements.txt`**: Pinned Python dependencies.
@@ -76,7 +80,9 @@ WEEK-3-RAG/
 ## ⚡ Quick Start & Setup
 
 ### 1. Environment Setup
+
 ### Option A: Complete Docker Compose Deployment (Recommended)
+
 With Docker installed, you can start the entire stack (FastAPI + React 18 SPA, Qdrant Vector DB, Ollama inference engine, and automatic model initialization) in a single command:
 
 ```bash
@@ -88,6 +94,7 @@ docker compose up -d --build
 ```
 
 `docker compose` automatically:
+
 1. Builds the React 18 + TypeScript + Vite frontend and FastAPI container (`weekly-rag-build-app:latest`).
 2. Starts the Qdrant vector database (`weekly-rag-build-qdrant`, image: `qdrant/qdrant:v1.13.4`).
 3. Starts the Ollama inference engine (`weekly-rag-build-ollama`, image: `ollama/ollama:0.33.3`).
@@ -103,6 +110,7 @@ docker compose up -d --build
 ---
 
 ### Option B: Local Python Development
+
 If you prefer running directly on your host machine:
 
 ```bash
@@ -117,17 +125,21 @@ cp .env.example .env
 ```
 
 ### 2. Choose your backends (edit `.env`)
+
 The app defaults to **fully local** — no cloud API key required at all:
 Launch the application:
+
 ```bash
 ollama pull nomic-embed-text   # embeddings
 ollama pull llava              # vision OCR (skip if you never upload images)
 ollama pull llama3.1           # chat / answer generation
 ollama serve                   # if not already running as a background service
 ```
+
 To use Google Gemini and/or xAI Grok instead for any of the three pieces, see §7 Configuration — each backend (`EMBED_BACKEND`, `VISION_BACKEND`, `CHAT_BACKEND`) is set independently.
 
 ### 3. VS Code Interpreter Selection
+
 ```text
 Ctrl + Shift + P
        ↓
@@ -137,19 +149,25 @@ Python: Select Interpreter
 ```
 
 ### 4. Launch the Application
+
 ```bash
 python app.py
 ```
+
 `app.py` still runs standalone — its `__main__` block now starts **uvicorn** (with the autoreloader when `APP_DEBUG=true`). Equivalent, if you prefer driving the server directly:
+
 ```bash
 uvicorn app:app --host 127.0.0.1 --port 5000 --reload
 ```
+
 Open **http://localhost:5000** in your browser. The startup banner tells you which mode actually loaded, e.g.:
+
 ```
 🚀 Ask My Docs is running → http://localhost:5000
    Mode: embeddings (Ollama (local)) + LLM (Ollama (local))
    API docs: http://localhost:5000/docs
 ```
+
 `python app.py` automatically checks if `frontend/dist` is present and builds the React 18 + Vite frontend if needed before starting Uvicorn. Open **http://localhost:5000**.
 
 Because the app is now FastAPI, the whole JSON API is self-documenting: **Swagger UI at `/docs`**, **ReDoc at `/redoc`**, and the raw schema at **`/openapi.json`** — generated from the request/response models in `app.py`, so it cannot drift from the code.
@@ -157,6 +175,7 @@ Because the app is now FastAPI, the whole JSON API is self-documenting: **Swagge
 ---
 
 ## 📖 Table of Contents
+
 1. System Workflows & How It Works
 2. Universal File Extraction & Vision OCR
 3. Retrieval & RAG System Architecture
@@ -198,6 +217,7 @@ Because the app is now FastAPI, the whole JSON API is self-documenting: **Swagge
 ```
 
 ### Workflow 1: Document Upload & Indexing
+
 1. **User Action**: You drop files (PDF, Word, Code, CSV, Image) into the dropzone or type a web URL.
 2. **Staging**: The UI validates file extension and size, staging it in the active upload list.
 3. **Chunk Strategy Selection**: You select a chunking strategy (`structured`, `128`, `256`, `512` words).
@@ -212,14 +232,15 @@ Because the app is now FastAPI, the whole JSON API is self-documenting: **Swagge
 ---
 
 ### Workflow 2: Grounded Question-Answering
-1. **User Action**: You type a question in the chat input (e.g. *"What does working from home mean?"*).
+
+1. **User Action**: You type a question in the chat input (e.g. _"What does working from home mean?"_).
 2. **Search Query Normalization**: If `QUERY_REWRITE_ENABLED=true`, a chat-model call simplifies conversational fluff into a clean search query.
 3. **Hybrid Retrieval**:
    - **BM25 Keyword Search**: Finds exact term occurrences (e.g. section numbers like `9.3.4`).
    - **Dense Vector Search**: Finds semantic concepts.
    - **Reciprocal Rank Fusion (RRF)**: Fuses both rankings using $RRF(c) = \sum \frac{1}{k + r(c)}$, normalized so 1.0 = ranked #1 by both methods.
 4. **Context Validation Gate**: Checks if the top match score clears `EMBED_MIN_SCORE` (`0.55` by default, on RRF's normalized scale — not a raw cosine similarity).
-   - If the top score is below threshold: immediately outputs *"I don't know — no document content matched your question closely enough."* to prevent hallucination, and returns the closest near-miss for diagnosis.
+   - If the top score is below threshold: immediately outputs _"I don't know — no document content matched your question closely enough."_ to prevent hallucination, and returns the closest near-miss for diagnosis.
 5. **Answer Synthesis**: Validated context chunks are passed to whichever `CHAT_BACKEND` is configured — xAI Grok or a local Ollama chat model — with strict grounding rules (answer only from the excerpts, cite every fact `[1]`/`[2]`, say "I don't know" if the excerpts don't cover it).
 6. **Citations & Inspection**: Returns the synthesized answer alongside **Grounded Sources** cards — numbered badge, filename, page, section, color-coded relevance score, an **Open ↗** button that deep-links into the document viewer at the exact page with the matched passage highlighted (see §5b), and a **▼ View Content** toggle showing the actual retrieved excerpt inline.
 7. **Trace Logged**: Every `/ask` call — success or "I don't know" — writes one durable, redacted JSON record to `traces/traces.jsonl` (see §5a).
@@ -227,12 +248,13 @@ Because the app is now FastAPI, the whole JSON API is self-documenting: **Swagge
 ---
 
 ### Workflow 3: Multimodal Image OCR
+
 1. **User Action**: You upload an image file (`.png`, `.jpg`, `.webp`, `.tiff`, `.bmp`, `.gif`).
 2. **Base64 Payload Encoding**: `app.py` reads the binary image bytes and base64-encodes them.
 3. **Vision OCR Call**, per `VISION_BACKEND`:
    - **Gemini**: calls `GEMINI_VISION_MODEL` (default `gemini-3.7-flash`) with the image as `inline_data`.
    - **Ollama** (default): calls a local vision-capable model (default `llava`) via `/api/generate`'s native `images` field.
-   Either way, the prompt is: *"Extract all text, table content, diagram descriptions, titles, bullet points, and key information into clean, structured Markdown."*
+     Either way, the prompt is: _"Extract all text, table content, diagram descriptions, titles, bullet points, and key information into clean, structured Markdown."_
 4. **Markdown Chunking & Embedding**: Transcribed Markdown text is chunked and embedded like standard text documents.
 
 > **Known limitation**: local vision models (`llava`, `moondream`) are noticeably weaker than Gemini's OCR at dense text and busy scans. Worth spot-checking real output quality before relying on `VISION_BACKEND=ollama` for policy-document-grade scans; you can set `VISION_BACKEND=gemini` independently of your embeddings/chat backend choices if OCR fidelity matters more than staying fully local.
@@ -240,6 +262,7 @@ Because the app is now FastAPI, the whole JSON API is self-documenting: **Swagge
 ---
 
 ### Workflow 4: Automated Evaluation & Ablation Matrix (`/eval`)
+
 1. **User Action**: Navigate to `/eval`. Enter test Q/A pairs or upload a Q/A benchmark PDF.
 2. **Preset Selection**: Select ablation ladder presets (`tfidf`, `bm25-qdrant-blend`, `bm25-qdrant-rrf`, `rrf-rerank`, `rrf-rerank-rewrite`).
 3. **Execution (`/eval/run`)**: Each preset runs questions through its respective retrieval pipeline.
@@ -249,6 +272,7 @@ Because the app is now FastAPI, the whole JSON API is self-documenting: **Swagge
 ---
 
 ### Workflow 5: Document Session Lifecycle
+
 - **Session Isolation**: Each user browser session receives a unique `session_id` and isolated vector collection.
 - **Single File Removal (`/remove`)**: Deletes chunks for a specific document and purges its deduplication hash.
 - **Session Reset (`/clear`)**: Clears all indexed vectors, uploaded files, and session state.
@@ -257,20 +281,21 @@ Because the app is now FastAPI, the whole JSON API is self-documenting: **Swagge
 
 ## 2. Universal File Extraction & Vision OCR
 
-| File Category | Extensions | Extraction Method & Behavior |
-| :--- | :--- | :--- |
-| **Images (Vision OCR)** | `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.tiff`, `.gif` | **Gemini or Ollama Vision** (per `VISION_BACKEND`): transcribes visual text, tables, numbers, diagram annotations, and notes into Markdown. |
-| **Word Documents** | `.docx`, `.doc` | **python-docx Extractor**: Parses paragraph text, headings, and data tables. |
-| **Spreadsheets & Data** | `.csv`, `.tsv`, `.json`, `.xml`, `.yaml`, `.yml` | **Data Formatter**: Converts tabular data into Markdown tables and formatted code blocks. |
-| **Source Code & Config** | `.py`, `.js`, `.ts`, `.jsx`, `.tsx`, `.html`, `.css`, `.c`, `.cpp`, `.java`, `.go`, `.rs`, `.php`, `.sql`, `.sh`, `.log`, `.env` | **Code Block Wrapper**: Preserves code formatting inside syntax fences. |
-| **Standard Documents** | `.pdf`, `.txt`, `.md`, `.markdown`, `.rst` | **PyMuPDF / Section Splitter**: Page-by-page and heading-based extraction. |
+| File Category            | Extensions                                                                                                                       | Extraction Method & Behavior                                                                                                                |
+| :----------------------- | :------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Images (Vision OCR)**  | `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.tiff`, `.gif`                                                                        | **Gemini or Ollama Vision** (per `VISION_BACKEND`): transcribes visual text, tables, numbers, diagram annotations, and notes into Markdown. |
+| **Word Documents**       | `.docx`, `.doc`                                                                                                                  | **python-docx Extractor**: Parses paragraph text, headings, and data tables.                                                                |
+| **Spreadsheets & Data**  | `.csv`, `.tsv`, `.json`, `.xml`, `.yaml`, `.yml`                                                                                 | **Data Formatter**: Converts tabular data into Markdown tables and formatted code blocks.                                                   |
+| **Source Code & Config** | `.py`, `.js`, `.ts`, `.jsx`, `.tsx`, `.html`, `.css`, `.c`, `.cpp`, `.java`, `.go`, `.rs`, `.php`, `.sql`, `.sh`, `.log`, `.env` | **Code Block Wrapper**: Preserves code formatting inside syntax fences.                                                                     |
+| **Standard Documents**   | `.pdf`, `.txt`, `.md`, `.markdown`, `.rst`                                                                                       | **PyMuPDF / Section Splitter**: Page-by-page and heading-based extraction.                                                                  |
 
 ---
 
 ## 3. Retrieval & RAG System Architecture
 
 ### Why Hybrid Search (BM25 + Dense Embeddings)?
-- **Dense Embeddings**: Match semantic meaning (e.g., *"How do I get my money back?"* matches *"refund policy"*).
+
+- **Dense Embeddings**: Match semantic meaning (e.g., _"How do I get my money back?"_ matches _"refund policy"_).
 - **BM25 Keyword Search**: Matches exact technical terms, acronyms, product SKUs, and error codes (e.g., section numbers, `SEC-808`).
 - **Reciprocal Rank Fusion (RRF)**: Merges sparse BM25 and dense vector rankings using $RRF(c) = \sum \frac{1}{k + r(c)}$, avoiding raw score normalization issues. `RRF_K=10` here (not the textbook web-scale default of 60) — tuned for a document-sized corpus of a few hundred chunks, where 60 crushed the gap between a genuine top match and a plausible false positive (~1.0 vs ~0.78) far more than 10 does (~1.0 vs ~0.39–0.42).
 
@@ -279,11 +304,13 @@ Because the app is now FastAPI, the whole JSON API is self-documenting: **Swagge
 ## 4. Deep Dive: Evaluation Suite & Metrics (`/eval`)
 
 ### 4.1 Failure Mode Categorization
+
 - **`Success`**: Right document/section retrieved in top-K, correct answer synthesized.
 - **`Retrieval Failure`**: Target ground-truth document was missing from top-K candidates (`Hit-Rate@K == 0`).
 - **`Generation Failure`**: Right document retrieved, but the chat model failed to synthesize a correct answer.
 
 ### 4.2 Quantitative Evaluation Metrics
+
 - **`Hit-Rate@K`** (e.g. `Hit-Rate@3`): Percentage of test questions where the correct document appeared in the top-K retrieved candidates.
 - **`MRR` (Mean Reciprocal Rank)**: Measures average reciprocal rank ($1/\text{rank}$) across all test queries.
 - **`Recall@K`**: Ratio of expected section coverage.
@@ -292,34 +319,34 @@ Because the app is now FastAPI, the whole JSON API is self-documenting: **Swagge
 
 ## 5. Backend API Endpoints Architecture
 
-| HTTP Method | Route | Description |
-| :--- | :--- | :--- |
-| `POST` | `/upload` | Universal file upload & vector indexing endpoint |
-| `POST` | `/upload-cancel` | Cancels in-flight upload, safely removes extracted file, and unindexes doc from vector store |
-| `POST` | `/load-url` | Web page fetch & HTML text extraction endpoint |
-| `POST` | `/ask` | Hybrid retrieval & grounded QA endpoint; writes a trace record per call |
-| `GET` | `/status` | Returns session indexed document counts, backend info (`embeddings_backend`, `chat_backend`, `vector_backend`, `retrieval_mode`) |
-| `POST` | `/remove` | Removes a specific document from vector store |
-| `POST` | `/clear` | Clears all documents and vectors for the current session |
-| `POST` | `/eval/run` | Runs evaluation benchmark matrix across presets |
-| `GET` | `/eval` | Evaluation Matrix & Inspection Drawer UI |
-| `GET` | `/file/<doc_id>` | Renders the document viewer page |
-| `GET` | `/file/<doc_id>/raw` | Streams the raw file bytes (used by the PDF `<embed>`) |
-| `GET` | `/file/<doc_id>/pages` | Returns extracted per-page text (used by the non-PDF text viewer) |
-| `GET` | `/healthz` | System liveness & configuration health check (`embeddings_configured`, `chat_configured`, `retrieval_mode`, `vector_backend`) |
-| `GET` | `/readyz` | System readiness check; validates live connectivity to Qdrant vector backend |
-| `GET` | `/orphans` | Lists unindexed / cleanup-failed orphaned documents (requires active session or `X-Admin-Key` header) |
-| `GET` | `/traces` | Lists all logged trace_ids |
-| `POST` | `/replay/<trace_id>` | Replays a trace from the trace record alone; returns original vs. replayed raw output (session-scoped or requires `X-Admin-Key`) |
-| `GET` | `/docs`, `/redoc`, `/openapi.json` | Auto-generated interactive API documentation (FastAPI) |
+| HTTP Method | Route                              | Description                                                                                                                      |
+| :---------- | :--------------------------------- | :------------------------------------------------------------------------------------------------------------------------------- |
+| `POST`      | `/upload`                          | Universal file upload & vector indexing endpoint                                                                                 |
+| `POST`      | `/upload-cancel`                   | Cancels in-flight upload, safely removes extracted file, and unindexes doc from vector store                                     |
+| `POST`      | `/load-url`                        | Web page fetch & HTML text extraction endpoint                                                                                   |
+| `POST`      | `/ask`                             | Hybrid retrieval & grounded QA endpoint; writes a trace record per call                                                          |
+| `GET`       | `/status`                          | Returns session indexed document counts, backend info (`embeddings_backend`, `chat_backend`, `vector_backend`, `retrieval_mode`) |
+| `POST`      | `/remove`                          | Removes a specific document from vector store                                                                                    |
+| `POST`      | `/clear`                           | Clears all documents and vectors for the current session                                                                         |
+| `POST`      | `/eval/run`                        | Runs evaluation benchmark matrix across presets                                                                                  |
+| `GET`       | `/eval`                            | Evaluation Matrix & Inspection Drawer UI                                                                                         |
+| `GET`       | `/file/<doc_id>`                   | Renders the document viewer page                                                                                                 |
+| `GET`       | `/file/<doc_id>/raw`               | Streams the raw file bytes (used by the PDF `<embed>`)                                                                           |
+| `GET`       | `/file/<doc_id>/pages`             | Returns extracted per-page text (used by the non-PDF text viewer)                                                                |
+| `GET`       | `/healthz`                         | System liveness & configuration health check (`embeddings_configured`, `chat_configured`, `retrieval_mode`, `vector_backend`)    |
+| `GET`       | `/readyz`                          | System readiness check; validates live connectivity to Qdrant vector backend                                                     |
+| `GET`       | `/orphans`                         | Lists unindexed / cleanup-failed orphaned documents (requires active session or `X-Admin-Key` header)                            |
+| `GET`       | `/traces`                          | Lists all logged trace_ids                                                                                                       |
+| `POST`      | `/replay/<trace_id>`               | Replays a trace from the trace record alone; returns original vs. replayed raw output (session-scoped or requires `X-Admin-Key`) |
+| `GET`       | `/docs`, `/redoc`, `/openapi.json` | Auto-generated interactive API documentation (FastAPI)                                                                           |
 
 Every path, HTTP method, request body and response body above is unchanged from the backend API contract — `frontend/src/services/api.ts` calls them with strongly typed TypeScript models. Path parameters are written `{doc_id}` internally (FastAPI syntax), and the URLs on the wire are identical.
 
 **Request/response validation.** JSON bodies are parsed into Pydantic models (`AskRequest`, `LoadUrlRequest`, `RemoveRequest`, `EvalRunRequest`, `UploadCancelRequest`), and the fixed-shape endpoints (`/status`, `/healthz`, `/readyz`, `/traces`, `/clear`, `/remove`, `/upload-cancel`) declare response models. Endpoints whose payload genuinely varies by branch (`/ask`, `/upload`, `/load-url`, `/eval/run`, `/orphans`, `/replay/<id>`, `/file/<id>/pages`) return plain dicts so their wire format stays byte-identical.
 
-The models are deliberately permissive where the old code was — unknown keys are ignored (`extra="ignore"`), every field is optional with the same defaults, an entirely absent body is treated as `{}`, and `top_k` / `temperature` are still *clamped* to their supported ranges rather than rejected. The one genuinely new behaviour: a value that cannot be parsed at all (e.g. `"top_k": "abc"`, previously ignored in silence) now returns **422**. That response uses this API's normal `{"error": "..."}` envelope — see `_validation_error_handler` in `app.py` — so `handleResponse()` in `frontend/src/services/api.ts` surfaces a real message rather than a bare status code, with FastAPI's structured `detail` array alongside it.
+The models are deliberately permissive where the old code was — unknown keys are ignored (`extra="ignore"`), every field is optional with the same defaults, an entirely absent body is treated as `{}`, and `top_k` / `temperature` are still _clamped_ to their supported ranges rather than rejected. The one genuinely new behaviour: a value that cannot be parsed at all (e.g. `"top_k": "abc"`, previously ignored in silence) now returns **422**. That response uses this API's normal `{"error": "..."}` envelope — see `_validation_error_handler` in `app.py` — so `handleResponse()` in `frontend/src/services/api.ts` surfaces a real message rather than a bare status code, with FastAPI's structured `detail` array alongside it.
 
-**Request size limit.** Every request body is capped at **50 MB**. Flask enforced this via `MAX_CONTENT_LENGTH`; Starlette imposes no limit of its own, so `MaxBodySizeMiddleware` in `app.py` re-implements it — rejecting an oversized `Content-Length` up front, *and* counting bytes for chunked requests that declare no length. Both paths return `413 {"error": "File too large (max 50 MB)"}`, exactly as the old `@app.errorhandler(413)` did.
+**Request size limit.** Every request body is capped at **50 MB**. Flask enforced this via `MAX_CONTENT_LENGTH`; Starlette imposes no limit of its own, so `MaxBodySizeMiddleware` in `app.py` re-implements it — rejecting an oversized `Content-Length` up front, _and_ counting bytes for chunked requests that declare no length. Both paths return `413 {"error": "File too large (max 50 MB)"}`, exactly as the old `@app.errorhandler(413)` did.
 
 ---
 
@@ -328,13 +355,14 @@ The models are deliberately permissive where the old code was — unknown keys a
 Every `/ask` call writes one durable, redacted JSON line to `traces/traces.jsonl` (path configurable via `TRACE_LOG_PATH`), in addition to the existing console-only `RAGTracer` step logs. Each record carries: `trace_id`, `question` (redacted), `retrieval_mode`, `retrieved` (chunk_id + doc_id + filename + page + section + score + text, all redacted), `model`, `temperature`, `prompt_version`, `raw_output` (redacted), `answer`, `found`, and `latency_ms`. See `trace_store.py` for the redaction rules and prompt-version registry.
 
 **Workflow for the Task Set C write-up:**
+
 1. Run the app and ask it a realistic mix of real HR questions (not just demo questions) so `traces/traces.jsonl` accumulates real traffic.
 2. `python sample_trace.py --n 20 --seed <your_seed>` — prints (and can save) the seeded 20 trace_ids. Paste the seed and the list into `notes.md`.
 3. `python sample_trace.py --replay-pick --seed <your_seed>` to seed-pick one trace_id, then replay via `POST`:
    ```bash
    curl -X POST http://localhost:5000/replay/<trace_id>
    ```
-   *(Note: `/replay/<trace_id>` is session-scoped. Provide your session cookie or include the `-H "X-Admin-Key: <key>"` header if replaying cross-session).* Paste both original and replayed outputs into `notes.md`, along with `fields_missing_from_trace` / `reconstruction_note` if either is non-null.
+   _(Note: `/replay/<trace_id>` is session-scoped. Provide your session cookie or include the `-H "X-Admin-Key: <key>"` header if replaying cross-session)._ Paste both original and replayed outputs into `notes.md`, along with `fields_missing_from_trace` / `reconstruction_note` if either is non-null.
 4. Read all 20 traces by hand (`grep trace_id traces/traces.jsonl` or open the file directly) and write one observation sentence each in `notes.md` — no fixes, no categorizing yet.
 5. Cluster into 4–7 named modes in `taxonomy.md`, write the dated prediction, commit it, and paste the commit hash.
 
@@ -347,28 +375,28 @@ Every `/ask` call writes one durable, redacted JSON line to `traces/traces.jsonl
 Clicking **Open ↗** on any source card navigates to `/#/file/<doc_id>?page=N&hl=<snippet>` in the React SPA. What happens next depends on file type:
 
 - **Non-PDF documents** (`.txt`, `.md`, extracted Word/CSV/code text) render through the React page-by-page viewer (`frontend/src/pages/ViewerPage.tsx`) with **real in-page highlighting**: the `hl` snippet (the first ~100 characters of the actual retrieved chunk, not the raw question — the question almost never appears verbatim in the source) is matched against the page text with a whitespace-flexible regex, since chunk text gets newlines collapsed during ingestion while the raw page text keeps them.
-- **PDF documents** are handed to the **browser's own native PDF plugin** via `<embed>` with `/file/{doc_id}/raw` — there is no API surface for us to inject a highlight into that renderer's content. What *does* work: the standard `#page=N` URL fragment (supported by Chrome/Firefox/Safari/Edge/Brave) jumps straight to the cited page. For the passage itself, a banner above the embed shows the exact excerpt text to look for, with a nudge to use the browser's native Find (Ctrl/Cmd+F) — an honest fallback rather than a highlight that silently does nothing.
+- **PDF documents** are handed to the **browser's own native PDF plugin** via `<embed>` with `/file/{doc_id}/raw` — there is no API surface for us to inject a highlight into that renderer's content. What _does_ work: the standard `#page=N` URL fragment (supported by Chrome/Firefox/Safari/Edge/Brave) jumps straight to the cited page. For the passage itself, a banner above the embed shows the exact excerpt text to look for, with a nudge to use the browser's native Find (Ctrl/Cmd+F) — an honest fallback rather than a highlight that silently does nothing.
 
 ---
 
 ## 6. Codebase Function & File Mapping
 
-| Feature / Logic | File Location | Key Function / Component |
-| :--- | :--- | :--- |
-| **Universal File Extraction** | `app.py` | `extract_document_pages()`, `extract_image_pages()`, `extract_docx_pages()` |
-| **Vision OCR (Gemini + Ollama)** | `app.py` | `extract_image_pages()`, `_gemini_vision_ocr()`, `_ollama_vision_ocr()` |
-| **Embeddings (Gemini + Ollama)** | `app.py` | `embed_texts()`, `_gemini_embed_batch()`, `_ollama_embed_batch()`, `_embeddings_configured()` |
-| **Chat / Generation (xAI + Ollama)** | `app.py` | `_chat_call()` dispatcher, `_xai_chat_call()`, `_ollama_chat_call()`, `_chat_configured()` |
-| **Semantic & Fixed Chunking** | `app.py` | `chunk_text()`, `structured_chunk()`, `fixed_chunk()` |
-| **Qdrant Vector DB Backend** | `qdrant_store.py` | `QdrantVectorStore`, `add()`, `query()` |
-| **Hybrid Search & RRF** | `app.py` | `reciprocal_rank_fusion()`, `hybrid_search()` |
-| **Context Validation Gate** | `app.py` | `validate_context()` |
-| **LLM Reranker & Rewriter** | `app.py` | `rerank_with_llm()`, `rewrite_query()` |
-| **Evaluation Suite & Matrix** | `app.py`, `eval_retrieval.py` | `/eval/run`, `_run_eval_preset()`, `recall_at_k()` |
-| **Trace Logging & Replay** | `trace_store.py`, `app.py` | `TraceStore`, `redact()`, `/replay/<trace_id>`, `sample_trace.py` (CLI) |
-| **Main React Application** | `frontend/src/pages/ChatPage.tsx` | React 18 Chat UI, `SourceItem` grounded-source cards, Dropzone, Staged File List |
-| **Evaluation React UI** | `frontend/src/pages/EvaluationPage.tsx` | React 18 Evaluation Matrix & Inspection Drawer |
-| **Document Viewer React UI** | `frontend/src/pages/ViewerPage.tsx` | React 18 Embedded Document Viewer, page-jump + highlight logic |
+| Feature / Logic                      | File Location                           | Key Function / Component                                                                      |
+| :----------------------------------- | :-------------------------------------- | :-------------------------------------------------------------------------------------------- |
+| **Universal File Extraction**        | `app.py`                                | `extract_document_pages()`, `extract_image_pages()`, `extract_docx_pages()`                   |
+| **Vision OCR (Gemini + Ollama)**     | `app.py`                                | `extract_image_pages()`, `_gemini_vision_ocr()`, `_ollama_vision_ocr()`                       |
+| **Embeddings (Gemini + Ollama)**     | `app.py`                                | `embed_texts()`, `_gemini_embed_batch()`, `_ollama_embed_batch()`, `_embeddings_configured()` |
+| **Chat / Generation (xAI + Ollama)** | `app.py`                                | `_chat_call()` dispatcher, `_xai_chat_call()`, `_ollama_chat_call()`, `_chat_configured()`    |
+| **Semantic & Fixed Chunking**        | `app.py`                                | `chunk_text()`, `structured_chunk()`, `fixed_chunk()`                                         |
+| **Qdrant Vector DB Backend**         | `qdrant_store.py`                       | `QdrantVectorStore`, `add()`, `query()`                                                       |
+| **Hybrid Search & RRF**              | `app.py`                                | `reciprocal_rank_fusion()`, `hybrid_search()`                                                 |
+| **Context Validation Gate**          | `app.py`                                | `validate_context()`                                                                          |
+| **LLM Reranker & Rewriter**          | `app.py`                                | `rerank_with_llm()`, `rewrite_query()`                                                        |
+| **Evaluation Suite & Matrix**        | `app.py`, `eval_retrieval.py`           | `/eval/run`, `_run_eval_preset()`, `recall_at_k()`                                            |
+| **Trace Logging & Replay**           | `trace_store.py`, `app.py`              | `TraceStore`, `redact()`, `/replay/<trace_id>`, `sample_trace.py` (CLI)                       |
+| **Main React Application**           | `frontend/src/pages/ChatPage.tsx`       | React 18 Chat UI, `SourceItem` grounded-source cards, Dropzone, Staged File List              |
+| **Evaluation React UI**              | `frontend/src/pages/EvaluationPage.tsx` | React 18 Evaluation Matrix & Inspection Drawer                                                |
+| **Document Viewer React UI**         | `frontend/src/pages/ViewerPage.tsx`     | React 18 Embedded Document Viewer, page-jump + highlight logic                                |
 
 ---
 
@@ -377,76 +405,83 @@ Clicking **Open ↗** on any source card navigates to `/#/file/<doc_id>?page=N&h
 Copy `.env.example` to `.env` and fill in what you need — see the file itself for full inline documentation. Summary:
 
 ### Embeddings (retrieval)
-| Variable | Default | Description |
-| :--- | :--- | :--- |
-| `EMBED_BACKEND` | `ollama` | `ollama` (local, no key) or `gemini` (needs `GEMINI_API_KEY`) |
-| `OLLAMA_URL` | `http://localhost:11434` | Local Ollama server address |
-| `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | Local embedding model (768-dim) |
-| `GEMINI_API_KEY` | *(empty)* | Required only if `EMBED_BACKEND=gemini` |
-| `EMBED_MODEL` | `gemini-embedding-001` | Gemini embedding model (3072-dim) |
+
+| Variable             | Default                  | Description                                                   |
+| :------------------- | :----------------------- | :------------------------------------------------------------ |
+| `EMBED_BACKEND`      | `ollama`                 | `ollama` (local, no key) or `gemini` (needs `GEMINI_API_KEY`) |
+| `OLLAMA_URL`         | `http://localhost:11434` | Local Ollama server address                                   |
+| `OLLAMA_EMBED_MODEL` | `nomic-embed-text`       | Local embedding model (768-dim)                               |
+| `GEMINI_API_KEY`     | _(empty)_                | Required only if `EMBED_BACKEND=gemini`                       |
+| `EMBED_MODEL`        | `gemini-embedding-001`   | Gemini embedding model (3072-dim)                             |
 
 ### Vision OCR (image uploads)
-| Variable | Default | Description |
-| :--- | :--- | :--- |
-| `VISION_BACKEND` | `ollama` | `ollama` (local) or `gemini` |
-| `OLLAMA_VISION_MODEL` | `llava` | Local vision model (also: `moondream`, `llama3.2-vision`) |
+
+| Variable              | Default            | Description                                               |
+| :-------------------- | :----------------- | :-------------------------------------------------------- |
+| `VISION_BACKEND`      | `ollama`           | `ollama` (local) or `gemini`                              |
+| `OLLAMA_VISION_MODEL` | `llava`            | Local vision model (also: `moondream`, `llama3.2-vision`) |
 | `GEMINI_VISION_MODEL` | `gemini-3.7-flash` | Gemini vision model, only used if `VISION_BACKEND=gemini` |
 
 ### Chat / Generation, Reranking, Query Rewriting
-| Variable | Default | Description |
-| :--- | :--- | :--- |
-| `CHAT_BACKEND` | `ollama` | `ollama` (local) or `xai` (needs `XAI_API_KEY`) |
-| `OLLAMA_CHAT_MODEL` | `llama3.1` | Local chat model (also: `qwen2.5`, `mistral`) |
-| `XAI_API_KEY` | *(empty)* | Required only if `CHAT_BACKEND=xai` |
-| `XAI_URL` | `https://api.x.ai/v1` | xAI API base URL |
-| `XAI_MODEL` | `grok-4.3` | xAI model (also: `grok-4.5`, `grok-4.20`) |
+
+| Variable            | Default               | Description                                     |
+| :------------------ | :-------------------- | :---------------------------------------------- |
+| `CHAT_BACKEND`      | `ollama`              | `ollama` (local) or `xai` (needs `XAI_API_KEY`) |
+| `OLLAMA_CHAT_MODEL` | `llama3.1`            | Local chat model (also: `qwen2.5`, `mistral`)   |
+| `XAI_API_KEY`       | _(empty)_             | Required only if `CHAT_BACKEND=xai`             |
+| `XAI_URL`           | `https://api.x.ai/v1` | xAI API base URL                                |
+| `XAI_MODEL`         | `grok-4.3`            | xAI model (also: `grok-4.5`, `grok-4.20`)       |
 
 ### Retrieval tuning
-| Variable | Default | Description |
-| :--- | :--- | :--- |
-| `RETRIEVAL_MODE` | `hybrid` | `hybrid` (BM25+embeddings via RRF), `hybrid-legacy` (weighted blend), or `embed` |
-| `EMBED_MIN_SCORE` | `0.55` | Context validation threshold, on RRF's normalized 0–1 scale |
-| `TOP_K` | `8` | Candidate chunks retrieved |
-| `MAX_CONTEXT_TOKENS` | `6000` | Context token budget cap |
-| `RRF_K` | `10` | RRF smoothing constant (tuned for document-sized corpora, not web-scale) |
-| `HYBRID_ALPHA` | `0.6` | Embedding weight, only used by `RETRIEVAL_MODE=hybrid-legacy` |
-| `BM25_K1` / `BM25_B` | `1.5` / `0.75` | Standard BM25 term-saturation / length-normalization constants |
+
+| Variable             | Default        | Description                                                                      |
+| :------------------- | :------------- | :------------------------------------------------------------------------------- |
+| `RETRIEVAL_MODE`     | `hybrid`       | `hybrid` (BM25+embeddings via RRF), `hybrid-legacy` (weighted blend), or `embed` |
+| `EMBED_MIN_SCORE`    | `0.55`         | Context validation threshold, on RRF's normalized 0–1 scale                      |
+| `TOP_K`              | `8`            | Candidate chunks retrieved                                                       |
+| `MAX_CONTEXT_TOKENS` | `6000`         | Context token budget cap                                                         |
+| `RRF_K`              | `10`           | RRF smoothing constant (tuned for document-sized corpora, not web-scale)         |
+| `HYBRID_ALPHA`       | `0.6`          | Embedding weight, only used by `RETRIEVAL_MODE=hybrid-legacy`                    |
+| `BM25_K1` / `BM25_B` | `1.5` / `0.75` | Standard BM25 term-saturation / length-normalization constants                   |
 
 ### Reranking & query rewriting (both off by default)
-| Variable | Default | Description |
-| :--- | :--- | :--- |
-| `RERANK_ENABLED` | `false` | Second-pass LLM relevance judgment on top candidates |
-| `RERANK_TOP_N` | `8` | How many candidates get reranked |
-| `RERANK_MIN_RELEVANCE` | `5` | Minimum LLM relevance score (0–10) to keep a candidate |
+
+| Variable                | Default | Description                                                            |
+| :---------------------- | :------ | :--------------------------------------------------------------------- |
+| `RERANK_ENABLED`        | `false` | Second-pass LLM relevance judgment on top candidates                   |
+| `RERANK_TOP_N`          | `8`     | How many candidates get reranked                                       |
+| `RERANK_MIN_RELEVANCE`  | `5`     | Minimum LLM relevance score (0–10) to keep a candidate                 |
 | `QUERY_REWRITE_ENABLED` | `false` | LLM rewrites the question into a cleaner search query before retrieval |
 
 ### Vector backend
-| Variable | Default | Description |
-| :--- | :--- | :--- |
-| `VECTOR_BACKEND` | `qdrant` | `qdrant` (real vector DB) or `memory` (in-process, zero setup) |
-| `QDRANT_URL` | *(required if qdrant)* | Qdrant Cloud or self-hosted endpoint |
-| `QDRANT_API_KEY` | *(required if Qdrant Cloud)* | Qdrant Cloud API key |
-| `QDRANT_TIMEOUT` | `10` | Request timeout (seconds) |
-| `QDRANT_CANDIDATE_POOL` | `30` | ANN candidates returned per query before hybrid re-ranking |
+
+| Variable                | Default                      | Description                                                    |
+| :---------------------- | :--------------------------- | :------------------------------------------------------------- |
+| `VECTOR_BACKEND`        | `qdrant`                     | `qdrant` (real vector DB) or `memory` (in-process, zero setup) |
+| `QDRANT_URL`            | _(required if qdrant)_       | Qdrant Cloud or self-hosted endpoint                           |
+| `QDRANT_API_KEY`        | _(required if Qdrant Cloud)_ | Qdrant Cloud API key                                           |
+| `QDRANT_TIMEOUT`        | `10`                         | Request timeout (seconds)                                      |
+| `QDRANT_CANDIDATE_POOL` | `30`                         | ANN candidates returned per query before hybrid re-ranking     |
 
 ### Trace logging, chunking defaults, ops
-| Variable | Default | Description |
-| :--- | :--- | :--- |
-| `TRACE_LOG_PATH` | `traces/traces.jsonl` | Durable `/ask` trace log path (see §5a) |
-| `DEFAULT_CHUNK_MODE` | `structured` | Default chunking strategy |
-| `DEFAULT_CHUNK_SIZE` | `512` | Default fixed chunk size (words) |
-| `SECRET_KEY` | *(random per-process if unset)* | Signs session cookies (Starlette `SessionMiddleware`, itsdangerous) — **mandatory in production** to preserve session continuity across worker restarts |
-| `APP_ENV` | *(empty)* | Set to `production` to make `SECRET_KEY` mandatory (boot fails without it). `ENV` / `FLASK_ENV` still work as legacy aliases |
-| `SESSION_COOKIE_SECURE` | `false` | Adds the `Secure` flag to the session cookie. Enable **only** behind TLS — browsers silently drop `Secure` cookies over plain HTTP |
-| `ADMIN_API_KEY` | *(empty)* | Optional administrative token for inspecting cross-session `/orphans` and replaying traces via `X-Admin-Key` header |
-| `LOG_LEVEL` | `INFO` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
-| `PORT` / `HOST` | `5000` / `127.0.0.1` | Set `HOST=0.0.0.0` when running inside Docker |
-| `APP_DEBUG` | `false` | Turns on uvicorn's autoreloader + debug logging for `python app.py` — never enable outside local dev |
+
+| Variable                | Default                         | Description                                                                                                                                             |
+| :---------------------- | :------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `TRACE_LOG_PATH`        | `traces/traces.jsonl`           | Durable `/ask` trace log path (see §5a)                                                                                                                 |
+| `DEFAULT_CHUNK_MODE`    | `structured`                    | Default chunking strategy                                                                                                                               |
+| `DEFAULT_CHUNK_SIZE`    | `512`                           | Default fixed chunk size (words)                                                                                                                        |
+| `SECRET_KEY`            | _(random per-process if unset)_ | Signs session cookies (Starlette `SessionMiddleware`, itsdangerous) — **mandatory in production** to preserve session continuity across worker restarts |
+| `APP_ENV`               | _(empty)_                       | Set to `production` to make `SECRET_KEY` mandatory (boot fails without it). `ENV` / `FLASK_ENV` still work as legacy aliases                            |
+| `SESSION_COOKIE_SECURE` | `false`                         | Adds the `Secure` flag to the session cookie. Enable **only** behind TLS — browsers silently drop `Secure` cookies over plain HTTP                      |
+| `ADMIN_API_KEY`         | _(empty)_                       | Optional administrative token for inspecting cross-session `/orphans` and replaying traces via `X-Admin-Key` header                                     |
+| `LOG_LEVEL`             | `INFO`                          | `DEBUG` / `INFO` / `WARNING` / `ERROR`                                                                                                                  |
+| `PORT` / `HOST`         | `5000` / `127.0.0.1`            | Set `HOST=0.0.0.0` when running inside Docker                                                                                                           |
+| `APP_DEBUG`             | `false`                         | Turns on uvicorn's autoreloader + debug logging for `python app.py` — never enable outside local dev                                                    |
 
 ---
 
 ## 8. Docker & Docker-Compose Deployment
- 
+
 The repository provides a single canonical [`docker-compose.yml`](file:///d:/RAG_WEEK_3/WEEK-3-RAG/docker-compose.yml) orchestrating the production multi-container deployment:
 
 ```bash
@@ -454,6 +489,7 @@ docker compose up -d --build
 ```
 
 ### Services Managed by Docker Compose:
+
 1. **`weekly-rag-build-app`**:
    - Multi-stage build (`Dockerfile`): Stage 1 compiles the React 18 + TypeScript + Vite SPA into `/build/frontend/dist`; Stage 2 sets up Python 3.11-slim runtime with non-root `appuser`.
    - Served via **Gunicorn with Uvicorn ASGI workers** (`gunicorn app:app -k uvicorn_worker.UvicornWorker --workers 2 --timeout 120`).
@@ -476,10 +512,13 @@ docker compose up -d --build
 ---
 
 ### Image Updates & Rebuilding with Latest Code
+
 When you make code changes and run:
+
 ```bash
 docker compose up -d --build
 ```
+
 - Docker builds the new `weekly-rag-build-app:latest` image using Docker layer caching (avoiding re-downloading npm or pip packages if `package.json` / `requirements.txt` haven't changed).
 - The existing container is replaced seamlessly in-place.
 - Old untagged build layers can be cleaned anytime with `docker image prune -f`.
@@ -488,7 +527,9 @@ docker compose up -d --build
 ---
 
 ### Clean Lifecycle Management (Stopping & Starting)
+
 Because Ollama runs strictly inside its Docker container (and not as a host background service):
+
 - **Start stack**: `docker compose up -d`
 - **Check status**: `docker compose ps`
 - **View live logs**: `docker compose logs -f`
@@ -498,7 +539,9 @@ Because Ollama runs strictly inside its Docker container (and not as a host back
 ---
 
 ### Production Network & Reverse Proxy Architecture
+
 In production deployments, the application should never be exposed directly to the public internet without a reverse proxy or cloud load balancer:
+
 ```text
 Internet / Clients
        │
@@ -513,7 +556,8 @@ FastAPI Application (Ask My Docs)
   ├── Qdrant Vector Store (http://qdrant:6333)
   └── Ollama Model Inference (http://ollama:11434)
 ```
-```
+
+````
 
 > **Concurrency model:** every route handler is a plain `def`, not `async def`. Starlette runs sync handlers in a threadpool, so the app's blocking `urllib.request` calls to Ollama / Gemini / xAI, blocking file I/O, and blocking Qdrant client calls behave exactly as they did under Gunicorn's sync workers — no event loop to starve. Converting the I/O layer to `httpx.AsyncClient` / an async Qdrant client would be a separate, much larger change.
 > **Concurrency model:** every route handler is a plain `def`, not `async def`. Starlette runs sync handlers in a threadpool, so the app's blocking `urllib.request` calls to Ollama / Gemini / xAI, blocking file I/O, and blocking Qdrant client calls behave safely — no event loop starvation.
@@ -523,7 +567,7 @@ To point at **Qdrant Cloud** instead of the bundled container, set in your `.env
 VECTOR_BACKEND=qdrant
 QDRANT_URL=https://xxxx.aws.cloud.qdrant.io:6333
 QDRANT_API_KEY=<your cluster key>
-```
+````
 
 The `app` container's health check hits `/healthz` directly via Python standard library — a fast way to confirm the container came up healthy: `docker compose ps`.
 
@@ -541,15 +585,18 @@ The `app` container's health check hits `/healthz` directly via Python standard 
 ## 9. GHCR Container Deployment
 
 `.github/workflows/python-app.yml` builds and publishes this app's Docker image to the **GitHub Container Registry (GHCR)** on every push to `main`:
+
 - Lints with `flake8` (hard-fails only on real syntax errors: `E9,F63,F7,F82`; everything else is reported but non-blocking).
 - Builds the image and tags it both `:latest` and `:<commit-sha>`.
 - Pushes to `ghcr.io/<owner>/<repo>:latest` (lowercased automatically, since GHCR requires it) — only on an actual push to `main`, never on a pull request (PRs, especially from forks, don't get write access to secrets by design).
 
 To pull and run the published image directly, without cloning the repo:
+
 ```bash
 docker pull ghcr.io/<owner>/<repo>:latest
 docker run -p 5000:5000 --env-file .env ghcr.io/<owner>/<repo>:latest
 ```
+
 Requires `packages: write` permission on the workflow's `GITHUB_TOKEN` (already configured) — no personal access token or extra scopes needed.
 
 ---
@@ -559,13 +606,17 @@ Requires `packages: write` permission on the workflow's `GITHUB_TOKEN` (already 
 The repository includes a comprehensive automated test suite alongside interactive benchmark and diagnostic tools:
 
 ### Automated Test Suite (`unittest`)
+
 Run the regression test suite covering retrieval logic, Qdrant transactional consistency, rollback on failure, trace redaction, prompt versioning, session isolation, orphan persistence, and replay security:
+
 ```bash
 python -m unittest test_eval_metrics.py -v
 ```
+
 All 60 unit and integration tests run offline without external API keys or live Ollama/Qdrant servers (using in-memory mocks and controlled error injection).
 
 Key areas verified by the suite:
+
 - **Evaluation & Retrieval Metrics**: Context relevance, answer relevance, groundedness, MRR, Hit-Rate@K, and diagnostic categorizations.
 - **Qdrant Transactional Consistency**: Rollback on insertion failure, atomic add/remove/clear operations, deterministic point IDs, and payload indexing.
 - **Multi-Worker & Multi-Process State Synchronization**: Atomic manifest persistence and filesystem-mtime change detection guaranteeing cache coherence and manifest synchronization across multiple Gunicorn worker processes.
@@ -575,6 +626,7 @@ Key areas verified by the suite:
 - **Web-Layer Contracts** (`TestFastAPIMigration`): the 50 MB body cap on both the `Content-Length` and chunked/streamed paths, session-cookie round-tripping and tamper rejection, the `/assets` static mount for compiled Vite assets, the full route table the frontend depends on, and the shared "No active session" 400 contract.
 
 ### Interactive & Diagnostic Tools
+
 - **`eval_retrieval.py`** — CLI tool computing `Hit-Rate@K`, `MRR`, and failure categorization directly against your indexed documents:
   ```bash
   python eval_retrieval.py

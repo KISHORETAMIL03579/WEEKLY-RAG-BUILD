@@ -38,7 +38,12 @@ class QdrantVectorStore:
     """Same public interface as VectorStore: load, save, add, query, query_scores,
     get_tfidf_index, clear, remove_doc, filtered_by_method."""
 
-    def __init__(self, sid: str, method_filter: Optional[str] = None, index_builder: Optional[Callable[[List[dict]], dict]] = None):
+    def __init__(
+        self,
+        sid: str,
+        method_filter: Optional[str] = None,
+        index_builder: Optional[Callable[[List[dict]], dict]] = None,
+    ):
         self.sid = sid
         self.collection = f"chunks_{sid}"
         self.method_filter = method_filter
@@ -58,7 +63,9 @@ class QdrantVectorStore:
         if not self._collection_exists():
             client.create_collection(
                 collection_name=self.collection,
-                vectors_config=qmodels.VectorParams(size=dim, distance=qmodels.Distance.COSINE),
+                vectors_config=qmodels.VectorParams(
+                    size=dim, distance=qmodels.Distance.COSINE
+                ),
             )
         for field_name in ("doc_id", "method"):
             try:
@@ -70,17 +77,29 @@ class QdrantVectorStore:
             except Exception as exc:
                 err_msg = str(exc).lower()
                 if "already exists" in err_msg or "already indexed" in err_msg:
-                    logger.debug("Payload index on %s already exists in %s", field_name, self.collection)
+                    logger.debug(
+                        "Payload index on %s already exists in %s",
+                        field_name,
+                        self.collection,
+                    )
                 else:
-                    logger.warning("Failed to create Qdrant payload index on %s (%s): %s",
-                                   field_name, self.collection, exc)
+                    logger.warning(
+                        "Failed to create Qdrant payload index on %s (%s): %s",
+                        field_name,
+                        self.collection,
+                        exc,
+                    )
 
     def _qdrant_filter(self):
         if not self.method_filter:
             return None
-        return qmodels.Filter(must=[
-            qmodels.FieldCondition(key="method", match=qmodels.MatchValue(value=self.method_filter))
-        ])
+        return qmodels.Filter(
+            must=[
+                qmodels.FieldCondition(
+                    key="method", match=qmodels.MatchValue(value=self.method_filter)
+                )
+            ]
+        )
 
     @staticmethod
     def _point_id(chunk_id: str) -> str:
@@ -96,8 +115,11 @@ class QdrantVectorStore:
             client = _client()
             while True:
                 points, offset = client.scroll(
-                    collection_name=self.collection, with_payload=True, with_vectors=True,
-                    limit=QDRANT_SCROLL_LIMIT, offset=offset,
+                    collection_name=self.collection,
+                    with_payload=True,
+                    with_vectors=True,
+                    limit=QDRANT_SCROLL_LIMIT,
+                    offset=offset,
                 )
                 for p in points:
                     chunks.append(p.payload)
@@ -108,8 +130,15 @@ class QdrantVectorStore:
             self._tfidf_index_cache = None
         except Exception as exc:
             self.last_backend_error = f"Qdrant load failed: {exc}"
-            logger.error("Qdrant load failed for collection %s: %s", self.collection, exc, exc_info=True)
-            raise RetrievalBackendError(f"Failed to load collection from Qdrant: {exc}") from exc
+            logger.error(
+                "Qdrant load failed for collection %s: %s",
+                self.collection,
+                exc,
+                exc_info=True,
+            )
+            raise RetrievalBackendError(
+                f"Failed to load collection from Qdrant: {exc}"
+            ) from exc
 
     def save(self) -> None:
         pass  # Qdrant persists on every upsert; nothing to flush locally
@@ -146,16 +175,28 @@ class QdrantVectorStore:
             if self._collection_exists():
                 _client().delete(
                     collection_name=self.collection,
-                    points_selector=qmodels.FilterSelector(filter=qmodels.Filter(must=[
-                        qmodels.FieldCondition(key="doc_id", match=qmodels.MatchValue(value=doc_id))
-                    ])),
+                    points_selector=qmodels.FilterSelector(
+                        filter=qmodels.Filter(
+                            must=[
+                                qmodels.FieldCondition(
+                                    key="doc_id", match=qmodels.MatchValue(value=doc_id)
+                                )
+                            ]
+                        )
+                    ),
                 )
         except Exception as exc:
             self.last_backend_error = f"Qdrant delete failed: {exc}"
-            logger.error("Qdrant delete-by-doc_id failed for %s: %s", doc_id, exc, exc_info=True)
-            raise RetrievalBackendError(f"Failed to delete document from Qdrant: {exc}") from exc
+            logger.error(
+                "Qdrant delete-by-doc_id failed for %s: %s", doc_id, exc, exc_info=True
+            )
+            raise RetrievalBackendError(
+                f"Failed to delete document from Qdrant: {exc}"
+            ) from exc
 
-        kept = [(c, v) for c, v in zip(self.chunks, self.vectors) if c["doc_id"] != doc_id]
+        kept = [
+            (c, v) for c, v in zip(self.chunks, self.vectors) if c["doc_id"] != doc_id
+        ]
         self.chunks = [c for c, _ in kept]
         self.vectors = [v for _, v in kept]
         removed = before - len(self.chunks)
@@ -171,8 +212,15 @@ class QdrantVectorStore:
                 _client().delete_collection(self.collection)
         except Exception as exc:
             self.last_backend_error = f"Qdrant delete_collection failed: {exc}"
-            logger.error("Qdrant delete_collection failed for %s: %s", self.collection, exc, exc_info=True)
-            raise RetrievalBackendError(f"Failed to clear Qdrant collection: {exc}") from exc
+            logger.error(
+                "Qdrant delete_collection failed for %s: %s",
+                self.collection,
+                exc,
+                exc_info=True,
+            )
+            raise RetrievalBackendError(
+                f"Failed to clear Qdrant collection: {exc}"
+            ) from exc
 
         self.chunks, self.vectors = [], []
         self._tfidf_index_cache = None
@@ -183,22 +231,32 @@ class QdrantVectorStore:
                 self._tfidf_index_cache = self._index_builder(self.chunks)
             else:
                 from backend.services.search import build_index
+
                 self._tfidf_index_cache = build_index(self.chunks)
         return self._tfidf_index_cache
 
-    def query(self, vector: List[float], top_k: int = 5, min_score: float = 0.0) -> List[dict]:
+    def query(
+        self, vector: List[float], top_k: int = 5, min_score: float = 0.0
+    ) -> List[dict]:
         try:
             if not self._collection_exists():
                 return []
             response = _client().query_points(
-                collection_name=self.collection, query=vector,
+                collection_name=self.collection,
+                query=vector,
                 query_filter=self._qdrant_filter(),
-                limit=top_k, score_threshold=min_score,
+                limit=top_k,
+                score_threshold=min_score,
             )
             hits = response.points
         except Exception as exc:
             self.last_backend_error = f"Qdrant query failed: {exc}"
-            logger.error("Qdrant retrieval query failed for collection %s: %s", self.collection, exc, exc_info=True)
+            logger.error(
+                "Qdrant retrieval query failed for collection %s: %s",
+                self.collection,
+                exc,
+                exc_info=True,
+            )
             raise RetrievalBackendError(f"Vector retrieval failed: {exc}") from exc
         return [{**h.payload, "score": h.score} for h in hits]
 
@@ -207,20 +265,28 @@ class QdrantVectorStore:
             if not self._collection_exists():
                 return [0.0] * len(self.chunks)
             response = _client().query_points(
-                collection_name=self.collection, query=vector,
+                collection_name=self.collection,
+                query=vector,
                 query_filter=self._qdrant_filter(),
                 limit=QDRANT_CANDIDATE_POOL,
             )
             hits = response.points
         except Exception as exc:
             self.last_backend_error = f"Qdrant query_scores failed: {exc}"
-            logger.error("Qdrant query_scores failed for collection %s: %s", self.collection, exc, exc_info=True)
+            logger.error(
+                "Qdrant query_scores failed for collection %s: %s",
+                self.collection,
+                exc,
+                exc_info=True,
+            )
             raise RetrievalBackendError(f"Vector hybrid scoring failed: {exc}") from exc
         score_by_id = {h.payload["id"]: h.score for h in hits}
         return [score_by_id.get(c["id"], 0.0) for c in self.chunks]
 
     def filtered_by_method(self, method: str) -> "QdrantVectorStore":
-        view = QdrantVectorStore(self.sid, method_filter=method, index_builder=self._index_builder)
+        view = QdrantVectorStore(
+            self.sid, method_filter=method, index_builder=self._index_builder
+        )
         has_vectors = len(self.vectors) == len(self.chunks)
         matched = [i for i, c in enumerate(self.chunks) if c.get("method") == method]
         view.chunks = [self.chunks[i] for i in matched]

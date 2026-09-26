@@ -81,7 +81,9 @@ def upload(
     upload_folder = get_app_symbol("UPLOAD_FOLDER", UPLOAD_FOLDER)
     vec_backend_val = get_app_symbol("VECTOR_BACKEND", VECTOR_BACKEND)
     fn_get_store = get_app_symbol("_get_store", get_store)
-    fn_embeddings_configured = get_app_symbol("_embeddings_configured", embeddings_configured)
+    fn_embeddings_configured = get_app_symbol(
+        "_embeddings_configured", embeddings_configured
+    )
     fn_embed_texts = get_app_symbol("embed_texts", embed_texts)
     fn_save_manifest = get_app_symbol("_save_session_manifest", save_session_manifest)
     fn_record_orphan = get_app_symbol("_record_orphaned_doc", record_orphaned_doc)
@@ -96,27 +98,41 @@ def upload(
     if not files:
         return JSONResponse({"error": "No files provided"}, status_code=400)
 
-    logger.info("📤 Upload request received: %d file(s) (chunk_mode: %s, session: %s)",
-                len(files), chunk_mode, sid[:8])
+    logger.info(
+        "📤 Upload request received: %d file(s) (chunk_mode: %s, session: %s)",
+        len(files),
+        chunk_mode,
+        sid[:8],
+    )
     hashes = hash_store_map.setdefault(sid, set())
     embedding_ok = fn_embeddings_configured()
     results = []
     pending: list[dict] = []
 
-    RAGTracer.trace("INGESTION", 1, 5, "Upload Request Received", {
-        "Files Count": len(files),
-        "Chunk Strategy": chunk_mode,
-        "Session ID": sid[:8],
-        "Embeddings Enabled": embedding_ok,
-    })
+    RAGTracer.trace(
+        "INGESTION",
+        1,
+        5,
+        "Upload Request Received",
+        {
+            "Files Count": len(files),
+            "Chunk Strategy": chunk_mode,
+            "Session ID": sid[:8],
+            "Embeddings Enabled": embedding_ok,
+        },
+    )
 
     for f in files:
         if not f or not allowed_file(f.filename or ""):
-            logger.warning("⚠️ Unsupported file type uploaded: %s", getattr(f, "filename", "?"))
-            results.append({
-                "filename": getattr(f, "filename", "?") or "?",
-                "error": "Unsupported file type (allowed: PDF, TXT, MD)",
-            })
+            logger.warning(
+                "⚠️ Unsupported file type uploaded: %s", getattr(f, "filename", "?")
+            )
+            results.append(
+                {
+                    "filename": getattr(f, "filename", "?") or "?",
+                    "error": "Unsupported file type (allowed: PDF, TXT, MD)",
+                }
+            )
             continue
 
         original_name = f.filename
@@ -136,30 +152,46 @@ def upload(
 
             if dedupe_key in hashes:
                 filepath.unlink(missing_ok=True)
-                logger.info("ℹ️ Duplicate upload skipped for '%s' under mode '%s'", original_name, chunk_mode)
-                results.append({
-                    "filename": original_name,
-                    "error": (
-                        f"Already indexed under the '{chunk_mode}' strategy — "
-                        f"pick a different chunking strategy to compare, or remove "
-                        f"the existing one first."
-                    ),
-                })
+                logger.info(
+                    "ℹ️ Duplicate upload skipped for '%s' under mode '%s'",
+                    original_name,
+                    chunk_mode,
+                )
+                results.append(
+                    {
+                        "filename": original_name,
+                        "error": (
+                            f"Already indexed under the '{chunk_mode}' strategy — "
+                            f"pick a different chunking strategy to compare, or remove "
+                            f"the existing one first."
+                        ),
+                    }
+                )
                 continue
             hashes.add(dedupe_key)
 
             doc_id = str(uuid.uuid4())[:8]
             doc_info = {"doc_id": doc_id, "filename": original_name}
 
-            pages = (extract_pdf_pages(str(filepath)) if ext == "pdf"
-                     else extract_txt_pages(str(filepath)))
+            pages = (
+                extract_pdf_pages(str(filepath))
+                if ext == "pdf"
+                else extract_txt_pages(str(filepath))
+            )
 
             if not pages:
                 filepath.unlink(missing_ok=True)
                 hashes.discard(dedupe_key)
-                reason = ("No extractable text (password-protected or scanned PDF?)"
-                          if ext == "pdf" else "Empty file")
-                logger.warning("⚠️ Text extraction returned empty for '%s': %s", original_name, reason)
+                reason = (
+                    "No extractable text (password-protected or scanned PDF?)"
+                    if ext == "pdf"
+                    else "Empty file"
+                )
+                logger.warning(
+                    "⚠️ Text extraction returned empty for '%s': %s",
+                    original_name,
+                    reason,
+                )
                 results.append({"filename": original_name, "error": reason})
                 continue
 
@@ -168,45 +200,66 @@ def upload(
                 filepath.unlink(missing_ok=True)
                 hashes.discard(dedupe_key)
                 logger.warning("⚠️ Chunking produced 0 chunks for '%s'", original_name)
-                results.append({"filename": original_name, "error": "No chunks produced"})
+                results.append(
+                    {"filename": original_name, "error": "No chunks produced"}
+                )
                 continue
 
-            RAGTracer.trace("INGESTION", 2, 5, "Text Extraction & Chunking", {
-                "File Name": original_name,
-                "Format": ext.upper(),
-                "Pages Extracted": len(pages),
-                "Chunks Generated": len(new_chunks),
-                "Doc ID": doc_id,
-            })
+            RAGTracer.trace(
+                "INGESTION",
+                2,
+                5,
+                "Text Extraction & Chunking",
+                {
+                    "File Name": original_name,
+                    "Format": ext.upper(),
+                    "Pages Extracted": len(pages),
+                    "Chunks Generated": len(new_chunks),
+                    "Doc ID": doc_id,
+                },
+            )
 
             chunk_counts_map.setdefault(sid, {})
             for mode in ("structured", "128", "256", "512"):
                 chunk_counts_map[sid][mode] = len(chunk_text(doc_info, pages, mode))
 
-            pending.append({
-                "filepath": filepath,
-                "doc_id": doc_id,
-                "filename": original_name,
-                "ext": ext,
-                "chunks": new_chunks,
-                "hash": dedupe_key,
-                "result": {
+            pending.append(
+                {
+                    "filepath": filepath,
+                    "doc_id": doc_id,
                     "filename": original_name,
-                    "pages": len(pages),
-                    "chunks": len(new_chunks),
-                    "method": chunk_mode,
-                },
-            })
+                    "ext": ext,
+                    "chunks": new_chunks,
+                    "hash": dedupe_key,
+                    "result": {
+                        "filename": original_name,
+                        "pages": len(pages),
+                        "chunks": len(new_chunks),
+                        "method": chunk_mode,
+                    },
+                }
+            )
         except Exception as exc:
             filepath.unlink(missing_ok=True)
             if dedupe_key is not None:
                 hashes.discard(dedupe_key)
-            logger.error("❌ Exception during processing '%s': %s", original_name, exc, exc_info=True)
-            results.append({"filename": original_name, "error": f"Failed to index: {exc}"})
+            logger.error(
+                "❌ Exception during processing '%s': %s",
+                original_name,
+                exc,
+                exc_info=True,
+            )
+            results.append(
+                {"filename": original_name, "error": f"Failed to index: {exc}"}
+            )
 
     if not pending:
         return JSONResponse(
-            {"ok": False, "error": "No valid documents were indexed.", "documents": results},
+            {
+                "ok": False,
+                "error": "No valid documents were indexed.",
+                "documents": results,
+            },
             status_code=400,
         )
 
@@ -235,7 +288,9 @@ def upload(
                 try:
                     vectors = fn_embed_texts([c["text"] for c in item["chunks"]])
                 except Exception as embed_exc:
-                    raise ValueError(f"Embedding generation failed on Qdrant backend: {embed_exc}") from embed_exc
+                    raise ValueError(
+                        f"Embedding generation failed on Qdrant backend: {embed_exc}"
+                    ) from embed_exc
             else:
                 if embedding_ok:
                     try:
@@ -244,7 +299,8 @@ def upload(
                         logger.warning(
                             "⚠️ Embedding failed for '%s', indexing without vectors "
                             "(keyword search only for this document): %s",
-                            item["filename"], embed_exc,
+                            item["filename"],
+                            embed_exc,
                         )
                         vectors = []
                         embedding_degraded = True
@@ -274,15 +330,26 @@ def upload(
                 )
             results.append(item["result"])
             committed_doc_ids.append(item["doc_id"])
-            RAGTracer.trace("INGESTION", 5, 5, "Store Commit Completed", {
-                "File Name": item["filename"],
-                "Doc ID": item["doc_id"],
-                "Chunks Indexed": len(item["chunks"]),
-                "Vector Backend": vec_backend_val,
-                "Total Session Chunks": len(store.chunks),
-            })
-            logger.info("✅ Indexed '%s' (%d chunks, vectors: %s, total store: %d chunks)",
-                        item["filename"], len(item["chunks"]), "yes" if bool(vectors) else "no", len(store.chunks))
+            RAGTracer.trace(
+                "INGESTION",
+                5,
+                5,
+                "Store Commit Completed",
+                {
+                    "File Name": item["filename"],
+                    "Doc ID": item["doc_id"],
+                    "Chunks Indexed": len(item["chunks"]),
+                    "Vector Backend": vec_backend_val,
+                    "Total Session Chunks": len(store.chunks),
+                },
+            )
+            logger.info(
+                "✅ Indexed '%s' (%d chunks, vectors: %s, total store: %d chunks)",
+                item["filename"],
+                len(item["chunks"]),
+                "yes" if bool(vectors) else "no",
+                len(store.chunks),
+            )
         except Exception as exc:
             cleanup_complete = True
             cleanup_error = None
@@ -296,7 +363,10 @@ def upload(
                     cleanup_error = f"Vector store rollback failed: {rb_exc}"
                     logger.error(
                         "❌ CRITICAL: Failed to rollback vector store for doc %s ('%s'): %s. Vector may be orphaned.",
-                        item["doc_id"], item["filename"], rb_exc, exc_info=True,
+                        item["doc_id"],
+                        item["filename"],
+                        rb_exc,
+                        exc_info=True,
                     )
                     orphan_rec = fn_record_orphan(
                         sid=sid,
@@ -315,7 +385,9 @@ def upload(
                 fn_save_manifest(sid)
             except Exception:
                 pass
-            logger.error("❌ Failed to index '%s': %s", item["filename"], exc, exc_info=True)
+            logger.error(
+                "❌ Failed to index '%s': %s", item["filename"], exc, exc_info=True
+            )
             doc_res = {
                 "filename": item["filename"],
                 "error": f"Failed to index: {exc}",
@@ -331,7 +403,10 @@ def upload(
     if upload_id and upload_id in cancelled_map:
         was_cancelled = True
     if was_cancelled:
-        logger.warning("🚫 Rolling back %d committed doc(s) due to upload cancellation", len(committed_doc_ids))
+        logger.warning(
+            "🚫 Rolling back %d committed doc(s) due to upload cancellation",
+            len(committed_doc_ids),
+        )
         failed_rollbacks = []
         for doc_id in committed_doc_ids:
             rollback_ok = False
@@ -340,7 +415,12 @@ def upload(
                 rollback_ok = True
                 fn_resolve_orphan(sid, doc_id)
             except Exception as rb_err:
-                logger.error("❌ Failed to remove doc %s from store during cancellation: %s", doc_id, rb_err, exc_info=True)
+                logger.error(
+                    "❌ Failed to remove doc %s from store during cancellation: %s",
+                    doc_id,
+                    rb_err,
+                    exc_info=True,
+                )
                 file_info = session_files_map.get(sid, {}).get(doc_id)
                 orphan_rec = fn_record_orphan(
                     sid=sid,
@@ -349,11 +429,15 @@ def upload(
                     error=str(rb_err),
                     stored_path=file_info.get("path") if file_info else None,
                 )
-                failed_rollbacks.append({
-                    "doc_id": doc_id,
-                    "error": str(rb_err),
-                    "reconciliation_persistence_failed": bool(orphan_rec.get("reconciliation_persistence_failed")),
-                })
+                failed_rollbacks.append(
+                    {
+                        "doc_id": doc_id,
+                        "error": str(rb_err),
+                        "reconciliation_persistence_failed": bool(
+                            orphan_rec.get("reconciliation_persistence_failed")
+                        ),
+                    }
+                )
 
             if rollback_ok:
                 info = session_files_map.get(sid, {}).pop(doc_id, None)
@@ -365,7 +449,9 @@ def upload(
             else:
                 if sid in session_files_map and doc_id in session_files_map[sid]:
                     session_files_map[sid][doc_id]["orphan"] = True
-                    session_files_map[sid][doc_id]["rollback_error"] = str(failed_rollbacks[-1]["error"])
+                    session_files_map[sid][doc_id]["rollback_error"] = str(
+                        failed_rollbacks[-1]["error"]
+                    )
 
         fn_save_manifest(sid)
         cancelled_map.pop(upload_id, None)
@@ -407,9 +493,13 @@ def load_url(sid: SessionId, payload: Optional[UrlPayload] = Body(default=None))
 
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
-        return JSONResponse({"error": "URL must start with http:// or https://"}, status_code=400)
+        return JSONResponse(
+            {"error": "URL must start with http:// or https://"}, status_code=400
+        )
 
-    fn_embeddings_configured = get_app_symbol("_embeddings_configured", embeddings_configured)
+    fn_embeddings_configured = get_app_symbol(
+        "_embeddings_configured", embeddings_configured
+    )
     fn_embed_texts = get_app_symbol("embed_texts", embed_texts)
     fn_fetch_web_page = get_app_symbol("fetch_web_page", fetch_web_page)
     fn_get_store = get_app_symbol("_get_store", get_store)
@@ -424,7 +514,9 @@ def load_url(sid: SessionId, payload: Optional[UrlPayload] = Body(default=None))
         return JSONResponse({"error": f"Failed to fetch URL: {exc}"}, status_code=400)
 
     if len(text.split()) < 20:
-        return JSONResponse({"error": "Page returned too little text to index."}, status_code=400)
+        return JSONResponse(
+            {"error": "Page returned too little text to index."}, status_code=400
+        )
 
     doc_id = str(uuid.uuid4())[:8]
     doc_info = {"doc_id": doc_id, "filename": title[:80] or parsed.netloc}
@@ -432,27 +524,36 @@ def load_url(sid: SessionId, payload: Optional[UrlPayload] = Body(default=None))
 
     new_chunks = chunk_text(doc_info, pages, chunk_mode)
     if not new_chunks:
-        return JSONResponse({"error": "No chunks produced from this page."}, status_code=400)
+        return JSONResponse(
+            {"error": "No chunks produced from this page."}, status_code=400
+        )
 
     store = fn_get_store(sid)
     if vec_backend_val == "qdrant":
         if not embedding_ok:
-            return JSONResponse({
-                "error": "Qdrant vector backend requires embeddings. Configure an embedding backend first."
-            }, status_code=503)
+            return JSONResponse(
+                {
+                    "error": "Qdrant vector backend requires embeddings. Configure an embedding backend first."
+                },
+                status_code=503,
+            )
         try:
             vectors = fn_embed_texts([c["text"] for c in new_chunks])
             store.add(new_chunks, vectors)
         except Exception as exc:
-            return JSONResponse({"error": f"Embedding/indexing failed on Qdrant backend: {exc}"},
-                                status_code=503)
+            return JSONResponse(
+                {"error": f"Embedding/indexing failed on Qdrant backend: {exc}"},
+                status_code=503,
+            )
     else:
         if embedding_ok:
             try:
                 vectors = fn_embed_texts([c["text"] for c in new_chunks])
                 store.add(new_chunks, vectors)
             except Exception as exc:
-                return JSONResponse({"error": f"Embedding failed: {exc}"}, status_code=500)
+                return JSONResponse(
+                    {"error": f"Embedding failed: {exc}"}, status_code=500
+                )
         else:
             store.add(new_chunks, [])
 
@@ -462,21 +563,25 @@ def load_url(sid: SessionId, payload: Optional[UrlPayload] = Body(default=None))
 
     return {
         "ok": True,
-        "documents": [{
-            "filename": doc_info["filename"],
-            "doc_id": doc_id,
-            "openable": False,
-            "pages": 1,
-            "chunks": len(new_chunks),
-            "method": chunk_mode,
-        }],
+        "documents": [
+            {
+                "filename": doc_info["filename"],
+                "doc_id": doc_id,
+                "openable": False,
+                "pages": 1,
+                "chunks": len(new_chunks),
+                "method": chunk_mode,
+            }
+        ],
         "total_chunks": len(store.chunks),
         "chunk_comparison": chunk_counts_map.get(sid, {}),
     }
 
 
 @router.post("/remove", response_model=RemoveResponse, response_model_exclude_none=True)
-def remove_doc(sid: RequiredSessionId, payload: Optional[RemovePayload] = Body(default=None)):
+def remove_doc(
+    sid: RequiredSessionId, payload: Optional[RemovePayload] = Body(default=None)
+):
     """Remove a single document: its chunks, file, manifest entry, and deduplication hash."""
     doc_id = ((payload.doc_id if payload else None) or "").strip()
     if not doc_id:
@@ -532,9 +637,10 @@ def list_orphans(
     is_admin = fn_is_admin(request)
 
     if not is_admin and not sid:
-        return JSONResponse({
-            "error": "Unauthorized: active session or admin credentials required."
-        }, status_code=401)
+        return JSONResponse(
+            {"error": "Unauthorized: active session or admin credentials required."},
+            status_code=401,
+        )
 
     durable_orphans = fn_read_durable()
 
@@ -565,4 +671,3 @@ def list_orphans(
         "admin": False,
         "orphans": safe_records,
     }
-

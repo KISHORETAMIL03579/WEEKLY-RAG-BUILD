@@ -39,7 +39,9 @@ def rr_rank(
             hit = True
         elif exp_sec_lower and (exp_sec_lower in section or exp_sec_lower in text):
             hit = True
-        elif exp_lower and (exp_lower in section or exp_lower in filename or exp_lower in text):
+        elif exp_lower and (
+            exp_lower in section or exp_lower in filename or exp_lower in text
+        ):
             hit = True
 
         if hit:
@@ -51,4 +53,3 @@ def rr_rank(
 # Aliases for exact backward compatibility with test_eval_metrics.py
 _hit_check = hit_check
 _rr_rank = rr_rank
-

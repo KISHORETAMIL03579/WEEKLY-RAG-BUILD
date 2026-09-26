@@ -54,10 +54,15 @@ def save_session_manifest(sid: str) -> None:
     mpath = manifest_path(sid)
     if files:
         tmp_path = mpath.with_suffix(".tmp")
-        tmp_path.write_text(json.dumps({
-            doc_id: {"path": str(info["path"]), "name": info["name"]}
-            for doc_id, info in files.items()
-        }), encoding="utf-8")
+        tmp_path.write_text(
+            json.dumps(
+                {
+                    doc_id: {"path": str(info["path"]), "name": info["name"]}
+                    for doc_id, info in files.items()
+                }
+            ),
+            encoding="utf-8",
+        )
         tmp_path.replace(mpath)
         try:
             mtimes_map[sid] = mpath.stat().st_mtime
@@ -75,7 +80,9 @@ def load_session_manifest(sid: str) -> None:
     try:
         data = json.loads(manifest.read_text(encoding="utf-8"))
     except Exception:
-        logger.warning("Corrupted session manifest at %s — ignoring", manifest, exc_info=True)
+        logger.warning(
+            "Corrupted session manifest at %s — ignoring", manifest, exc_info=True
+        )
         return
     files: Dict[str, dict] = {}
     for doc_id, meta in data.items():
@@ -103,12 +110,18 @@ def sweep_orphan_uploads() -> None:
         try:
             data = json.loads(manifest.read_text(encoding="utf-8"))
         except Exception:
-            logger.warning("Corrupted manifest during sweep: %s", manifest, exc_info=True)
+            logger.warning(
+                "Corrupted manifest during sweep: %s", manifest, exc_info=True
+            )
             continue
         for meta in data.values():
             referenced.add(str(Path(meta.get("path", "")).resolve()))
     for f in folder.iterdir():
-        if f.name.endswith(".manifest.json") or f.name.endswith(".jsonl") or f.name.endswith(".lock"):
+        if (
+            f.name.endswith(".manifest.json")
+            or f.name.endswith(".jsonl")
+            or f.name.endswith(".lock")
+        ):
             continue
         if str(f.resolve()) not in referenced:
             f.unlink(missing_ok=True)
@@ -139,7 +152,11 @@ def evict_session_store(sid: str) -> None:
         try:
             QdrantVectorStore(sid).clear()
         except Exception:
-            logger.warning("Failed to release Qdrant collection for evicted session %s", sid, exc_info=True)
+            logger.warning(
+                "Failed to release Qdrant collection for evicted session %s",
+                sid,
+                exc_info=True,
+            )
 
 
 def get_store(sid: str) -> Any:
@@ -184,7 +201,9 @@ def get_store(sid: str) -> Any:
             mtimes_map[sid] = current_mtime
     else:
         last_mtime = mtimes_map.get(sid)
-        if current_mtime is not None and (last_mtime is None or current_mtime > last_mtime):
+        if current_mtime is not None and (
+            last_mtime is None or current_mtime > last_mtime
+        ):
             load_session_manifest(sid)
             try:
                 store.load()
@@ -253,4 +272,3 @@ _sweep_cancelled_uploads = sweep_cancelled_uploads
 _sweep_orphan_uploads = sweep_orphan_uploads
 _save_upload_to = save_upload_to
 _manifest_path = manifest_path
-

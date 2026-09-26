@@ -57,17 +57,17 @@ Do not skip a stage unless it is genuinely not applicable.
 
 Before modifying code, determine:
 
-* What exactly is the user asking for?
-* What behavior must change?
-* What behavior must remain unchanged?
-* What are the acceptance criteria?
-* What files/components are involved?
-* What dependencies are involved?
-* What edge cases are relevant?
-* Are there security requirements?
-* Are there testing requirements?
-* Are there ordering constraints?
-* Are there restrictions such as "do not modify code yet"?
+- What exactly is the user asking for?
+- What behavior must change?
+- What behavior must remain unchanged?
+- What are the acceptance criteria?
+- What files/components are involved?
+- What dependencies are involved?
+- What edge cases are relevant?
+- Are there security requirements?
+- Are there testing requirements?
+- Are there ordering constraints?
+- Are there restrictions such as "do not modify code yet"?
 
 Do not implement from assumptions when the requirement can be verified from the project/task documentation.
 
@@ -101,16 +101,16 @@ Prefer the smallest correct change.
 
 When making changes:
 
-* Modify only what is required.
-* Preserve existing functionality.
-* Follow existing project conventions.
-* Reuse existing utilities when appropriate.
-* Avoid duplicate implementations.
-* Avoid dead code.
-* Avoid unnecessary abstractions.
-* Avoid unrelated refactoring.
-* Avoid changing APIs unnecessarily.
-* Avoid changing configuration unless required.
+- Modify only what is required.
+- Preserve existing functionality.
+- Follow existing project conventions.
+- Reuse existing utilities when appropriate.
+- Avoid duplicate implementations.
+- Avoid dead code.
+- Avoid unnecessary abstractions.
+- Avoid unrelated refactoring.
+- Avoid changing APIs unnecessarily.
+- Avoid changing configuration unless required.
 
 If a cleaner architecture is possible but is not required for the task, do not introduce it unnecessarily.
 
@@ -137,16 +137,16 @@ Review every changed file.
 
 For every change, ask:
 
-* Why was this changed?
-* Does it directly support the requirement?
-* Is the implementation correct?
-* Could it break existing behavior?
-* Are error paths handled?
-* Are edge cases handled?
-* Are inputs validated?
-* Are security boundaries preserved?
-* Is this change actually necessary?
-* Did I accidentally modify unrelated code?
+- Why was this changed?
+- Does it directly support the requirement?
+- Is the implementation correct?
+- Could it break existing behavior?
+- Are error paths handled?
+- Are edge cases handled?
+- Are inputs validated?
+- Are security boundaries preserved?
+- Is this change actually necessary?
+- Did I accidentally modify unrelated code?
 
 Remove accidental or unrelated changes.
 
@@ -195,42 +195,42 @@ Check affected integrations.
 
 Review:
 
-* Routes
-* Services
-* Storage
-* Database/vector store
-* Sessions
-* Authentication
-* Authorization
-* Error handling
-* Logging
-* Configuration
+- Routes
+- Services
+- Storage
+- Database/vector store
+- Sessions
+- Authentication
+- Authorization
+- Error handling
+- Logging
+- Configuration
 
 ## Frontend
 
 Review:
 
-* API calls
-* Request/response handling
-* State updates
-* Loading states
-* Error states
-* Cancellation
-* Browser behavior
-* Existing UI behavior
+- API calls
+- Request/response handling
+- State updates
+- Loading states
+- Error states
+- Cancellation
+- Browser behavior
+- Existing UI behavior
 
 ## Infrastructure
 
 Review:
 
-* Docker
-* Docker Compose
-* Environment variables
-* Volumes
-* Health checks
-* Worker processes
-* External services
-* Startup/shutdown behavior
+- Docker
+- Docker Compose
+- Environment variables
+- Volumes
+- Health checks
+- Worker processes
+- External services
+- Startup/shutdown behavior
 
 Check every caller of a changed function or interface.
 
@@ -244,58 +244,58 @@ Identify the edge cases relevant to the correction.
 
 Check where applicable:
 
-* Missing input
-* Empty input
-* Invalid input
-* Oversized input
-* Unauthorized access
-* Wrong session
-* Dependency failure
-* Timeout
-* Malformed response
+- Missing input
+- Empty input
+- Invalid input
+- Oversized input
+- Unauthorized access
+- Wrong session
+- Dependency failure
+- Timeout
+- Malformed response
 
 ## RAG
 
 Check where applicable:
 
-* No documents
-* No matching chunks
-* Low similarity
-* Duplicate chunks
-* Incorrect chunks
-* Conflicting chunks
-* Empty answer
-* LLM failure
-* Embedding failure
-* Vector-store failure
-* Context overflow
-* Citation mismatch
+- No documents
+- No matching chunks
+- Low similarity
+- Duplicate chunks
+- Incorrect chunks
+- Conflicting chunks
+- Empty answer
+- LLM failure
+- Embedding failure
+- Vector-store failure
+- Context overflow
+- Citation mismatch
 
 ## Persistence
 
 Check where applicable:
 
-* Missing file
-* Corrupted file
-* Concurrent write
-* Partial failure
-* Rollback failure
-* Process restart
-* Worker restart
-* Persistence recovery
+- Missing file
+- Corrupted file
+- Concurrent write
+- Partial failure
+- Rollback failure
+- Process restart
+- Worker restart
+- Persistence recovery
 
 ## Frontend
 
 Check where applicable:
 
-* Network failure
-* API failure
-* Empty response
-* Duplicate request
-* Request cancellation
-* Browser refresh
-* Hard refresh
-* Invalid state
+- Network failure
+- API failure
+- Empty response
+- Duplicate request
+- Request cancellation
+- Browser refresh
+- Hard refresh
+- Invalid state
 
 Do not test irrelevant edge cases just for the sake of testing, but do not ignore obvious failure paths.
 
@@ -305,19 +305,19 @@ Do not test irrelevant edge cases just for the sake of testing, but do not ignor
 
 For backend or infrastructure changes, explicitly review:
 
-* Authentication
-* Authorization
-* Session isolation
-* Input validation
-* Path traversal
-* SSRF
-* XSS
-* CSRF where applicable
-* Secret exposure
-* PII exposure
-* Error-message leakage
-* File access
-* Prompt injection where applicable
+- Authentication
+- Authorization
+- Session isolation
+- Input validation
+- Path traversal
+- SSRF
+- XSS
+- CSRF where applicable
+- Secret exposure
+- PII exposure
+- Error-message leakage
+- File access
+- Prompt injection where applicable
 
 Do not claim stronger security guarantees than the implementation actually provides.
 
@@ -349,16 +349,16 @@ is shared between workers.
 
 Review:
 
-* Shared state
-* File writes
-* File locking
-* Database/vector-store state
-* Sessions
-* Caches
-* Concurrent updates
-* Worker restarts
-* Race conditions
-* Atomicity
+- Shared state
+- File writes
+- File locking
+- Database/vector-store state
+- Sessions
+- Caches
+- Concurrent updates
+- Worker restarts
+- Race conditions
+- Atomicity
 
 If persistence or shared state is affected, verify behavior across processes when practical.
 
@@ -392,11 +392,11 @@ Do not fabricate test output.
 
 Record:
 
-* Command executed
-* Tests passed
-* Tests failed
-* Errors/warnings
-* Relevant integration results
+- Command executed
+- Tests passed
+- Tests failed
+- Errors/warnings
+- Relevant integration results
 
 Passing tests does not automatically prove the requirement is satisfied.
 
@@ -481,17 +481,17 @@ Trace
 
 A retrieval change must not accidentally break:
 
-* Upload
-* Parsing
-* Chunking
-* Embedding
-* Vector indexing
-* Hybrid retrieval
-* Reranking
-* Context limits
-* Generation
-* Citations
-* Trace logging
+- Upload
+- Parsing
+- Chunking
+- Embedding
+- Vector indexing
+- Hybrid retrieval
+- Reranking
+- Context limits
+- Generation
+- Citations
+- Trace logging
 
 Verify the behavior that the correction is intended to change.
 
@@ -505,13 +505,13 @@ For trace-analysis tasks, distinguish between:
 
 Examples:
 
-* Trace store
-* Trace IDs
-* Trace sampling
-* Replay functionality
-* Redaction
-* Prompt registry
-* Prompt hashing
+- Trace store
+- Trace IDs
+- Trace sampling
+- Replay functionality
+- Redaction
+- Prompt registry
+- Prompt hashing
 
 and:
 
@@ -519,16 +519,16 @@ and:
 
 Examples:
 
-* Actual seeded sample
-* Actual trace IDs
-* Actual replay
-* Original vs replayed output
-* Actual manual observations
-* Actual taxonomy
-* Actual counts
-* Actual percentages
-* Actual prediction
-* Actual Git commit
+- Actual seeded sample
+- Actual trace IDs
+- Actual replay
+- Original vs replayed output
+- Actual manual observations
+- Actual taxonomy
+- Actual counts
+- Actual percentages
+- Actual prediction
+- Actual Git commit
 
 The existence of infrastructure does NOT prove that the assignment itself is complete.
 
@@ -570,13 +570,13 @@ During the observation stage:
 
 Do not:
 
-* Fix retrieval
-* Fix prompts
-* Change chunking
-* Change ranking
-* Change thresholds
-* Change models
-* Change evaluation logic
+- Fix retrieval
+- Fix prompts
+- Change chunking
+- Change ranking
+- Change thresholds
+- Change models
+- Change evaluation logic
 
 before the required baseline analysis is completed.
 
@@ -630,18 +630,18 @@ Whenever numbers appear in the implementation, report, documentation, or evaluat
 
 Examples:
 
-* Test count
-* Trace count
-* Accuracy
-* Recall
-* Hit rate
-* MRR
-* Frequency
-* Percentage
-* Latency
-* Chunk count
-* Worker count
-* Token count
+- Test count
+- Trace count
+- Accuracy
+- Recall
+- Hit rate
+- MRR
+- Frequency
+- Percentage
+- Latency
+- Chunk count
+- Worker count
+- Token count
 
 Never trust a copied or hardcoded number without checking its source.
 
@@ -670,24 +670,24 @@ After making code changes, inspect relevant documentation.
 
 Check:
 
-* README
-* Task documentation
-* Configuration examples
-* API documentation
-* Deployment instructions
-* Test instructions
-* Comments
-* Environment variables
+- README
+- Task documentation
+- Configuration examples
+- API documentation
+- Deployment instructions
+- Test instructions
+- Comments
+- Environment variables
 
 Look for:
 
-* Incorrect commands
-* Outdated configuration
-* Incorrect endpoint methods
-* Old test counts
-* Duplicate information
-* Missing limitations
-* Claims that no longer match the code
+- Incorrect commands
+- Outdated configuration
+- Incorrect endpoint methods
+- Old test counts
+- Duplicate information
+- Missing limitations
+- Claims that no longer match the code
 
 Documentation must describe the current implementation.
 
@@ -699,17 +699,17 @@ Before completion, inspect Git state.
 
 Ensure that the change did not accidentally add:
 
-* `.env`
-* API keys
-* Tokens
-* Passwords
-* Credentials
-* Runtime traces
-* Uploaded documents
-* Generated vector data
-* Logs
-* Temporary files
-* Debug artifacts
+- `.env`
+- API keys
+- Tokens
+- Passwords
+- Credentials
+- Runtime traces
+- Uploaded documents
+- Generated vector data
+- Logs
+- Temporary files
+- Debug artifacts
 
 Run:
 
@@ -762,12 +762,12 @@ In that case:
 
 After fixing a problem discovered during self-review:
 
-* Re-run the affected tests.
-* Re-run the broader test suite when practical.
-* Re-check the original requirement.
-* Re-check the actual diff.
-* Re-check integration.
-* Re-check the original failure scenario.
+- Re-run the affected tests.
+- Re-run the broader test suite when practical.
+- Re-check the original requirement.
+- Re-check the actual diff.
+- Re-check integration.
+- Re-check the original failure scenario.
 
 Do not assume the second implementation is correct just because it fixes the first problem.
 
@@ -821,11 +821,11 @@ Briefly describe what was changed.
 
 Include:
 
-* Test command
-* Result
-* Number passed
-* Number failed
-* Important runtime/E2E verification
+- Test command
+- Result
+- Number passed
+- Number failed
+- Important runtime/E2E verification
 
 Never fabricate results.
 
@@ -833,19 +833,19 @@ Never fabricate results.
 
 List:
 
-* Problem
-* Root cause
-* Correction
-* Verification
+- Problem
+- Root cause
+- Correction
+- Verification
 
 ## 5. Remaining Risks
 
 Use:
 
-* P0 — Blocker
-* P1 — High
-* P2 — Medium
-* P3 — Low
+- P0 — Blocker
+- P1 — High
+- P2 — Medium
+- P3 — Low
 
 Only report genuine remaining risks.
 
@@ -853,11 +853,11 @@ Only report genuine remaining risks.
 
 Use exactly one:
 
-* `COMPLETE`
-* `COMPLETE WITH WARNINGS`
-* `PARTIALLY COMPLETE`
-* `NOT COMPLETE`
-* `IMPLEMENTED BUT NOT VERIFIED`
+- `COMPLETE`
+- `COMPLETE WITH WARNINGS`
+- `PARTIALLY COMPLETE`
+- `NOT COMPLETE`
+- `IMPLEMENTED BUT NOT VERIFIED`
 
 Explain the reason briefly.
 

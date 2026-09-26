@@ -29,3 +29,6 @@ filelock>=3.13.0
 
 # Qdrant vector database
 qdrant-client>=1.19.0
+
+# Code formatting & style
+black>=24.8.0

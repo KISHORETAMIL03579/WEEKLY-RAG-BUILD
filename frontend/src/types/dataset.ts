@@ -33,4 +33,4 @@ export interface DatasetParseResult {
   pairs?: Array<{ question: string; expected: string }>;
 }
 
-export type DatasetMode = 'builtin' | 'custom';
+export type DatasetMode = "builtin" | "custom";

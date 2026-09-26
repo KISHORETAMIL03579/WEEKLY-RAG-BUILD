@@ -69,8 +69,10 @@ export interface JudgeAssertions {
   out_of_jurisdiction_refusal: boolean;
 }
 
-export type EvaluationCaseStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'ERROR';
-export type EvaluationVerdictSource = 'LLM' | 'DETERMINISTIC' | 'FALLBACK' | 'CACHE' | 'ERROR';
+export type EvaluationCaseStatus =
+  "PENDING" | "RUNNING" | "COMPLETED" | "ERROR";
+export type EvaluationVerdictSource =
+  "LLM" | "DETERMINISTIC" | "FALLBACK" | "CACHE" | "ERROR";
 
 export interface JudgeCaseResult {
   case_id: string;
@@ -84,7 +86,7 @@ export interface JudgeCaseResult {
   human_label?: number;
   expected_numeric?: string;
   out_of_jurisdiction?: boolean;
-  
+
   // Evaluation Lifecycle & Run Association
   evaluation_run_id?: string | null;
   status?: EvaluationCaseStatus;
@@ -129,7 +131,8 @@ export interface JudgeCaseResult {
 
   // Assertions & Diagnosis
   assertions?: JudgeAssertions | null;
-  failure_category?: 'pipeline' | 'llm_model' | 'code_issue' | 'pass' | string | null;
+  failure_category?:
+    "pipeline" | "llm_model" | "code_issue" | "pass" | string | null;
   failure_type?: string | null;
   failure_reason?: string | null;
   resolution?: string | null;
@@ -148,8 +151,8 @@ export interface JudgeEvalResponse {
 
 export interface EvaluationRunStateResponse {
   evaluation_run_id: string;
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'CANCELLED' | 'ERROR';
-  eval_engine: 'deterministic' | 'llm';
+  status: "PENDING" | "RUNNING" | "COMPLETED" | "CANCELLED" | "ERROR";
+  eval_engine: "deterministic" | "llm";
   total_cases: number;
   completed_cases: number;
   current_case_id?: string | null;

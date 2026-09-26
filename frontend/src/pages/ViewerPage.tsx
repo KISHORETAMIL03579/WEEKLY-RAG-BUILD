@@ -1,42 +1,42 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { DocumentPage } from '../types/document';
-import { api } from '../services/api';
-import { escapeRegex } from '../utils/helpers';
+import React, { useState, useEffect, useCallback } from "react";
+import { DocumentPage } from "../types/document";
+import { api } from "../services/api";
+import { escapeRegex } from "../utils/helpers";
 
 interface ViewerPageProps {
   initialDocId?: string;
 }
 
 export const ViewerPage: React.FC<ViewerPageProps> = ({ initialDocId }) => {
-  const [docId, setDocId] = useState<string>(initialDocId || '');
-  const [filename, setFilename] = useState<string>('');
+  const [docId, setDocId] = useState<string>(initialDocId || "");
+  const [filename, setFilename] = useState<string>("");
   const [pages, setPages] = useState<DocumentPage[]>([]);
   const [curPage, setCurPage] = useState<number>(1);
   const [zoom, setZoom] = useState<number>(1);
-  const [ext, setExt] = useState<string>('pdf');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [highlightQuery, setHighlightQuery] = useState<string>('');
-  const [searchCount, setSearchCount] = useState<string>('');
+  const [ext, setExt] = useState<string>("pdf");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [highlightQuery, setHighlightQuery] = useState<string>("");
+  const [searchCount, setSearchCount] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    let id = params.get('doc_id') || initialDocId || '';
-    if (!id && window.location.pathname.startsWith('/file/')) {
-      const parts = window.location.pathname.split('/');
-      if (parts[2] && parts[2] !== 'raw' && parts[2] !== 'pages') {
+    let id = params.get("doc_id") || initialDocId || "";
+    if (!id && window.location.pathname.startsWith("/file/")) {
+      const parts = window.location.pathname.split("/");
+      if (parts[2] && parts[2] !== "raw" && parts[2] !== "pages") {
         id = decodeURIComponent(parts[2]);
       }
     }
-    const initialPage = parseInt(params.get('page') || '1', 10);
-    const initialHl = params.get('hl') || '';
+    const initialPage = parseInt(params.get("page") || "1", 10);
+    const initialHl = params.get("hl") || "";
 
     setDocId(id);
     if (initialHl) setHighlightQuery(initialHl);
 
     if (!id) {
-      setError('No document ID specified.');
+      setError("No document ID specified.");
       setLoading(false);
       return;
     }
@@ -47,18 +47,18 @@ export const ViewerPage: React.FC<ViewerPageProps> = ({ initialDocId }) => {
       try {
         const data = await api.getFilePages(id, controller.signal);
         if (!Array.isArray(data.pages)) {
-          throw new Error('Invalid document response format.');
+          throw new Error("Invalid document response format.");
         }
         setPages(data.pages);
         setFilename(data.filename || id);
-        setExt(data.ext || 'pdf');
+        setExt(data.ext || "pdf");
         if (initialPage > 0 && initialPage <= data.pages.length) {
           setCurPage(initialPage);
         }
       } catch (err: unknown) {
         const e = err as Error;
-        if (e.name === 'AbortError') return;
-        setError(e.message || 'Could not load document.');
+        if (e.name === "AbortError") return;
+        setError(e.message || "Could not load document.");
       } finally {
         if (!controller.signal.aborted) {
           setLoading(false);
@@ -72,18 +72,18 @@ export const ViewerPage: React.FC<ViewerPageProps> = ({ initialDocId }) => {
   }, [initialDocId]);
 
   const handleBack = useCallback(() => {
-    if (typeof window !== 'undefined' && window.history.length > 1) {
+    if (typeof window !== "undefined" && window.history.length > 1) {
       window.history.back();
     } else {
-      window.location.href = '/';
+      window.location.href = "/";
     }
   }, []);
 
   const handleClose = useCallback(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       window.close();
       setTimeout(() => {
-        window.location.href = '/';
+        window.location.href = "/";
       }, 100);
     }
   }, []);
@@ -96,10 +96,10 @@ export const ViewerPage: React.FC<ViewerPageProps> = ({ initialDocId }) => {
     let matchCount = 0;
     let firstPageMatch = -1;
     const escaped = escapeRegex(trimmed);
-    const re = new RegExp(escaped, 'ig');
+    const re = new RegExp(escaped, "ig");
 
     pages.forEach((p, idx) => {
-      const pageText = typeof p?.text === 'string' ? p.text : '';
+      const pageText = typeof p?.text === "string" ? p.text : "";
       const matches = pageText.match(re);
       if (matches) {
         matchCount += matches.length;
@@ -107,7 +107,7 @@ export const ViewerPage: React.FC<ViewerPageProps> = ({ initialDocId }) => {
       }
     });
 
-    setSearchCount(`${matchCount} match${matchCount === 1 ? '' : 'es'} found`);
+    setSearchCount(`${matchCount} match${matchCount === 1 ? "" : "es"} found`);
     if (firstPageMatch !== -1) {
       setCurPage(firstPageMatch);
       setHighlightQuery(trimmed);
@@ -115,16 +115,16 @@ export const ViewerPage: React.FC<ViewerPageProps> = ({ initialDocId }) => {
   };
 
   const highlightText = (text: string, query: string) => {
-    const safeText = typeof text === 'string' ? text : '';
+    const safeText = typeof text === "string" ? text : "";
     if (!safeText) return safeText;
     if (!query) return safeText;
     const trimmed = query.trim();
     if (!trimmed) return safeText;
     const escaped = escapeRegex(trimmed);
-    const flexible = escaped.replace(/ +/g, '\\s+');
+    const flexible = escaped.replace(/ +/g, "\\s+");
     let regex: RegExp;
     try {
-      regex = new RegExp(`(${flexible})`, 'gi');
+      regex = new RegExp(`(${flexible})`, "gi");
     } catch {
       return safeText;
     }
@@ -136,11 +136,11 @@ export const ViewerPage: React.FC<ViewerPageProps> = ({ initialDocId }) => {
         </mark>
       ) : (
         part
-      )
+      ),
     );
   };
 
-  const isPdf = ext === 'pdf';
+  const isPdf = ext === "pdf";
   const currentPageData = pages[curPage - 1];
 
   return (
@@ -148,12 +148,19 @@ export const ViewerPage: React.FC<ViewerPageProps> = ({ initialDocId }) => {
       {/* Header Bar */}
       <header className="app-header">
         <div className="viewer-header-left">
-          <button type="button" className="nav-link" onClick={handleBack} title="Back to previous page or home">
+          <button
+            type="button"
+            className="nav-link"
+            onClick={handleBack}
+            title="Back to previous page or home"
+          >
             ← Back
           </button>
           <div className="brand">
             <span className="viewer-brand-icon">📄</span>
-            <span className="viewer-brand-name">{filename || 'Document Viewer'}</span>
+            <span className="viewer-brand-name">
+              {filename || "Document Viewer"}
+            </span>
           </div>
         </div>
 
@@ -211,7 +218,9 @@ export const ViewerPage: React.FC<ViewerPageProps> = ({ initialDocId }) => {
             <button
               type="button"
               className="viewer-icon-btn"
-              onClick={() => setZoom((z) => Math.max(0.5, parseFloat((z - 0.1).toFixed(1))))}
+              onClick={() =>
+                setZoom((z) => Math.max(0.5, parseFloat((z - 0.1).toFixed(1))))
+              }
               title="Zoom out"
               aria-label="Zoom out"
             >
@@ -221,7 +230,9 @@ export const ViewerPage: React.FC<ViewerPageProps> = ({ initialDocId }) => {
             <button
               type="button"
               className="viewer-icon-btn"
-              onClick={() => setZoom((z) => Math.min(2.0, parseFloat((z + 0.1).toFixed(1))))}
+              onClick={() =>
+                setZoom((z) => Math.min(2.0, parseFloat((z + 0.1).toFixed(1))))
+              }
               title="Zoom in"
               aria-label="Zoom in"
             >
@@ -243,7 +254,9 @@ export const ViewerPage: React.FC<ViewerPageProps> = ({ initialDocId }) => {
 
       {/* Main Document Content Area */}
       <main className="viewer-main">
-        {loading && <div className="viewer-loading">Loading document pages...</div>}
+        {loading && (
+          <div className="viewer-loading">Loading document pages...</div>
+        )}
 
         {error && <div className="viewer-error">{error}</div>}
 
@@ -251,7 +264,8 @@ export const ViewerPage: React.FC<ViewerPageProps> = ({ initialDocId }) => {
           <div className="viewer-pdf-wrapper">
             {highlightQuery && (
               <div className="viewer-pdf-notice">
-                🔍 Looking for this passage (use your browser's Find, Ctrl/Cmd+F, if it's not immediately visible):
+                🔍 Looking for this passage (use your browser's Find,
+                Ctrl/Cmd+F, if it's not immediately visible):
                 <div className="viewer-pdf-snippet">"{highlightQuery}"</div>
               </div>
             )}
@@ -259,13 +273,16 @@ export const ViewerPage: React.FC<ViewerPageProps> = ({ initialDocId }) => {
               type="application/pdf"
               src={`/file/${encodeURIComponent(String(docId))}/raw#page=${curPage}`}
               className="viewer-pdf-embed"
-              style={{ ['--viewer-zoom' as string]: zoom }}
+              style={{ ["--viewer-zoom" as string]: zoom }}
             />
           </div>
         )}
 
         {!loading && !error && !isPdf && currentPageData && (
-          <div className="viewer-doc-page" style={{ ['--viewer-zoom' as string]: zoom }}>
+          <div
+            className="viewer-doc-page"
+            style={{ ["--viewer-zoom" as string]: zoom }}
+          >
             <div className="viewer-doc-meta">
               <span>
                 Section {currentPageData.num} of {pages.length}
@@ -279,4 +296,3 @@ export const ViewerPage: React.FC<ViewerPageProps> = ({ initialDocId }) => {
     </div>
   );
 };
-

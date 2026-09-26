@@ -8,14 +8,40 @@ from backend.services.search import hybrid_search, reciprocal_rank_fusion, searc
 
 EVAL_PRESETS = {
     "tfidf": {"force_tfidf": True, "mode": None, "rerank": False, "rewrite": False},
-    "bm25-qdrant-blend": {"force_tfidf": False, "mode": "hybrid-legacy", "rerank": False, "rewrite": False},
-    "bm25-qdrant-rrf": {"force_tfidf": False, "mode": "hybrid", "rerank": False, "rewrite": False},
-    "rrf-rerank": {"force_tfidf": False, "mode": "hybrid", "rerank": True, "rewrite": False},
-    "rrf-rerank-rewrite": {"force_tfidf": False, "mode": "hybrid", "rerank": True, "rewrite": True},
+    "bm25-qdrant-blend": {
+        "force_tfidf": False,
+        "mode": "hybrid-legacy",
+        "rerank": False,
+        "rewrite": False,
+    },
+    "bm25-qdrant-rrf": {
+        "force_tfidf": False,
+        "mode": "hybrid",
+        "rerank": False,
+        "rewrite": False,
+    },
+    "rrf-rerank": {
+        "force_tfidf": False,
+        "mode": "hybrid",
+        "rerank": True,
+        "rewrite": False,
+    },
+    "rrf-rerank-rewrite": {
+        "force_tfidf": False,
+        "mode": "hybrid",
+        "rerank": True,
+        "rewrite": True,
+    },
 }
 
 
-def retrieve_for_eval(active_store: Any, query: str, k: int, mode: Optional[str], force_tfidf: bool = False) -> List[dict]:
+def retrieve_for_eval(
+    active_store: Any,
+    query: str,
+    k: int,
+    mode: Optional[str],
+    force_tfidf: bool = False,
+) -> List[dict]:
     """Runs retrieval through the real system's pipeline for benchmarking."""
     has_embeddings = (
         embeddings_configured()
@@ -50,7 +76,10 @@ def run_eval_preset(
     if preset.get("rerank") and len(retrieved) > 1:
         retrieved, rerank_score = rerank_with_llm(question, retrieved)
     hit, rr, rank = rr_rank(
-        retrieved, expected=expected, expected_doc=expected_doc, expected_section=expected_section
+        retrieved,
+        expected=expected,
+        expected_doc=expected_doc,
+        expected_section=expected_section,
     )
     failure_type = "Success" if hit else "Retrieval Failure"
     return {
@@ -70,8 +99,12 @@ def run_eval_preset(
                 "section": r.get("section"),
                 "filename": r.get("filename"),
                 "score": round(r.get("score", 0.0), 4),
-                "embed_score": round(r["embed_score"], 4) if "embed_score" in r else None,
-                "bm25_score": round(r["keyword_score"], 4) if "keyword_score" in r else None,
+                "embed_score": (
+                    round(r["embed_score"], 4) if "embed_score" in r else None
+                ),
+                "bm25_score": (
+                    round(r["keyword_score"], 4) if "keyword_score" in r else None
+                ),
             }
             for r in retrieved
         ],
@@ -80,4 +113,3 @@ def run_eval_preset(
 
 _retrieve_for_eval = retrieve_for_eval
 _run_eval_preset = run_eval_preset
-

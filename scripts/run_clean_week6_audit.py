@@ -2,6 +2,7 @@
 run_clean_week6_audit.py — Clean Certified Audit Runner for All 25 Week 6 Cases
 Executes genuine Ollama llama3.1:8b inference with 180s timeout, recording microsecond telemetry.
 """
+
 import os
 import sys
 import time
@@ -13,11 +14,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8', line_buffering=True)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
 
 from week6.assertions import run_all_assertions
 from week6.judge import parse_judge_output
+
 
 def query_ollama(prompt: str, timeout: int = 180) -> tuple:
     t_start = time.perf_counter()
@@ -29,13 +31,13 @@ def query_ollama(prompt: str, timeout: int = 180) -> tuple:
             "temperature": 0.0,
             "top_p": 0.1,
             "num_predict": 16,
-            "stop": ["\n", "}", "```"]
-        }
+            "stop": ["\n", "}", "```"],
+        },
     }
     req = urllib.request.Request(
         "http://127.0.0.1:11434/api/generate",
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"}
+        headers={"Content-Type": "application/json"},
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -54,9 +56,12 @@ def query_ollama(prompt: str, timeout: int = 180) -> tuple:
         t_elapsed = (time.perf_counter() - t_start) * 1000
         return f"ERROR: {exc}", "ERROR", t_elapsed, {}
 
+
 def run_certified_audit():
     print("=" * 115)
-    print("                  CERTIFIED AUDIT: 25-CASE LIVE OLLAMA LLM EVALUATION RUN                  ")
+    print(
+        "                  CERTIFIED AUDIT: 25-CASE LIVE OLLAMA LLM EVALUATION RUN                  "
+    )
     print("=" * 115)
 
     cases_path = REPO_ROOT / "week6" / "eval_cases_25.json"
@@ -73,12 +78,20 @@ def run_certified_audit():
     v2_template = v2_path.read_text(encoding="utf-8")
 
     # Warm-up probe
-    print("\n[Step 1] Warming up Ollama daemon on http://127.0.0.1:11434 with llama3.1:8b...")
+    print(
+        "\n[Step 1] Warming up Ollama daemon on http://127.0.0.1:11434 with llama3.1:8b..."
+    )
     warm_raw, warm_src, warm_ms, _ = query_ollama("Judge test warm-up.", timeout=120)
-    print(f"  [OK] Ollama daemon is ready. Warm-up latency: {warm_ms:.1f}ms (Source: {warm_src})\n")
+    print(
+        f"  [OK] Ollama daemon is ready. Warm-up latency: {warm_ms:.1f}ms (Source: {warm_src})\n"
+    )
 
-    print("[Step 2] Executing live inference for all 25 benchmark cases on Judge V2 (and Judge V1)...")
-    print(f"{'Case':<9} | {'Human':<5} | {'V1 Verd':<7} | {'V1 ms':<8} | {'V2 Verd':<7} | {'V2 ms':<8} | {'Prompt Tok':<10} | {'Gen Tok':<7} | {'V2 Status':<12}")
+    print(
+        "[Step 2] Executing live inference for all 25 benchmark cases on Judge V2 (and Judge V1)..."
+    )
+    print(
+        f"{'Case':<9} | {'Human':<5} | {'V1 Verd':<7} | {'V1 ms':<8} | {'V2 Verd':<7} | {'V2 ms':<8} | {'Prompt Tok':<10} | {'Gen Tok':<7} | {'V2 Status':<12}"
+    )
     print("-" * 115)
 
     results = []
@@ -98,10 +111,12 @@ def run_certified_audit():
         h_label = labels.get(cid, c.get("human_label", 1))
 
         # --- Judge V2 Prompt (Blind: question, context, answer ONLY) ---
-        p2 = v2_template.replace("{question}", c.get("question", "").strip()) \
-                        .replace("{context}", c.get("retrieved_context", "").strip()) \
-                        .replace("{answer}", c.get("answer", "").strip())
-        
+        p2 = (
+            v2_template.replace("{question}", c.get("question", "").strip())
+            .replace("{context}", c.get("retrieved_context", "").strip())
+            .replace("{answer}", c.get("answer", "").strip())
+        )
+
         v2_raw, v2_src, v2_ms, v2_telem = query_ollama(p2, timeout=180)
         v2_verd = parse_judge_output(v2_raw)
         v2_latencies.append(v2_ms)
@@ -112,14 +127,16 @@ def run_certified_audit():
         elif v2_src == "FALLBACK":
             fallback_count += 1
 
-        v2_is_agree = (v2_verd == h_label)
+        v2_is_agree = v2_verd == h_label
         if v2_is_agree:
             v2_agreed += 1
 
         # --- Judge V1 Prompt (Baseline) ---
-        p1 = v1_template.replace("{question}", c.get("question", "").strip()) \
-                        .replace("{context}", c.get("retrieved_context", "").strip()) \
-                        .replace("{answer}", c.get("answer", "").strip())
+        p1 = (
+            v1_template.replace("{question}", c.get("question", "").strip())
+            .replace("{context}", c.get("retrieved_context", "").strip())
+            .replace("{answer}", c.get("answer", "").strip())
+        )
         v1_raw, v1_src, v1_ms, v1_telem = query_ollama(p1, timeout=180)
         v1_verd = parse_judge_output(v1_raw)
         v1_latencies.append(v1_ms)
@@ -130,7 +147,7 @@ def run_certified_audit():
         elif v1_src == "FALLBACK":
             fallback_count += 1
 
-        v1_is_agree = (v1_verd == h_label)
+        v1_is_agree = v1_verd == h_label
         if v1_is_agree:
             v1_agreed += 1
 
@@ -138,24 +155,28 @@ def run_certified_audit():
         gen_toks = v2_telem.get("eval_count", 0)
         v2_status = "MATCH [100%]" if v2_is_agree else "MISMATCH [X]"
 
-        print(f"[{idx:02d}/25] {cid:<6} | {h_label:<5} | {v1_verd:<7} | {v1_ms:6.1f}ms | {v2_verd:<7} | {v2_ms:6.1f}ms | {prompt_toks:<10} | {gen_toks:<7} | {v2_status:<12}")
+        print(
+            f"[{idx:02d}/25] {cid:<6} | {h_label:<5} | {v1_verd:<7} | {v1_ms:6.1f}ms | {v2_verd:<7} | {v2_ms:6.1f}ms | {prompt_toks:<10} | {gen_toks:<7} | {v2_status:<12}"
+        )
 
-        results.append({
-            "case_id": cid,
-            "human_label": h_label,
-            "v1_verdict": v1_verd,
-            "v1_agreed": v1_is_agree,
-            "v1_source": v1_src,
-            "v1_latency_ms": round(v1_ms, 2),
-            "v1_raw": v1_raw,
-            "v2_verdict": v2_verd,
-            "v2_agreed": v2_is_agree,
-            "v2_source": v2_src,
-            "v2_latency_ms": round(v2_ms, 2),
-            "v2_raw": v2_raw,
-            "v2_telemetry": v2_telem,
-            "llm_completed": (v2_src == "LLM"),
-        })
+        results.append(
+            {
+                "case_id": cid,
+                "human_label": h_label,
+                "v1_verdict": v1_verd,
+                "v1_agreed": v1_is_agree,
+                "v1_source": v1_src,
+                "v1_latency_ms": round(v1_ms, 2),
+                "v1_raw": v1_raw,
+                "v2_verdict": v2_verd,
+                "v2_agreed": v2_is_agree,
+                "v2_source": v2_src,
+                "v2_latency_ms": round(v2_ms, 2),
+                "v2_raw": v2_raw,
+                "v2_telemetry": v2_telem,
+                "llm_completed": (v2_src == "LLM"),
+            }
+        )
 
     wall_total = time.perf_counter() - wall_start
 
@@ -169,14 +190,18 @@ def run_certified_audit():
     p95_lat = sorted_lats[p95_idx]
 
     print("\n" + "=" * 115)
-    print("                                   FINAL AUDIT SUMMARY                                   ")
+    print(
+        "                                   FINAL AUDIT SUMMARY                                   "
+    )
     print("=" * 115)
     print(f"Total Benchmark Cases Evaluated   : {len(cases)} / 25")
     print(f"Total Genuine LLM Calls Made      : {actual_llm_calls} (V1: 25 + V2: 25)")
     print(f"Number of LLM Fallback Verdicts   : {fallback_count} (0 expected)")
     print(f"Number of LLM Timeouts / Errors   : {error_count} (0 expected)")
     print(f"Number of Cache Hits / Mocks      : {cache_hits} (0 expected)")
-    print(f"Total Wall-Clock Evaluation Time  : {wall_total:.2f} seconds ({wall_total/60:.2f} minutes)")
+    print(
+        f"Total Wall-Clock Evaluation Time  : {wall_total:.2f} seconds ({wall_total/60:.2f} minutes)"
+    )
     print("-" * 115)
     print(f"Judge V2 Minimum Latency          : {min_lat:.2f} ms")
     print(f"Judge V2 Maximum Latency          : {max_lat:.2f} ms")
@@ -184,8 +209,12 @@ def run_certified_audit():
     print(f"Judge V2 Median Latency           : {med_lat:.2f} ms")
     print(f"Judge V2 P95 Latency              : {p95_lat:.2f} ms")
     print("-" * 115)
-    print(f"Judge V1 Agreement with Human GT  : {(v1_agreed / len(cases) * 100):.2f}% ({v1_agreed}/{len(cases)})")
-    print(f"Judge V2 Agreement with Human GT  : {(v2_agreed / len(cases) * 100):.2f}% ({v2_agreed}/{len(cases)})")
+    print(
+        f"Judge V1 Agreement with Human GT  : {(v1_agreed / len(cases) * 100):.2f}% ({v1_agreed}/{len(cases)})"
+    )
+    print(
+        f"Judge V2 Agreement with Human GT  : {(v2_agreed / len(cases) * 100):.2f}% ({v2_agreed}/{len(cases)})"
+    )
     print("=" * 115)
 
     # Save to disk
@@ -212,8 +241,10 @@ def run_certified_audit():
         "cases": results,
     }
     audit_file.write_text(json.dumps(audit_data, indent=2), encoding="utf-8")
-    print(f"\n[Audit Saved] Certified results written to: {audit_file.relative_to(REPO_ROOT)}")
+    print(
+        f"\n[Audit Saved] Certified results written to: {audit_file.relative_to(REPO_ROOT)}"
+    )
+
 
 if __name__ == "__main__":
     run_certified_audit()
-

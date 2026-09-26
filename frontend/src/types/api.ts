@@ -1,4 +1,4 @@
-import { DocumentInfo, UploadDocumentResult, DocumentPage } from './document';
+import { DocumentInfo, UploadDocumentResult, DocumentPage } from "./document";
 
 export interface SourceInfo {
   filename: string;
@@ -93,4 +93,3 @@ export interface ErrorResponse {
   message?: string;
   detail?: string | unknown[];
 }
-

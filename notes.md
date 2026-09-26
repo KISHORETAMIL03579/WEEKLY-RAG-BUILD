@@ -1,12 +1,14 @@
 # Week 5 Practical Task Set C — Trace Evaluation Notes
 
 ## 1. Seeded Random Sample
-* **Sample Size**: 20 traces
-* **Random Seed**: `42`
-* **Sampling Command**: `python sample_trace.py --n 20 --seed 42`
-* **Total Traces in Pool**: 56
+
+- **Sample Size**: 20 traces
+- **Random Seed**: `42`
+- **Sampling Command**: `python sample_trace.py --n 20 --seed 42`
+- **Total Traces in Pool**: 56
 
 ### Selected Trace IDs (Chronological / Sorted):
+
 1. `12371cb1-12e6-4a85-8cc9-813a09b5d0b7` (Q19: Working hours, T=0.7, K=10)
 2. `137a9ac0-7e81-4c47-b42d-f78f7161b296` (Q6: Bullying/harassment, T=0.3, K=5)
 3. `260b919b-658e-4050-ac5f-78cf3c8edb63` (Q9: Study leave, T=0.3, K=5)
@@ -32,7 +34,7 @@
 
 ## 2. Verbatim Open-Coding Observations (One Honest Sentence Per Trace)
 
-*Zero code changes were made during this step — the zero is graded.*
+_Zero code changes were made during this step — the zero is graded._
 
 1. **`12371cb1`**: The answer accurately states daily hours are 9:00 am to 5:30 pm with one hour lunch, but dropped the "Monday to Friday" restriction present in chunk `c119`.
 2. **`137a9ac0`**: The answer synthesizes harassment reporting across section 2.2.3, grievance procedures in section 9.1, and anti-retaliation protections in section 9.6 with four bracketed citations.
@@ -59,11 +61,12 @@
 
 ## 3. Trace Replay Proof (Requirement 1)
 
-* **Seeded Selection**: `python sample_trace.py --replay-pick --seed 42`
-* **Picked Trace ID**: `a05fdc3f-2274-48f1-baa2-b03e17e037dd`
-* **Replayed From**: Trace record alone (`prompt_version`, `model`, `temperature`, persisted redacted context snapshot).
+- **Seeded Selection**: `python sample_trace.py --replay-pick --seed 42`
+- **Picked Trace ID**: `a05fdc3f-2274-48f1-baa2-b03e17e037dd`
+- **Replayed From**: Trace record alone (`prompt_version`, `model`, `temperature`, persisted redacted context snapshot).
 
 ### Original vs. Replayed Output Comparison:
+
 ```text
 Original Output:
 No, compassionate leave is granted for the death or serious illness of a close member of the family, not an immediate family member. [1] defines close members of the family as including parents-in-law, which is not included in the definition of immediate family member in [2].
@@ -75,32 +78,37 @@ Outputs Match Exactly: False (Semantics match 100%; phrasing shifted on final cl
 ```
 
 ### Trace Fields Verification:
-* `prompt_version`: `"qa-answer-v1"` (Registered prompt template in registry)
-* `model`: `"llama3.1"`
-* `temperature`: `0.0`
-* `retrieved`: 4 chunks with scores (`c151`, `c153`, `c152`, `c149`)
-* `raw_output`: Preserved
-* `fields_missing_from_trace`: None (`[]`)
-* `reconstruction_note`: None (`null`)
+
+- `prompt_version`: `"qa-answer-v1"` (Registered prompt template in registry)
+- `model`: `"llama3.1"`
+- `temperature`: `0.0`
+- `retrieved`: 4 chunks with scores (`c151`, `c153`, `c152`, `c149`)
+- `raw_output`: Preserved
+- `fields_missing_from_trace`: None (`[]`)
+- `reconstruction_note`: None (`null`)
 
 ---
 
 ## 4. Redaction Confirmation
+
 > **Confirmed**: Employee identifiers, personal names, session IDs, and authorization tokens are redacted before writing to `traces/traces.jsonl` via `redact()` in `trace_store.py`, not after.
 
 ---
 
 ## 5. Dated Falsifiable Prediction
-* **Date**: 2026-09-05
-* **Git Commit Hash**: `7e90faa`
-* **Target Failure Mode**: **Low-K Multi-Clause Truncation** (Rank 1, currently at 25.0% / 5 out of 20 traces).
-* **Specific Change**: Implement adaptive Top-K expansion ($K=8$) with query-aware section re-ranking for multi-clause HR policy questions (sick leave, advances, parental leave, resignation notice).
-* **Exact Falsifiable Delta**: This specific change will drop the Low-K Multi-Clause Truncation failure mode from **25.0% (5/20) to under 5.0% (<=1/20)** on the same 20 evaluation queries, while reducing Citation Drifting from 30.0% to under 10.0% by enforcing strict system-prompt bracket-citation few-shot examples.
+
+- **Date**: 2026-09-05
+- **Git Commit Hash**: `7e90faa`
+- **Target Failure Mode**: **Low-K Multi-Clause Truncation** (Rank 1, currently at 25.0% / 5 out of 20 traces).
+- **Specific Change**: Implement adaptive Top-K expansion ($K=8$) with query-aware section re-ranking for multi-clause HR policy questions (sick leave, advances, parental leave, resignation notice).
+- **Exact Falsifiable Delta**: This specific change will drop the Low-K Multi-Clause Truncation failure mode from **25.0% (5/20) to under 5.0% (<=1/20)** on the same 20 evaluation queries, while reducing Citation Drifting from 30.0% to under 10.0% by enforcing strict system-prompt bracket-citation few-shot examples.
 
 ---
 
 ## 6. Public Benchmark Reflection
+
 A public benchmark score (such as MMLU, GSM8K, or general RAG benchmarks like CRUD or RGB) would not have surfaced any of our top-3 failure modes:
+
 1. **Domain Multi-Clause Synthesis**: Public benchmarks evaluate single-fact retrieval or multi-hop synthetic chains, missing real enterprise HR policies where legal qualifications and statutory splits are dispersed across multiple adjacent sub-paragraphs.
 2. **Citation Syntax Stability Under Stochasticity**: Benchmarks evaluate token accuracy against a gold string, ignoring whether citation structures drift into inline text that breaks production UI deep-links.
 3. **Threshold Starvation & Refusal Calibration**: Benchmarks assume the reference document contains the answer, completely failing to test whether the system accurately abstains on unstated corporate policies (such as missing retirement age or dress code rules) without hallucinating.

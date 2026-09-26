@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
-import { EvalQuestionInput } from '../../types/evaluation';
-import { PRESETS } from './KeyTakeaways';
-import { CANONICAL_RETRIEVAL_QUESTIONS } from '../../data/canonicalRetrievalQuestions';
-import { EvaluationProgressCard } from './EvaluationProgressCard';
-import { EvaluationDatasetManager } from './EvaluationDatasetManager';
-import { QADataSetCase, DatasetMode } from '../../types/dataset';
+import React, { useState } from "react";
+import { EvalQuestionInput } from "../../types/evaluation";
+import { PRESETS } from "./KeyTakeaways";
+import { CANONICAL_RETRIEVAL_QUESTIONS } from "../../data/canonicalRetrievalQuestions";
+import { EvaluationProgressCard } from "./EvaluationProgressCard";
+import { EvaluationDatasetManager } from "./EvaluationDatasetManager";
+import { QADataSetCase, DatasetMode } from "../../types/dataset";
 
 interface FormViewProps {
   questions: EvalQuestionInput[];
@@ -18,7 +18,7 @@ interface FormViewProps {
   onRun: () => void;
   onCancel: () => void;
   isRunning: boolean;
-  onNotify?: (msg: string, type?: 'info' | 'success' | 'error') => void;
+  onNotify?: (msg: string, type?: "info" | "success" | "error") => void;
 }
 
 export const FormView: React.FC<FormViewProps> = ({
@@ -36,17 +36,19 @@ export const FormView: React.FC<FormViewProps> = ({
   onNotify,
 }) => {
   // Common Dataset State
-  const [datasetMode, setDatasetMode] = useState<DatasetMode>('builtin');
-  const [customDatasetCases, setCustomDatasetCases] = useState<QADataSetCase[]>([]);
+  const [datasetMode, setDatasetMode] = useState<DatasetMode>("builtin");
+  const [customDatasetCases, setCustomDatasetCases] = useState<QADataSetCase[]>(
+    [],
+  );
 
   const handleCustomCasesChange = (cases: QADataSetCase[]) => {
     setCustomDatasetCases(cases);
-    if (datasetMode === 'custom') {
+    if (datasetMode === "custom") {
       const mapped: EvalQuestionInput[] = cases.map((c) => ({
         id: c.case_id,
         question: c.question,
-        expected: c.expected_answer || c.expected || '',
-        expected_section: c.expected_section || '',
+        expected: c.expected_answer || c.expected || "",
+        expected_section: c.expected_section || "",
       }));
       setQuestions(mapped);
     }
@@ -54,22 +56,25 @@ export const FormView: React.FC<FormViewProps> = ({
 
   const handleModeChange = (mode: DatasetMode) => {
     setDatasetMode(mode);
-    if (mode === 'builtin') {
+    if (mode === "builtin") {
       setQuestions(CANONICAL_RETRIEVAL_QUESTIONS);
-      notify('Switched to Canonical Retrieval Benchmark dataset.', 'info');
+      notify("Switched to Canonical Retrieval Benchmark dataset.", "info");
     } else {
       const mapped: EvalQuestionInput[] = customDatasetCases.map((c) => ({
         id: c.case_id,
         question: c.question,
-        expected: c.expected_answer || c.expected || '',
-        expected_section: c.expected_section || '',
+        expected: c.expected_answer || c.expected || "",
+        expected_section: c.expected_section || "",
       }));
       setQuestions(mapped);
-      notify(`Switched to Custom Dataset (${customDatasetCases.length} cases loaded).`, 'info');
+      notify(
+        `Switched to Custom Dataset (${customDatasetCases.length} cases loaded).`,
+        "info",
+      );
     }
   };
 
-  const notify = (msg: string, type: 'info' | 'success' | 'error' = 'info') => {
+  const notify = (msg: string, type: "info" | "success" | "error" = "info") => {
     if (onNotify) {
       onNotify(msg, type);
     } else {
@@ -79,7 +84,7 @@ export const FormView: React.FC<FormViewProps> = ({
 
   const resetToCanonical = () => {
     setQuestions(CANONICAL_RETRIEVAL_QUESTIONS);
-    notify('Reset to canonical 25-case benchmark questions.', 'info');
+    notify("Reset to canonical 25-case benchmark questions.", "info");
   };
 
   const toggleP = (key: string) => {
@@ -87,63 +92,105 @@ export const FormView: React.FC<FormViewProps> = ({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
       {/* HERO BANNER & PRIMARY EXECUTION CTA */}
       <div
         className="card"
         style={{
-          background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%)',
-          border: '1px solid var(--border)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '16px',
+          background:
+            "linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%)",
+          border: "1px solid var(--border)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: "16px",
         }}
       >
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              marginBottom: "4px",
+            }}
+          >
             <span
               style={{
-                fontSize: '0.72rem',
+                fontSize: "0.72rem",
                 fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: '0.06em',
-                color: 'var(--accent)',
-                background: 'var(--accent-dim)',
-                padding: '2px 8px',
-                borderRadius: '4px',
-                border: '1px solid rgba(59, 130, 246, 0.3)',
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                color: "var(--accent)",
+                background: "var(--accent-dim)",
+                padding: "2px 8px",
+                borderRadius: "4px",
+                border: "1px solid rgba(59, 130, 246, 0.3)",
               }}
             >
               RETRIEVAL BENCHMARK
             </span>
-            <span style={{ color: '#10b981', fontSize: '0.78rem', fontWeight: 600 }}>
+            <span
+              style={{ color: "#10b981", fontSize: "0.78rem", fontWeight: 600 }}
+            >
               ● {questions.length}/{questions.length} Ready
             </span>
           </div>
-          <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#fff', margin: 0 }}>
+          <h1
+            style={{
+              fontSize: "1.35rem",
+              fontWeight: 800,
+              color: "#fff",
+              margin: 0,
+            }}
+          >
             Multi-Strategy Retrieval Benchmark
           </h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.84rem', margin: '4px 0 0 0', maxWidth: '650px' }}>
-            Compare Document &amp; Section Recall@K and MRR across ablation stages (TF-IDF, Hybrid Weighted, Hybrid RRF, Cross-Encoder Rerank, Query Rewriting).
+          <p
+            style={{
+              color: "var(--text-muted)",
+              fontSize: "0.84rem",
+              margin: "4px 0 0 0",
+              maxWidth: "650px",
+            }}
+          >
+            Compare Document &amp; Section Recall@K and MRR across ablation
+            stages (TF-IDF, Hybrid Weighted, Hybrid RRF, Cross-Encoder Rerank,
+            Query Rewriting).
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div
+          style={{
+            display: "flex",
+            gap: "12px",
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
           <div
             style={{
-              background: 'rgba(16, 185, 129, 0.12)',
-              border: '1px solid rgba(16, 185, 129, 0.35)',
-              borderRadius: '8px',
-              padding: '8px 16px',
-              textAlign: 'right',
+              background: "rgba(16, 185, 129, 0.12)",
+              border: "1px solid rgba(16, 185, 129, 0.35)",
+              borderRadius: "8px",
+              padding: "8px 16px",
+              textAlign: "right",
             }}
           >
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+            <div
+              style={{
+                fontSize: "0.72rem",
+                color: "var(--text-muted)",
+                textTransform: "uppercase",
+                fontWeight: 600,
+              }}
+            >
               Benchmark Dataset
             </div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#34d399' }}>
+            <div
+              style={{ fontSize: "1.25rem", fontWeight: 800, color: "#34d399" }}
+            >
               {questions.length} Cases Loaded
             </div>
           </div>
@@ -154,17 +201,20 @@ export const FormView: React.FC<FormViewProps> = ({
             disabled={isRunning || questions.length === 0}
             className="btn-primary"
             style={{
-              padding: '10px 22px',
-              fontSize: '0.9rem',
+              padding: "10px 22px",
+              fontSize: "0.9rem",
               fontWeight: 700,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
             }}
           >
             {isRunning ? (
               <>
-                <span className="spinner" style={{ width: '16px', height: '16px' }} />
+                <span
+                  className="spinner"
+                  style={{ width: "16px", height: "16px" }}
+                />
                 <span>Running Benchmark...</span>
               </>
             ) : (
@@ -203,7 +253,7 @@ export const FormView: React.FC<FormViewProps> = ({
         onModeChange={handleModeChange}
         onCustomCasesChange={handleCustomCasesChange}
         onResetToBuiltin={() => {
-          setDatasetMode('builtin');
+          setDatasetMode("builtin");
           resetToCanonical();
         }}
         onNotify={notify}
@@ -214,12 +264,12 @@ export const FormView: React.FC<FormViewProps> = ({
       <div className="card">
         <h2
           style={{
-            fontSize: '0.82rem',
+            fontSize: "0.82rem",
             fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            color: 'var(--text-primary)',
-            margin: '0 0 16px 0',
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+            color: "var(--text-primary)",
+            margin: "0 0 16px 0",
           }}
         >
           Retrieval Settings
@@ -227,32 +277,43 @@ export const FormView: React.FC<FormViewProps> = ({
 
         <div
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: '16px',
-            marginBottom: '18px',
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: "16px",
+            marginBottom: "18px",
           }}
         >
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "6px",
+              }}
+            >
               <label
                 htmlFor="top-k-stepper-input"
-                style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}
+                style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}
               >
                 Top-k
               </label>
-              <div style={{ display: 'flex', gap: '6px' }}>
+              <div style={{ display: "flex", gap: "6px" }}>
                 <button
                   type="button"
                   onClick={() => setTopK(5)}
                   style={{
-                    fontSize: '0.7rem',
-                    padding: '2px 6px',
-                    borderRadius: '4px',
-                    border: Number(topK) === 5 ? '1px solid var(--accent)' : '1px solid var(--border)',
-                    background: Number(topK) === 5 ? 'var(--accent-dim)' : 'transparent',
-                    color: Number(topK) === 5 ? '#fff' : 'var(--text-muted)',
-                    cursor: 'pointer',
+                    fontSize: "0.7rem",
+                    padding: "2px 6px",
+                    borderRadius: "4px",
+                    border:
+                      Number(topK) === 5
+                        ? "1px solid var(--accent)"
+                        : "1px solid var(--border)",
+                    background:
+                      Number(topK) === 5 ? "var(--accent-dim)" : "transparent",
+                    color: Number(topK) === 5 ? "#fff" : "var(--text-muted)",
+                    cursor: "pointer",
                   }}
                   title="Application Default (K=5)"
                 >
@@ -262,13 +323,17 @@ export const FormView: React.FC<FormViewProps> = ({
                   type="button"
                   onClick={() => setTopK(8)}
                   style={{
-                    fontSize: '0.7rem',
-                    padding: '2px 6px',
-                    borderRadius: '4px',
-                    border: Number(topK) === 8 ? '1px solid var(--accent)' : '1px solid var(--border)',
-                    background: Number(topK) === 8 ? 'var(--accent-dim)' : 'transparent',
-                    color: Number(topK) === 8 ? '#fff' : 'var(--text-muted)',
-                    cursor: 'pointer',
+                    fontSize: "0.7rem",
+                    padding: "2px 6px",
+                    borderRadius: "4px",
+                    border:
+                      Number(topK) === 8
+                        ? "1px solid var(--accent)"
+                        : "1px solid var(--border)",
+                    background:
+                      Number(topK) === 8 ? "var(--accent-dim)" : "transparent",
+                    color: Number(topK) === 8 ? "#fff" : "var(--text-muted)",
+                    cursor: "pointer",
                   }}
                   title="Week 6 Baseline (K=8)"
                 >
@@ -278,13 +343,13 @@ export const FormView: React.FC<FormViewProps> = ({
             </div>
             <div
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                background: 'var(--bg-raised)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                overflow: 'hidden',
-                height: '38px',
+                display: "flex",
+                alignItems: "center",
+                background: "var(--bg-raised)",
+                border: "1px solid var(--border)",
+                borderRadius: "8px",
+                overflow: "hidden",
+                height: "38px",
               }}
             >
               <button
@@ -294,16 +359,16 @@ export const FormView: React.FC<FormViewProps> = ({
                   setTopK(Math.max(1, current - 1));
                 }}
                 style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--text-muted)',
-                  width: '36px',
-                  height: '100%',
-                  cursor: 'pointer',
-                  fontSize: '1.1rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  background: "none",
+                  border: "none",
+                  color: "var(--text-muted)",
+                  width: "36px",
+                  height: "100%",
+                  cursor: "pointer",
+                  fontSize: "1.1rem",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
                 title="Decrease Top-k"
               >
@@ -318,8 +383,8 @@ export const FormView: React.FC<FormViewProps> = ({
                 value={topK}
                 onChange={(e) => {
                   const raw = e.target.value;
-                  if (raw === '') {
-                    setTopK('');
+                  if (raw === "") {
+                    setTopK("");
                   } else {
                     const val = parseInt(raw, 10);
                     if (!isNaN(val)) {
@@ -338,13 +403,13 @@ export const FormView: React.FC<FormViewProps> = ({
                 }}
                 style={{
                   flex: 1,
-                  textAlign: 'center',
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#fff',
-                  fontSize: '0.85rem',
+                  textAlign: "center",
+                  background: "transparent",
+                  border: "none",
+                  color: "#fff",
+                  fontSize: "0.85rem",
                   fontWeight: 600,
-                  outline: 'none',
+                  outline: "none",
                   padding: 0,
                 }}
               />
@@ -355,16 +420,16 @@ export const FormView: React.FC<FormViewProps> = ({
                   setTopK(Math.min(20, current + 1));
                 }}
                 style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--text-muted)',
-                  width: '36px',
-                  height: '100%',
-                  cursor: 'pointer',
-                  fontSize: '1.1rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  background: "none",
+                  border: "none",
+                  color: "var(--text-muted)",
+                  width: "36px",
+                  height: "100%",
+                  cursor: "pointer",
+                  fontSize: "1.1rem",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
                 title="Increase Top-k"
               >
@@ -375,7 +440,12 @@ export const FormView: React.FC<FormViewProps> = ({
           <div>
             <label
               htmlFor="strategy-filter-input"
-              style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '6px' }}
+              style={{
+                display: "block",
+                fontSize: "0.75rem",
+                color: "var(--text-muted)",
+                marginBottom: "6px",
+              }}
             >
               Chunk strategy filter (optional)
             </label>
@@ -386,38 +456,65 @@ export const FormView: React.FC<FormViewProps> = ({
               value={strategyFilter}
               onChange={(e) => setStrategyFilter(e.target.value)}
               className="input-field"
-              style={{ width: '100%' }}
+              style={{ width: "100%" }}
             />
           </div>
         </div>
 
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '10px', fontWeight: 600 }}>
+        <div
+          style={{
+            fontSize: "0.75rem",
+            color: "var(--text-muted)",
+            marginBottom: "10px",
+            fontWeight: 600,
+          }}
+        >
           Ablation stages to compare
         </div>
         <div
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: '10px',
-            marginBottom: '22px',
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: "10px",
+            marginBottom: "22px",
           }}
         >
           {Object.keys(PRESETS).map((key) => {
             const meta = PRESETS[key];
             const isChecked = !!presets[key];
             return (
-              <label key={key} className={`stage-checkbox ${isChecked ? 'checked' : ''}`}>
+              <label
+                key={key}
+                className={`stage-checkbox ${isChecked ? "checked" : ""}`}
+              >
                 <input
                   type="checkbox"
                   checked={isChecked}
                   onChange={() => toggleP(key)}
-                  style={{ accentColor: 'var(--accent)', width: '15px', height: '15px', cursor: 'pointer' }}
+                  style={{
+                    accentColor: "var(--accent)",
+                    width: "15px",
+                    height: "15px",
+                    cursor: "pointer",
+                  }}
                 />
                 <div>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: isChecked ? '#fff' : 'var(--text-muted)' }}>
+                  <div
+                    style={{
+                      fontSize: "0.8rem",
+                      fontWeight: 600,
+                      color: isChecked ? "#fff" : "var(--text-muted)",
+                    }}
+                  >
                     {meta.label}
                   </div>
-                  <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '1px' }}>
+                  <div
+                    style={{
+                      fontSize: "0.68rem",
+                      color: "var(--text-muted)",
+                      marginTop: "1px",
+                    }}
+                  >
                     {meta.desc}
                   </div>
                 </div>
@@ -426,18 +523,22 @@ export const FormView: React.FC<FormViewProps> = ({
           })}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <button
             type="button"
             onClick={onRun}
             disabled={isRunning || questions.length === 0}
             className="btn-primary"
           >
-            {isRunning ? 'Running benchmark...' : 'Run Retrieval Benchmark'}
+            {isRunning ? "Running benchmark..." : "Run Retrieval Benchmark"}
           </button>
 
           {isRunning && (
-            <button type="button" onClick={onCancel} className="btn-secondary btn-danger">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="btn-secondary btn-danger"
+            >
               Cancel
             </button>
           )}

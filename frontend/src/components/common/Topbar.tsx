@@ -1,8 +1,8 @@
-import React from 'react';
+import React from "react";
 
 interface TopbarProps {
   backendMode: string;
-  backendStatus: 'checking' | 'healthy' | 'error';
+  backendStatus: "checking" | "healthy" | "error";
   docsCount: number;
   retrievalMode: string;
   topK: number;
@@ -22,17 +22,27 @@ export const Topbar: React.FC<TopbarProps> = ({
   onToggleSidebar,
 }) => {
   const statusLabel =
-    backendStatus === 'healthy' ? 'Connected' : backendStatus === 'checking' ? 'Connecting...' : 'Disconnected';
+    backendStatus === "healthy"
+      ? "Connected"
+      : backendStatus === "checking"
+        ? "Connecting..."
+        : "Disconnected";
 
   return (
     <header className="topbar">
       <div className="topbar-logo">
         <button
           type="button"
-          className={`logo-toggle-btn ${sidebarOpen ? 'active' : 'collapsed'}`}
+          className={`logo-toggle-btn ${sidebarOpen ? "active" : "collapsed"}`}
           onClick={onToggleSidebar}
-          title={sidebarOpen ? 'Hide Sidebar (Collapse)' : 'Show Sidebar (Open)'}
-          aria-label={sidebarOpen ? 'Collapse sidebar navigation' : 'Expand sidebar navigation'}
+          title={
+            sidebarOpen ? "Hide Sidebar (Collapse)" : "Show Sidebar (Open)"
+          }
+          aria-label={
+            sidebarOpen
+              ? "Collapse sidebar navigation"
+              : "Expand sidebar navigation"
+          }
         >
           <span className="hamburger-line"></span>
           <span className="hamburger-line"></span>
@@ -48,14 +58,14 @@ export const Topbar: React.FC<TopbarProps> = ({
         href="/eval/policy"
         className="eval-btn"
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
           fontWeight: 600,
-          background: 'rgba(16, 185, 129, 0.15)',
-          borderColor: '#10b981',
-          color: '#10b981',
-          marginRight: '6px',
+          background: "rgba(16, 185, 129, 0.15)",
+          borderColor: "#10b981",
+          color: "#10b981",
+          marginRight: "6px",
         }}
       >
         👔 HR Policy Assistant ↗
@@ -65,13 +75,13 @@ export const Topbar: React.FC<TopbarProps> = ({
         href="/eval"
         className="eval-btn"
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
           fontWeight: 600,
-          background: 'rgba(59, 130, 246, 0.15)',
-          borderColor: 'var(--accent)',
-          color: '#60a5fa',
+          background: "rgba(59, 130, 246, 0.15)",
+          borderColor: "var(--accent)",
+          color: "#60a5fa",
         }}
       >
         ⚖️ Evaluator ↗
@@ -84,17 +94,18 @@ export const Topbar: React.FC<TopbarProps> = ({
           aria-label={`Backend status: ${statusLabel}`}
         ></span>
         <span>Docs: {docsCount}</span>
-        <span className="topbar-mode">K={topK} · T={temperature.toFixed(2)}</span>
+        <span className="topbar-mode">
+          K={topK} · T={temperature.toFixed(2)}
+        </span>
         {retrievalMode && (
           <span className="topbar-mode topbar-mode-hybrid">
             mode: {retrievalMode}
           </span>
         )}
         <span className="topbar-mode topbar-mode-backend">
-          {backendMode || 'qdrant'}
+          {backendMode || "qdrant"}
         </span>
       </div>
     </header>
   );
 };
-

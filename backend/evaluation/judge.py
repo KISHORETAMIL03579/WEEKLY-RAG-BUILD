@@ -10,4 +10,3 @@ from week6.judge import (
     parse_judge_output,
     run_judge_suite,
 )
-

@@ -85,11 +85,15 @@ def parse_and_validate_dataset(
                 else:
                     raw_cases = [parsed]
             else:
-                result.errors.append("Invalid JSON format. Expected JSON array of objects or object with 'cases'.")
+                result.errors.append(
+                    "Invalid JSON format. Expected JSON array of objects or object with 'cases'."
+                )
                 result.ok = False
                 return result
         except json.JSONDecodeError as exc:
-            result.errors.append(f"Invalid JSON format: {exc.msg} at line {exc.lineno} col {exc.colno}")
+            result.errors.append(
+                f"Invalid JSON format: {exc.msg} at line {exc.lineno} col {exc.colno}"
+            )
             result.ok = False
             return result
     else:
@@ -98,7 +102,9 @@ def parse_and_validate_dataset(
 
     result.total_found = len(raw_cases)
     if not raw_cases:
-        result.errors.append('No Q&A pairs found. Expected format: "Q: question" followed by "A: expected answer".')
+        result.errors.append(
+            'No Q&A pairs found. Expected format: "Q: question" followed by "A: expected answer".'
+        )
         result.ok = False
         return result
 
@@ -117,7 +123,9 @@ def parse_and_validate_dataset(
             or c.get("a")
             or ""
         ).strip()
-        exp_sec = str(c.get("expected_section") or c.get("section_info") or c.get("section") or "").strip()
+        exp_sec = str(
+            c.get("expected_section") or c.get("section_info") or c.get("section") or ""
+        ).strip()
         emp_id = str(c.get("employee_id") or c.get("emp_id") or "").strip()
 
         # Generate case_id if missing
@@ -131,7 +139,9 @@ def parse_and_validate_dataset(
         if cid in seen_ids:
             is_duplicate = True
             result.duplicate_count += 1
-            result.warnings.append(f"Row {row_num}: Duplicate case ID '{cid}'. Assigning unique ID '{cid}_{row_num}'.")
+            result.warnings.append(
+                f"Row {row_num}: Duplicate case ID '{cid}'. Assigning unique ID '{cid}_{row_num}'."
+            )
             cid = f"{cid}_{row_num}"
         seen_ids.add(cid)
 
@@ -144,20 +154,26 @@ def parse_and_validate_dataset(
         if evaluator_type == "retrieval":
             # In retrieval, either expected_section or expected_answer is valid as the ground truth target
             if not exp_a and not exp_sec:
-                case_errors.append("Missing expected document substring or section reference")
+                case_errors.append(
+                    "Missing expected document substring or section reference"
+                )
         else:
             # Judge & Policy require an expected answer
             if not exp_a:
-                case_errors.append("Missing expected answer or ground truth entitlement")
+                case_errors.append(
+                    "Missing expected answer or ground truth entitlement"
+                )
 
         if case_errors:
             result.invalid_count += 1
-            result.invalid_cases.append({
-                "row": row_num,
-                "case_id": cid,
-                "reason": "; ".join(case_errors),
-                "raw": c,
-            })
+            result.invalid_cases.append(
+                {
+                    "row": row_num,
+                    "case_id": cid,
+                    "reason": "; ".join(case_errors),
+                    "raw": c,
+                }
+            )
         else:
             normalized = {
                 "case_id": cid,
@@ -165,7 +181,9 @@ def parse_and_validate_dataset(
                 "expected_answer": exp_a,
                 "expected_section": exp_sec,
                 "employee_id": emp_id or "EMP001",
-                "taxonomy": str(c.get("taxonomy") or c.get("taxonomy_mode") or "General"),
+                "taxonomy": str(
+                    c.get("taxonomy") or c.get("taxonomy_mode") or "General"
+                ),
                 "metadata": c.get("metadata") or {},
             }
             # For backward compatibility with legacy endpoints expecting "expected" key
@@ -208,7 +226,11 @@ def _parse_txt_md_blocks(text: str) -> List[Dict[str, Any]]:
             continue
 
         # Header detection: e.g. "### Case 01", "# --- Case 02 ---", "Case 1:"
-        header_match = re.match(r"^(?:#{1,6}\s*)?(?:---*\s*)?(?:case\s*(\d+|[a-zA-Z0-9_\-]+))", line, re.IGNORECASE)
+        header_match = re.match(
+            r"^(?:#{1,6}\s*)?(?:---*\s*)?(?:case\s*(\d+|[a-zA-Z0-9_\-]+))",
+            line,
+            re.IGNORECASE,
+        )
         if header_match and not re.match(r"^case\s*id\s*[:\-.]", line, re.IGNORECASE):
             flush_case()
             raw_id = header_match.group(1).strip()
@@ -225,14 +247,22 @@ def _parse_txt_md_blocks(text: str) -> List[Dict[str, Any]]:
         # Strip bold/italic markdown prefix markers: e.g. "**Question:**" -> "Question: "
         clean_line = re.sub(r"^\*{1,2}([^:*]+):?\*{1,2}\s*:?\s*", r"\1: ", line)
 
-        q_match = re.match(r"^(?:q(?:uestion)?|query)\s*[:\-.]\s*(.*)", clean_line, re.IGNORECASE)
+        q_match = re.match(
+            r"^(?:q(?:uestion)?|query)\s*[:\-.]\s*(.*)", clean_line, re.IGNORECASE
+        )
         a_match = re.match(
             r"^(?:a(?:nswer)?|expected(?:\s*(?:entitlement\s*\/\s*answer|entitlement|value|answer))?)\s*[:\-.]\s*(.*)",
             clean_line,
-            re.IGNORECASE
+            re.IGNORECASE,
         )
-        sec_match = re.match(r"^(?:source\s*(?:policy\s*)?section|section)\s*[:\-.]\s*(.*)", clean_line, re.IGNORECASE)
-        emp_match = re.match(r"^(?:employee\s*(?:id)?|emp_id)\s*[:\-.]\s*(.*)", clean_line, re.IGNORECASE)
+        sec_match = re.match(
+            r"^(?:source\s*(?:policy\s*)?section|section)\s*[:\-.]\s*(.*)",
+            clean_line,
+            re.IGNORECASE,
+        )
+        emp_match = re.match(
+            r"^(?:employee\s*(?:id)?|emp_id)\s*[:\-.]\s*(.*)", clean_line, re.IGNORECASE
+        )
         cid_match = re.match(r"^case\s*id\s*[:\-.]\s*(.*)", clean_line, re.IGNORECASE)
 
         if q_match:

@@ -28,4 +28,3 @@ export interface DocumentPage {
   num: number;
   text: string;
 }
-

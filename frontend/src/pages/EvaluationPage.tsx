@@ -1,39 +1,44 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { EvalQuestionInput, EvalRunResponse } from '../types/evaluation';
-import { FormView } from '../components/Evaluation/FormView';
-import { ResultsView } from '../components/Evaluation/ResultsView';
-import { JudgeEvaluatorView } from '../components/Evaluation/JudgeEvaluatorView';
-import { PolicyAssistantView } from '../components/Evaluation/PolicyAssistantView';
-import { PolicySearchView } from '../components/Evaluation/PolicySearchView';
-import { ToastContainer, ToastItem } from '../components/common/ToastContainer';
-import { PRESETS } from '../components/Evaluation/KeyTakeaways';
-import { CANONICAL_RETRIEVAL_QUESTIONS } from '../data/canonicalRetrievalQuestions';
-import { api } from '../services/api';
-import { generateId } from '../utils/helpers';
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { EvalQuestionInput, EvalRunResponse } from "../types/evaluation";
+import { FormView } from "../components/Evaluation/FormView";
+import { ResultsView } from "../components/Evaluation/ResultsView";
+import { JudgeEvaluatorView } from "../components/Evaluation/JudgeEvaluatorView";
+import { PolicyAssistantView } from "../components/Evaluation/PolicyAssistantView";
+import { PolicySearchView } from "../components/Evaluation/PolicySearchView";
+import { ToastContainer, ToastItem } from "../components/common/ToastContainer";
+import { PRESETS } from "../components/Evaluation/KeyTakeaways";
+import { CANONICAL_RETRIEVAL_QUESTIONS } from "../data/canonicalRetrievalQuestions";
+import { api } from "../services/api";
+import { generateId } from "../utils/helpers";
 
 export const EvaluationPage: React.FC = () => {
-  const getInitialTab = (): 'policy' | 'judge' | 'retrieval' => {
-    if (typeof window !== 'undefined') {
+  const getInitialTab = (): "policy" | "judge" | "retrieval" => {
+    if (typeof window !== "undefined") {
       const pathname = window.location.pathname.toLowerCase();
-      if (pathname.includes('/eval/judge')) return 'judge';
-      if (pathname.includes('/eval/retrieval')) return 'retrieval';
-      if (pathname.includes('/eval/policy')) return 'policy';
+      if (pathname.includes("/eval/judge")) return "judge";
+      if (pathname.includes("/eval/retrieval")) return "retrieval";
+      if (pathname.includes("/eval/policy")) return "policy";
 
       const p = new URLSearchParams(window.location.search);
-      const tab = p.get('tab');
-      if (tab === 'judge' || tab === 'retrieval' || tab === 'policy') return tab;
+      const tab = p.get("tab");
+      if (tab === "judge" || tab === "retrieval" || tab === "policy")
+        return tab;
     }
-    return 'policy';
+    return "policy";
   };
 
-  const [activeTab, setActiveTabState] = useState<'policy' | 'judge' | 'retrieval'>(getInitialTab);
+  const [activeTab, setActiveTabState] = useState<
+    "policy" | "judge" | "retrieval"
+  >(getInitialTab);
   const [isJudgeEvaluating, setIsJudgeEvaluating] = useState<boolean>(false);
-  const [policySubTab, setPolicySubTab] = useState<'search' | 'benchmark'>('search');
+  const [policySubTab, setPolicySubTab] = useState<"search" | "benchmark">(
+    "search",
+  );
 
-  const setActiveTab = (tab: 'policy' | 'judge' | 'retrieval') => {
+  const setActiveTab = (tab: "policy" | "judge" | "retrieval") => {
     setActiveTabState(tab);
-    if (typeof window !== 'undefined' && window.history) {
-      window.history.pushState(null, '', `/eval/${tab}`);
+    if (typeof window !== "undefined" && window.history) {
+      window.history.pushState(null, "", `/eval/${tab}`);
     }
   };
 
@@ -41,28 +46,32 @@ export const EvaluationPage: React.FC = () => {
     const handlePopState = () => {
       setActiveTabState(getInitialTab());
     };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
   // Retrieval Benchmark State: Auto-load canonical 25 questions on mount with default Top-K = 5
-  const [questions, setQuestions] = useState<EvalQuestionInput[]>(() => [...CANONICAL_RETRIEVAL_QUESTIONS]);
+  const [questions, setQuestions] = useState<EvalQuestionInput[]>(() => [
+    ...CANONICAL_RETRIEVAL_QUESTIONS,
+  ]);
   const [topK, setTopK] = useState<number | string>(5);
-  const [strategyFilter, setStrategyFilter] = useState<string>('');
+  const [strategyFilter, setStrategyFilter] = useState<string>("");
   const [presets, setPresets] = useState<Record<string, boolean>>({
-    'tfidf': true,
-    'bm25-qdrant-blend': true,
-    'bm25-qdrant-rrf': true,
-    'rrf-rerank': true,
-    'rrf-rerank-rewrite': true,
+    tfidf: true,
+    "bm25-qdrant-blend": true,
+    "bm25-qdrant-rrf": true,
+    "rrf-rerank": true,
+    "rrf-rerank-rewrite": true,
   });
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [results, setResults] = useState<EvalRunResponse | null>(null);
-  const [view, setView] = useState<'form' | 'results'>('form');
+  const [view, setView] = useState<"form" | "results">("form");
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const abortControllerRef = useRef<AbortController | null>(null);
-  const toastTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const toastTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
 
   const dismissToast = useCallback((id: string) => {
     if (toastTimersRef.current.has(id)) {
@@ -73,8 +82,12 @@ export const EvaluationPage: React.FC = () => {
   }, []);
 
   const showToast = useCallback(
-    (message: string, type: 'info' | 'success' | 'error' = 'info', duration = 5000) => {
-      const id = generateId('toast');
+    (
+      message: string,
+      type: "info" | "success" | "error" = "info",
+      duration = 5000,
+    ) => {
+      const id = generateId("toast");
       setToasts((prev) => [...prev, { id, message, type }]);
       if (duration > 0) {
         const timer = setTimeout(() => {
@@ -83,7 +96,7 @@ export const EvaluationPage: React.FC = () => {
         toastTimersRef.current.set(id, timer);
       }
     },
-    [dismissToast]
+    [dismissToast],
   );
 
   useEffect(() => {
@@ -97,7 +110,7 @@ export const EvaluationPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }, [view, activeTab]);
 
   const handleCancel = () => {
@@ -106,33 +119,46 @@ export const EvaluationPage: React.FC = () => {
       controller.abort();
       abortControllerRef.current = null;
       setIsRunning(false);
-      showToast('Retrieval benchmark cancelled by user.', 'info');
+      showToast("Retrieval benchmark cancelled by user.", "info");
     }
   };
 
   const handleRun = async () => {
     // Validate both question AND expected ground truth
-    const invalidEmptyExpected = questions.filter((q) => q.question.trim() && !q.expected.trim());
+    const invalidEmptyExpected = questions.filter(
+      (q) => q.question.trim() && !q.expected.trim(),
+    );
     if (invalidEmptyExpected.length > 0) {
-      showToast('Please provide an expected section/filename substring for all entered questions.', 'error');
+      showToast(
+        "Please provide an expected section/filename substring for all entered questions.",
+        "error",
+      );
       return;
     }
 
-    const validQ = questions.filter((q) => q.question.trim() && q.expected.trim());
+    const validQ = questions.filter(
+      (q) => q.question.trim() && q.expected.trim(),
+    );
     if (!validQ.length) {
-      showToast('Please enter at least one question and its expected target substring.', 'error');
+      showToast(
+        "Please enter at least one question and its expected target substring.",
+        "error",
+      );
       return;
     }
 
     const active = Object.keys(presets).filter((k) => presets[k]);
     if (!active.length) {
-      showToast('Please select at least one retrieval strategy to compare.', 'error');
+      showToast(
+        "Please select at least one retrieval strategy to compare.",
+        "error",
+      );
       return;
     }
 
     const rawTopK = String(topK).trim();
     if (!/^\d+$/.test(rawTopK)) {
-      showToast('Top-K must be a whole number between 1 and 20.', 'error');
+      showToast("Top-K must be a whole number between 1 and 20.", "error");
       return;
     }
     const kVal = Math.max(1, Math.min(20, Number(rawTopK)));
@@ -154,57 +180,85 @@ export const EvaluationPage: React.FC = () => {
           presets: active,
           strategy_filter: strategyFilter,
         },
-        controller.signal
+        controller.signal,
       );
 
       // Response schema and result integrity validation
-      if (!data || typeof data !== 'object' || !data.modes || typeof data.modes !== 'object') {
-        throw new Error('Malformed evaluation response: missing modes dictionary.');
+      if (
+        !data ||
+        typeof data !== "object" ||
+        !data.modes ||
+        typeof data.modes !== "object"
+      ) {
+        throw new Error(
+          "Malformed evaluation response: missing modes dictionary.",
+        );
       }
 
       const submittedIds = new Set(validQ.map((q) => q.id));
       for (const mk of active) {
         const modeData = data.modes[mk];
-        if (!modeData || typeof modeData !== 'object' || !Array.isArray(modeData.results)) {
-          throw new Error(`Strategy "${PRESETS[mk]?.label || mk}" missing results array in server response.`);
+        if (
+          !modeData ||
+          typeof modeData !== "object" ||
+          !Array.isArray(modeData.results)
+        ) {
+          throw new Error(
+            `Strategy "${PRESETS[mk]?.label || mk}" missing results array in server response.`,
+          );
         }
 
         modeData.hit_rate =
-          typeof modeData.hit_rate === 'number' && !isNaN(modeData.hit_rate)
+          typeof modeData.hit_rate === "number" && !isNaN(modeData.hit_rate)
             ? modeData.hit_rate
             : Number(modeData.hit_rate) || 0;
         modeData.mrr =
-          typeof modeData.mrr === 'number' && !isNaN(modeData.mrr)
+          typeof modeData.mrr === "number" && !isNaN(modeData.mrr)
             ? modeData.mrr
             : Number(modeData.mrr) || 0;
         modeData.hits =
-          typeof modeData.hits === 'number' && !isNaN(modeData.hits)
+          typeof modeData.hits === "number" && !isNaN(modeData.hits)
             ? modeData.hits
             : Number(modeData.hits) || 0;
         modeData.total =
-          typeof modeData.total === 'number' && !isNaN(modeData.total)
+          typeof modeData.total === "number" && !isNaN(modeData.total)
             ? modeData.total
             : Number(modeData.total) || 0;
 
         const resultIds: string[] = [];
         for (const r of modeData.results) {
-          if (!r || typeof r !== 'object' || typeof r.id !== 'string') {
-            throw new Error(`Strategy "${PRESETS[mk]?.label || mk}" returned an invalid result item structure.`);
+          if (!r || typeof r !== "object" || typeof r.id !== "string") {
+            throw new Error(
+              `Strategy "${PRESETS[mk]?.label || mk}" returned an invalid result item structure.`,
+            );
           }
           // Strict boolean hit normalization
-          if (typeof r.hit === 'boolean') {
+          if (typeof r.hit === "boolean") {
             // Valid boolean
-          } else if ((r.hit as unknown) === 1 || (r.hit as unknown) === '1' || (r.hit as unknown) === 'true') {
+          } else if (
+            (r.hit as unknown) === 1 ||
+            (r.hit as unknown) === "1" ||
+            (r.hit as unknown) === "true"
+          ) {
             r.hit = true;
-          } else if ((r.hit as unknown) === 0 || (r.hit as unknown) === '0' || (r.hit as unknown) === 'false') {
+          } else if (
+            (r.hit as unknown) === 0 ||
+            (r.hit as unknown) === "0" ||
+            (r.hit as unknown) === "false"
+          ) {
             r.hit = false;
           } else {
-            throw new Error(`Strategy "${PRESETS[mk]?.label || mk}" returned invalid hit value for question ID "${r.id}".`);
+            throw new Error(
+              `Strategy "${PRESETS[mk]?.label || mk}" returned invalid hit value for question ID "${r.id}".`,
+            );
           }
 
           if (r.rank !== null && r.rank !== undefined) {
             const parsedRank = Number(r.rank);
-            r.rank = isNaN(parsedRank) || parsedRank <= 0 ? null : Math.floor(parsedRank);
+            r.rank =
+              isNaN(parsedRank) || parsedRank <= 0
+                ? null
+                : Math.floor(parsedRank);
           } else {
             r.rank = null;
           }
@@ -213,27 +267,36 @@ export const EvaluationPage: React.FC = () => {
 
         const uniqueIds = new Set(resultIds);
         if (uniqueIds.size !== resultIds.length) {
-          throw new Error(`Strategy "${PRESETS[mk]?.label || mk}" returned duplicate question IDs.`);
+          throw new Error(
+            `Strategy "${PRESETS[mk]?.label || mk}" returned duplicate question IDs.`,
+          );
         }
         for (const qId of submittedIds) {
           if (!uniqueIds.has(qId)) {
-            throw new Error(`Strategy "${PRESETS[mk]?.label || mk}" did not return a result for question ID "${qId}".`);
+            throw new Error(
+              `Strategy "${PRESETS[mk]?.label || mk}" did not return a result for question ID "${qId}".`,
+            );
           }
         }
         for (const resultId of resultIds) {
           if (!submittedIds.has(resultId)) {
-            throw new Error(`Strategy "${PRESETS[mk]?.label || mk}" returned unexpected question ID "${resultId}".`);
+            throw new Error(
+              `Strategy "${PRESETS[mk]?.label || mk}" returned unexpected question ID "${resultId}".`,
+            );
           }
         }
       }
 
       setResults(data);
-      setView('results');
-      showToast(`Retrieval benchmark evaluated across ${active.length} strategies!`, 'success');
+      setView("results");
+      showToast(
+        `Retrieval benchmark evaluated across ${active.length} strategies!`,
+        "success",
+      );
     } catch (e: unknown) {
       const err = e as Error;
-      if (err.name !== 'AbortError') {
-        showToast('Evaluation Integrity Error: ' + err.message, 'error');
+      if (err.name !== "AbortError") {
+        showToast("Evaluation Integrity Error: " + err.message, "error");
       }
     } finally {
       if (abortControllerRef.current === controller) {
@@ -244,17 +307,17 @@ export const EvaluationPage: React.FC = () => {
   };
 
   const goToForm = () => {
-    setView('form');
+    setView("form");
   };
 
   const goToResults = () => {
-    setView('results');
+    setView("results");
   };
 
   const handleClear = () => {
     setResults(null);
-    setView('form');
-    showToast('Evaluation results cleared.', 'info');
+    setView("form");
+    showToast("Evaluation results cleared.", "info");
   };
 
   return (
@@ -264,41 +327,50 @@ export const EvaluationPage: React.FC = () => {
       {/* TOPBAR */}
       <header
         style={{
-          position: 'sticky',
+          position: "sticky",
           top: 0,
           zIndex: 50,
-          background: 'var(--bg-surface)',
-          borderBottom: '1px solid var(--border)',
-          padding: '12px 28px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+          background: "var(--bg-surface)",
+          borderBottom: "1px solid var(--border)",
+          padding: "12px 28px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
         }}
       >
         <div>
-          <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#fff' }}>Evaluation Hub</div>
-          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-            LLM Judges (V1 vs V2), Deterministic Assertions &amp; Retrieval Benchmarks
+          <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "#fff" }}>
+            Evaluation Hub
+          </div>
+          <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
+            LLM Judges (V1 vs V2), Deterministic Assertions &amp; Retrieval
+            Benchmarks
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <button
             type="button"
-            onClick={() => setActiveTab('policy')}
+            onClick={() => setActiveTab("policy")}
             style={{
-              padding: '6px 14px',
-              borderRadius: '6px',
-              fontSize: '0.85rem',
+              padding: "6px 14px",
+              borderRadius: "6px",
+              fontSize: "0.85rem",
               fontWeight: 600,
-              cursor: 'pointer',
-              border: activeTab === 'policy' ? '1px solid var(--accent)' : '1px solid var(--border)',
-              background: activeTab === 'policy' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-              color: activeTab === 'policy' ? '#60a5fa' : 'var(--text-muted)',
-              transition: 'all 0.15s ease',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
+              cursor: "pointer",
+              border:
+                activeTab === "policy"
+                  ? "1px solid var(--accent)"
+                  : "1px solid var(--border)",
+              background:
+                activeTab === "policy"
+                  ? "rgba(59, 130, 246, 0.15)"
+                  : "transparent",
+              color: activeTab === "policy" ? "#60a5fa" : "var(--text-muted)",
+              transition: "all 0.15s ease",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
             }}
           >
             <span>👔 Policy Assistant (Agent vs Workflow)</span>
@@ -306,33 +378,39 @@ export const EvaluationPage: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => setActiveTab('judge')}
+            onClick={() => setActiveTab("judge")}
             style={{
-              padding: '6px 14px',
-              borderRadius: '6px',
-              fontSize: '0.85rem',
+              padding: "6px 14px",
+              borderRadius: "6px",
+              fontSize: "0.85rem",
               fontWeight: 600,
-              cursor: 'pointer',
-              border: activeTab === 'judge' ? '1px solid var(--accent)' : '1px solid var(--border)',
-              background: activeTab === 'judge' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-              color: activeTab === 'judge' ? '#60a5fa' : 'var(--text-muted)',
-              transition: 'all 0.15s ease',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
+              cursor: "pointer",
+              border:
+                activeTab === "judge"
+                  ? "1px solid var(--accent)"
+                  : "1px solid var(--border)",
+              background:
+                activeTab === "judge"
+                  ? "rgba(59, 130, 246, 0.15)"
+                  : "transparent",
+              color: activeTab === "judge" ? "#60a5fa" : "var(--text-muted)",
+              transition: "all 0.15s ease",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
             }}
           >
             <span>⚖️ Judge Evaluator</span>
             {isJudgeEvaluating && (
               <span
                 style={{
-                  background: 'rgba(245, 158, 11, 0.2)',
-                  color: '#fbbf24',
-                  fontSize: '0.7rem',
-                  padding: '1px 6px',
-                  borderRadius: '4px',
+                  background: "rgba(245, 158, 11, 0.2)",
+                  color: "#fbbf24",
+                  fontSize: "0.7rem",
+                  padding: "1px 6px",
+                  borderRadius: "4px",
                   fontWeight: 700,
-                  animation: 'pulse 1.5s infinite',
+                  animation: "pulse 1.5s infinite",
                 }}
               >
                 ⚡ Running...
@@ -342,33 +420,40 @@ export const EvaluationPage: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => setActiveTab('retrieval')}
+            onClick={() => setActiveTab("retrieval")}
             style={{
-              padding: '6px 14px',
-              borderRadius: '6px',
-              fontSize: '0.85rem',
+              padding: "6px 14px",
+              borderRadius: "6px",
+              fontSize: "0.85rem",
               fontWeight: 600,
-              cursor: 'pointer',
-              border: activeTab === 'retrieval' ? '1px solid var(--accent)' : '1px solid var(--border)',
-              background: activeTab === 'retrieval' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-              color: activeTab === 'retrieval' ? '#60a5fa' : 'var(--text-muted)',
-              transition: 'all 0.15s ease',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
+              cursor: "pointer",
+              border:
+                activeTab === "retrieval"
+                  ? "1px solid var(--accent)"
+                  : "1px solid var(--border)",
+              background:
+                activeTab === "retrieval"
+                  ? "rgba(59, 130, 246, 0.15)"
+                  : "transparent",
+              color:
+                activeTab === "retrieval" ? "#60a5fa" : "var(--text-muted)",
+              transition: "all 0.15s ease",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
             }}
           >
             <span>📊 Retrieval Benchmark (Recall@K)</span>
             {isRunning && (
               <span
                 style={{
-                  background: 'rgba(245, 158, 11, 0.2)',
-                  color: '#fbbf24',
-                  fontSize: '0.7rem',
-                  padding: '1px 6px',
-                  borderRadius: '4px',
+                  background: "rgba(245, 158, 11, 0.2)",
+                  color: "#fbbf24",
+                  fontSize: "0.7rem",
+                  padding: "1px 6px",
+                  borderRadius: "4px",
                   fontWeight: 700,
-                  animation: 'pulse 1.5s infinite',
+                  animation: "pulse 1.5s infinite",
                 }}
               >
                 ⚡ Running...
@@ -377,13 +462,13 @@ export const EvaluationPage: React.FC = () => {
           </button>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {activeTab === 'retrieval' && view === 'form' && results && (
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          {activeTab === "retrieval" && view === "form" && results && (
             <button
               type="button"
               onClick={goToResults}
               className="btn-secondary"
-              style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+              style={{ borderColor: "var(--accent)", color: "var(--accent)" }}
             >
               View Results →
             </button>
@@ -396,32 +481,74 @@ export const EvaluationPage: React.FC = () => {
       </header>
 
       {/* MAIN CONTENT — ONLY ACTIVE TAB IS MOUNTED */}
-      <main style={{ maxWidth: '1200px', width: '100%', margin: '0 auto', padding: '28px 20px 50px 20px', flex: 1 }}>
+      <main
+        style={{
+          maxWidth: "1200px",
+          width: "100%",
+          margin: "0 auto",
+          padding: "28px 20px 50px 20px",
+          flex: 1,
+        }}
+      >
         {/* TAB 1: POLICY ASSISTANT — Week 7 */}
-        {activeTab === 'policy' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {activeTab === "policy" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {/* Sub-tabs: Search vs Benchmark */}
-            <div style={{ display: 'flex', gap: 6, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 6,
+                borderBottom: "1px solid var(--border)",
+                paddingBottom: 12,
+              }}
+            >
               <button
                 type="button"
-                onClick={() => setPolicySubTab('search')}
+                onClick={() => setPolicySubTab("search")}
                 style={{
-                  padding: '6px 14px', borderRadius: '6px', fontSize: '0.83rem', fontWeight: 600,
-                  cursor: 'pointer', border: policySubTab === 'search' ? '1px solid #22c55e' : '1px solid var(--border)',
-                  background: policySubTab === 'search' ? 'rgba(34,197,94,0.12)' : 'transparent',
-                  color: policySubTab === 'search' ? '#22c55e' : 'var(--text-muted)',
+                  padding: "6px 14px",
+                  borderRadius: "6px",
+                  fontSize: "0.83rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  border:
+                    policySubTab === "search"
+                      ? "1px solid #22c55e"
+                      : "1px solid var(--border)",
+                  background:
+                    policySubTab === "search"
+                      ? "rgba(34,197,94,0.12)"
+                      : "transparent",
+                  color:
+                    policySubTab === "search" ? "#22c55e" : "var(--text-muted)",
                 }}
               >
-                🔍 Policy Search <span style={{ fontSize: '0.7rem', opacity: 0.8 }}>(Auto-Routed)</span>
+                🔍 Policy Search{" "}
+                <span style={{ fontSize: "0.7rem", opacity: 0.8 }}>
+                  (Auto-Routed)
+                </span>
               </button>
               <button
                 type="button"
-                onClick={() => setPolicySubTab('benchmark')}
+                onClick={() => setPolicySubTab("benchmark")}
                 style={{
-                  padding: '6px 14px', borderRadius: '6px', fontSize: '0.83rem', fontWeight: 600,
-                  cursor: 'pointer', border: policySubTab === 'benchmark' ? '1px solid #f59e0b' : '1px solid var(--border)',
-                  background: policySubTab === 'benchmark' ? 'rgba(245,158,11,0.12)' : 'transparent',
-                  color: policySubTab === 'benchmark' ? '#f59e0b' : 'var(--text-muted)',
+                  padding: "6px 14px",
+                  borderRadius: "6px",
+                  fontSize: "0.83rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  border:
+                    policySubTab === "benchmark"
+                      ? "1px solid #f59e0b"
+                      : "1px solid var(--border)",
+                  background:
+                    policySubTab === "benchmark"
+                      ? "rgba(245,158,11,0.12)"
+                      : "transparent",
+                  color:
+                    policySubTab === "benchmark"
+                      ? "#f59e0b"
+                      : "var(--text-muted)",
                 }}
               >
                 📊 Agent vs Workflow Benchmark
@@ -429,7 +556,7 @@ export const EvaluationPage: React.FC = () => {
             </div>
 
             {/* Sub-tab content */}
-            {policySubTab === 'search' ? (
+            {policySubTab === "search" ? (
               <PolicySearchView onNotify={showToast} />
             ) : (
               <PolicyAssistantView onNotify={showToast} />
@@ -438,7 +565,7 @@ export const EvaluationPage: React.FC = () => {
         )}
 
         {/* TAB 2: JUDGE EVALUATOR */}
-        {activeTab === 'judge' && (
+        {activeTab === "judge" && (
           <JudgeEvaluatorView
             onNotify={showToast}
             onEvaluatingChange={setIsJudgeEvaluating}
@@ -446,9 +573,9 @@ export const EvaluationPage: React.FC = () => {
         )}
 
         {/* TAB 3: RETRIEVAL BENCHMARK */}
-        {activeTab === 'retrieval' && (
-          <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
-            {view === 'form' ? (
+        {activeTab === "retrieval" && (
+          <div style={{ maxWidth: "1000px", margin: "0 auto" }}>
+            {view === "form" ? (
               <FormView
                 questions={questions}
                 setQuestions={setQuestions}
@@ -464,7 +591,11 @@ export const EvaluationPage: React.FC = () => {
                 onNotify={showToast}
               />
             ) : (
-              <ResultsView results={results} onBack={goToForm} onClear={handleClear} />
+              <ResultsView
+                results={results}
+                onBack={goToForm}
+                onClear={handleClear}
+              />
             )}
           </div>
         )}

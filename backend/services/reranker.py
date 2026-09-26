@@ -21,12 +21,12 @@ RERANK_SYSTEM_PROMPT = register_prompt(
     (
         "You score search results for relevance to a question. Given a "
         "question and numbered candidate excerpts, respond with ONLY a "
-        "JSON array of objects, one per candidate, each with \"index\" "
-        "and \"score\" (0-10, where 10 means the excerpt directly and "
+        'JSON array of objects, one per candidate, each with "index" '
+        'and "score" (0-10, where 10 means the excerpt directly and '
         "fully answers the question, 0 means completely unrelated — "
         "judge genuine relevance, not just shared words). Order the "
         "array from highest score to lowest. No other text — just the "
-        "JSON array, e.g. [{\"index\":2,\"score\":9},{\"index\":0,\"score\":3}]."
+        'JSON array, e.g. [{"index":2,"score":9},{"index":0,"score":3}].'
     ),
 )
 
@@ -42,7 +42,9 @@ REWRITE_SYSTEM_PROMPT = register_prompt(
 )
 
 
-def rerank_with_llm(query: str, results: List[dict]) -> Tuple[List[dict], Optional[float]]:
+def rerank_with_llm(
+    query: str, results: List[dict]
+) -> Tuple[List[dict], Optional[float]]:
     """Second-pass reranker over candidate list using LLM scoring."""
     if not results or not chat_configured():
         return results, None
@@ -63,7 +65,9 @@ def rerank_with_llm(query: str, results: List[dict]) -> Tuple[List[dict], Option
         top_score = float(scored[0]["score"])
         return reranked + results[RERANK_TOP_N:], top_score
     except Exception:
-        logger.warning("LLM reranking failed — falling back to original order.", exc_info=True)
+        logger.warning(
+            "LLM reranking failed — falling back to original order.", exc_info=True
+        )
         return results, None
 
 
@@ -76,10 +80,11 @@ def rewrite_query(query: str) -> str:
         rewritten = chat_call(system, query, temperature=0, max_tokens=60).strip('"')
         return rewritten if rewritten else query
     except Exception:
-        logger.warning("Query rewriting failed — using original question as-is.", exc_info=True)
+        logger.warning(
+            "Query rewriting failed — using original question as-is.", exc_info=True
+        )
         return query
 
 
 _rerank_with_llm = rerank_with_llm
 _rewrite_query = rewrite_query
-

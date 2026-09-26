@@ -29,8 +29,15 @@ from backend.schemas.policy import (
     PolicyQueryRequest,
 )
 from backend.services.policy_agent import run_agent_case, check_ollama_available
-from backend.services.policy_benchmark_runner import PolicyBenchmarkRunManager, PolicyBenchmarkRunState
-from backend.services.policy_router import route_policy_question, MODE_WORKFLOW, MODE_AGENT
+from backend.services.policy_benchmark_runner import (
+    PolicyBenchmarkRunManager,
+    PolicyBenchmarkRunState,
+)
+from backend.services.policy_router import (
+    route_policy_question,
+    MODE_WORKFLOW,
+    MODE_AGENT,
+)
 from backend.services.policy_tools import CANONICAL_EMPLOYEES
 from backend.services.policy_workflow import run_workflow_case
 
@@ -124,18 +131,20 @@ def _run_with_retries(
             accumulated_latency += attempt_ms
 
             # Record this attempt
-            retry_history.append({
-                "attempt": attempt,
-                "status": "SUCCESS",
-                "latency_ms": round(attempt_ms, 3),
-                "input_tokens": result.prompt_tokens,
-                "output_tokens": result.completion_tokens,
-                "total_tokens": result.total_tokens,
-                "estimated_cost": round(result.cost_usd, 8),
-                "is_retry": is_retry,
-                "retryable": True,
-                "retry_reason": None,
-            })
+            retry_history.append(
+                {
+                    "attempt": attempt,
+                    "status": "SUCCESS",
+                    "latency_ms": round(attempt_ms, 3),
+                    "input_tokens": result.prompt_tokens,
+                    "output_tokens": result.completion_tokens,
+                    "total_tokens": result.total_tokens,
+                    "estimated_cost": round(result.cost_usd, 8),
+                    "is_retry": is_retry,
+                    "retryable": True,
+                    "retry_reason": None,
+                }
+            )
 
             # Accumulate totals across all attempts (including retries)
             result.total_tokens = accumulated_tokens
@@ -165,23 +174,31 @@ def _run_with_retries(
                 retry_reason = "MODEL_ERROR"
                 retryable = True
 
-            retry_history.append({
-                "attempt": attempt,
-                "status": "RETRY" if (retryable and attempt < max_total_attempts) else "FAILED",
-                "latency_ms": round(attempt_ms, 3),
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "total_tokens": 0,
-                "estimated_cost": 0.0,
-                "is_retry": is_retry,
-                "retryable": retryable,
-                "retry_reason": retry_reason,
-            })
+            retry_history.append(
+                {
+                    "attempt": attempt,
+                    "status": (
+                        "RETRY"
+                        if (retryable and attempt < max_total_attempts)
+                        else "FAILED"
+                    ),
+                    "latency_ms": round(attempt_ms, 3),
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "total_tokens": 0,
+                    "estimated_cost": 0.0,
+                    "is_retry": is_retry,
+                    "retryable": retryable,
+                    "retry_reason": retry_reason,
+                }
+            )
 
             accumulated_latency += attempt_ms
 
             if not retryable or attempt >= max_total_attempts:
-                logger.error(f"Policy execution failed after {attempt} attempt(s): {exc}")
+                logger.error(
+                    f"Policy execution failed after {attempt} attempt(s): {exc}"
+                )
                 # Return a failed result
                 failed_result = PolicyOutputContract(
                     case_id=case_id,
@@ -192,7 +209,11 @@ def _run_with_retries(
                     explanation=f"Execution failed after {attempt} attempt(s): {exc}",
                     passed=False,
                     implementation=mode,
-                    termination_reason="MAX_RETRIES" if attempt >= max_total_attempts else retry_reason or "MODEL_ERROR",
+                    termination_reason=(
+                        "MAX_RETRIES"
+                        if attempt >= max_total_attempts
+                        else retry_reason or "MODEL_ERROR"
+                    ),
                     latency_ms=round(accumulated_latency, 3),
                     total_tokens=accumulated_tokens,
                     cost_usd=accumulated_cost,
@@ -205,14 +226,26 @@ def _run_with_retries(
                 )
                 return failed_result, retry_history
 
-            logger.warning(f"Attempt {attempt} failed ({retry_reason}), retrying... ({max_total_attempts - attempt} remaining)")
+            logger.warning(
+                f"Attempt {attempt} failed ({retry_reason}), retrying... ({max_total_attempts - attempt} remaining)"
+            )
 
     # Should not reach here, but safety net
-    return last_result or PolicyOutputContract(
-        case_id=case_id, employee_id=employee_id, question=question,
-        entitlement_value="", rule_cited="", explanation="Unexpected retry exhaustion",
-        passed=False, implementation=mode, termination_reason="MAX_RETRIES",
-    ), retry_history
+    return (
+        last_result
+        or PolicyOutputContract(
+            case_id=case_id,
+            employee_id=employee_id,
+            question=question,
+            entitlement_value="",
+            rule_cited="",
+            explanation="Unexpected retry exhaustion",
+            passed=False,
+            implementation=mode,
+            termination_reason="MAX_RETRIES",
+        ),
+        retry_history,
+    )
 
 
 class PolicyBenchmarkStartRequest(BaseModel):
@@ -225,6 +258,7 @@ class PolicyBenchmarkStartRequest(BaseModel):
 
 class PolicySearchRequest(BaseModel):
     """Request for auto-routed HR policy search."""
+
     employee_id: str = Field(..., description="Employee ID, e.g. EMP001")
     question: str = Field(..., description="HR policy question")
     case_id: Optional[str] = None
@@ -232,7 +266,7 @@ class PolicySearchRequest(BaseModel):
     temperature: Optional[float] = Field(0.3, ge=0.0, le=1.0)
     model: Optional[str] = "llama3.1:8b"
     max_retries: Optional[int] = Field(MAX_RETRIES, ge=0, le=5)
-    force_mode: Optional[str] = None   # "workflow" | "agent" | None (auto-route)
+    force_mode: Optional[str] = None  # "workflow" | "agent" | None (auto-route)
 
 
 def _load_benchmark_cases() -> List[Dict[str, Any]]:
@@ -248,6 +282,7 @@ def _load_benchmark_cases() -> List[Dict[str, Any]]:
 
 
 # ── Policy Search Endpoint (Auto-Routed) ──────────────────────────────────────
+
 
 @router.post("/search")
 def policy_search(payload: PolicySearchRequest):
@@ -269,7 +304,9 @@ def policy_search(payload: PolicySearchRequest):
     top_k = payload.top_k or 5
     temperature = payload.temperature if payload.temperature is not None else 0.3
     model = payload.model or "llama3.1:8b"
-    max_retries = payload.max_retries if payload.max_retries is not None else MAX_RETRIES
+    max_retries = (
+        payload.max_retries if payload.max_retries is not None else MAX_RETRIES
+    )
     case_id = payload.case_id or f"search_{payload.employee_id}"
 
     # ── 1. Router ─────────────────────────────────────────────────────────────
@@ -314,7 +351,9 @@ def policy_search(payload: PolicySearchRequest):
 
     # Determine token source
     if result.total_tokens > 0:
-        result.token_source = "ollama_live" if check_ollama_available() else "proxy_estimate"
+        result.token_source = (
+            "ollama_live" if check_ollama_available() else "proxy_estimate"
+        )
     else:
         result.token_source = "unavailable"
 
@@ -326,6 +365,7 @@ def policy_search(payload: PolicySearchRequest):
 
 
 # ── Existing Endpoints (preserved exactly) ────────────────────────────────────
+
 
 @router.get("/cases", response_model=List[Dict[str, Any]])
 def get_benchmark_cases():
@@ -475,7 +515,9 @@ def cancel_benchmark_run(run_id: str):
     manager = PolicyBenchmarkRunManager.get_instance()
     success = manager.cancel_run(run_id)
     if not success:
-        raise HTTPException(status_code=400, detail=f"Could not cancel benchmark run {run_id}")
+        raise HTTPException(
+            status_code=400, detail=f"Could not cancel benchmark run {run_id}"
+        )
     return JSONResponse(content={"cancelled": True, "run_id": run_id})
 
 
@@ -499,7 +541,9 @@ def get_latest_benchmark_results():
 
 
 @router.get("/router/classify")
-def classify_question(question: str = Query(...), employee_id: Optional[str] = Query(None)):
+def classify_question(
+    question: str = Query(...), employee_id: Optional[str] = Query(None)
+):
     """
     Preview the routing decision for a given question without executing it.
     Useful for testing and UI previews.

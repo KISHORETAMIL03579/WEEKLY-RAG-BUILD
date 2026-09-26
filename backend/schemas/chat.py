@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class _LenientModel(BaseModel):
     """Base for request bodies: unknown keys are ignored rather than rejected."""
+
     model_config = ConfigDict(extra="ignore")
 
 
@@ -72,4 +73,3 @@ class HealthzResponse(BaseModel):
 class ReadyzResponse(BaseModel):
     ready: bool
     checks: Dict[str, bool]
-

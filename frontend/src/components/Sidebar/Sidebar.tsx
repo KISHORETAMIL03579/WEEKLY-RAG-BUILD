@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { DocumentInfo, StagedFile } from '../../types/document';
-import { getTempClass, getTempLabel } from '../../utils/helpers';
+import React, { useState, useEffect, useRef } from "react";
+import { DocumentInfo, StagedFile } from "../../types/document";
+import { getTempClass, getTempLabel } from "../../utils/helpers";
 
 interface SidebarProps {
   strategy: string;
@@ -44,7 +44,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onClearSelectedFiles,
 }) => {
   const [dragActive, setDragActive] = useState(false);
-  const [urlInput, setUrlInput] = useState('');
+  const [urlInput, setUrlInput] = useState("");
   const [isLoadingUrl, setIsLoadingUrl] = useState(false);
   const [showCompare, setShowCompare] = useState(false);
   const [topKInput, setTopKInput] = useState(String(topK));
@@ -58,8 +58,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     e.preventDefault();
     e.stopPropagation();
     if (isThinking || isUploading) return;
-    if (e.type === 'dragenter' || e.type === 'dragover') setDragActive(true);
-    else if (e.type === 'dragleave') setDragActive(false);
+    if (e.type === "dragenter" || e.type === "dragover") setDragActive(true);
+    else if (e.type === "dragleave") setDragActive(false);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -75,7 +75,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       onAddSelectedFiles(Array.from(e.target.files));
-      e.target.value = '';
+      e.target.value = "";
     }
   };
 
@@ -86,7 +86,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setIsLoadingUrl(true);
     try {
       await onLoadUrl(targetUrl);
-      setUrlInput('');
+      setUrlInput("");
     } finally {
       setIsLoadingUrl(false);
     }
@@ -107,16 +107,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const trimmed = topKInput.trim();
     if (!/^\d+$/.test(trimmed)) {
       setTopK(8);
-      setTopKInput('8');
+      setTopKInput("8");
       return;
     }
     const parsed = parseInt(trimmed, 10);
     if (parsed < 1) {
       setTopK(1);
-      setTopKInput('1');
+      setTopKInput("1");
     } else if (parsed > 20) {
       setTopK(20);
-      setTopKInput('20');
+      setTopKInput("20");
     } else {
       setTopK(parsed);
       setTopKInput(String(parsed));
@@ -134,7 +134,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         <label
           htmlFor="sidebar-file-input"
-          className={`dropzone ${dragActive ? 'active' : ''} ${isReadyToUpload ? 'file-ready' : ''} ${isBusy ? 'disabled' : ''}`}
+          className={`dropzone ${dragActive ? "active" : ""} ${isReadyToUpload ? "file-ready" : ""} ${isBusy ? "disabled" : ""}`}
           tabIndex={isBusy ? -1 : 0}
           aria-label="Upload documents dropzone. Click or press Enter to choose files."
           onDragEnter={handleDrag}
@@ -142,7 +142,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onDragLeave={handleDrag}
           onDrop={handleDrop}
           onKeyDown={(e) => {
-            if (!isBusy && (e.key === 'Enter' || e.key === ' ')) {
+            if (!isBusy && (e.key === "Enter" || e.key === " ")) {
               e.preventDefault();
               fileInputRef.current?.click();
             }
@@ -162,10 +162,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="dropzone-title">
             {isReadyToUpload
               ? `${selectedFiles.length} file(s) selected`
-              : 'Drop files here'}
+              : "Drop files here"}
           </div>
           <div className="dropzone-sub">
-            {isReadyToUpload ? 'Click or drop more files to add' : 'PDF, Word, TXT, CSV, Code, or Images'}
+            {isReadyToUpload
+              ? "Click or drop more files to add"
+              : "PDF, Word, TXT, CSV, Code, or Images"}
           </div>
         </label>
 
@@ -237,26 +239,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
           aria-expanded={showCompare}
           onClick={() => setShowCompare((v) => !v)}
         >
-          {showCompare ? '▴ Hide chunk details' : '▾ Compare chunk sizes'}
+          {showCompare ? "▴ Hide chunk details" : "▾ Compare chunk sizes"}
         </button>
 
         {showCompare && (
           <div className="compare-details-box">
-            <div>• <strong>Structured</strong>: Semantic headings & paragraphs</div>
-            <div>• <strong>128 words</strong>: Fine-grained window</div>
-            <div>• <strong>256 words</strong>: Medium balanced</div>
-            <div>• <strong>512 words</strong>: Broad window</div>
+            <div>
+              • <strong>Structured</strong>: Semantic headings & paragraphs
+            </div>
+            <div>
+              • <strong>128 words</strong>: Fine-grained window
+            </div>
+            <div>
+              • <strong>256 words</strong>: Medium balanced
+            </div>
+            <div>
+              • <strong>512 words</strong>: Broad window
+            </div>
           </div>
         )}
 
         <div className="sidebar-btn-row">
           <button
             type="button"
-            onClick={() => isReadyToUpload && !isBusy && onUpload(selectedFiles)}
+            onClick={() =>
+              isReadyToUpload && !isBusy && onUpload(selectedFiles)
+            }
             disabled={!isReadyToUpload || isBusy}
-            className={`btn-primary btn-upload-primary ${isReadyToUpload && !isBusy ? 'pulse' : ''}`}
+            className={`btn-primary btn-upload-primary ${isReadyToUpload && !isBusy ? "pulse" : ""}`}
           >
-            {isUploading ? 'Uploading...' : '↑ Upload & Index'}
+            {isUploading ? "Uploading..." : "↑ Upload & Index"}
           </button>
           <button
             type="button"
@@ -318,7 +330,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 key={p}
                 type="button"
                 disabled={isBusy}
-                className={`quick-pill ${topK === p ? 'active' : ''}`}
+                className={`quick-pill ${topK === p ? "active" : ""}`}
                 onClick={() => setTopK(p)}
                 aria-label={`Set Top-K to ${p}`}
               >
@@ -326,7 +338,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             ))}
           </div>
-          <div className="param-hint">Number of context candidates retrieved (Default: 8)</div>
+          <div className="param-hint">
+            Number of context candidates retrieved (Default: 8)
+          </div>
         </div>
 
         {/* Temperature Slider */}
@@ -356,7 +370,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
           <div className="param-hint">
-            Set 0.0 for strict factuality, or &gt;0.7 to evaluate hallucination risk.
+            Set 0.0 for strict factuality, or &gt;0.7 to evaluate hallucination
+            risk.
           </div>
         </div>
       </div>
@@ -380,7 +395,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             disabled={isBusy || isLoadingUrl || !urlInput.trim()}
             className="btn-green"
           >
-            {isLoadingUrl ? 'Loading...' : '🌐 Fetch & Index'}
+            {isLoadingUrl ? "Loading..." : "🌐 Fetch & Index"}
           </button>
         </form>
       </div>
@@ -394,7 +409,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ) : (
           <div className="doc-list">
             {files.map((f) => {
-              const displayName = f.filename || f.name || 'Untitled Document';
+              const displayName = f.filename || f.name || "Untitled Document";
               return (
                 <div key={f.doc_id} className="doc-item">
                   <span className="doc-name" title={displayName}>
@@ -441,4 +456,3 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </aside>
   );
 };
-

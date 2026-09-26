@@ -83,14 +83,24 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
     method_filter = (payload.chunk_mode or "").strip() or None
 
     # Dynamic TOP_K and TEMPERATURE from request payload (fallback to env/defaults).
-    top_k = max(1, min(20, payload.top_k)) if payload.top_k is not None else get_app_symbol("TOP_K", TOP_K)
-    temperature = max(0.0, min(1.0, payload.temperature)) if payload.temperature is not None else get_app_symbol("DEFAULT_TEMPERATURE", 0.3)
+    top_k = (
+        max(1, min(20, payload.top_k))
+        if payload.top_k is not None
+        else get_app_symbol("TOP_K", TOP_K)
+    )
+    temperature = (
+        max(0.0, min(1.0, payload.temperature))
+        if payload.temperature is not None
+        else get_app_symbol("DEFAULT_TEMPERATURE", 0.3)
+    )
 
     trace_id = str(uuid.uuid4())
     _t0 = time.time()
 
     fn_get_store = get_app_symbol("_get_store", get_store)
-    fn_embeddings_configured = get_app_symbol("_embeddings_configured", embeddings_configured)
+    fn_embeddings_configured = get_app_symbol(
+        "_embeddings_configured", embeddings_configured
+    )
     fn_chat_configured = get_app_symbol("_chat_configured", chat_configured)
     fn_rrf = get_app_symbol("reciprocal_rank_fusion", reciprocal_rank_fusion)
     fn_hybrid = get_app_symbol("hybrid_search", hybrid_search)
@@ -140,18 +150,22 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
             "embed_min_score": embed_min_score_val,
             "rerank_enabled": rerank_enabled_val,
             "rerank_score": rerank_score,
-            "retrieved": redact_deep([
-                {
-                    "chunk_id": r.get("id"),
-                    "doc_id": r.get("doc_id"),
-                    "filename": r.get("filename"),
-                    "page": r.get("page"),
-                    "section": r.get("section"),
-                    "score": round(r["score"], 4) if r.get("score") is not None else None,
-                    "text": r.get("text"),
-                }
-                for r in (retrieved or [])
-            ]),
+            "retrieved": redact_deep(
+                [
+                    {
+                        "chunk_id": r.get("id"),
+                        "doc_id": r.get("doc_id"),
+                        "filename": r.get("filename"),
+                        "page": r.get("page"),
+                        "section": r.get("section"),
+                        "score": (
+                            round(r["score"], 4) if r.get("score") is not None else None
+                        ),
+                        "text": r.get("text"),
+                    }
+                    for r in (retrieved or [])
+                ]
+            ),
             "valid_context": valid_context,
             "model": model,
             "temperature": temperature,
@@ -165,20 +179,32 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
             record.update(redact_deep(extra))
         traces_store.log(record)
 
-    RAGTracer.trace("RETRIEVAL", 1, 6, "Question Received", {
-        "User Question": query,
-        "Session ID": sid[:8],
-        "Strategy Filter": method_filter or "All",
-        "Total Session Chunks": len(store.chunks),
-        "Top-K": top_k,
-        "Temperature": temperature,
-    })
+    RAGTracer.trace(
+        "RETRIEVAL",
+        1,
+        6,
+        "Question Received",
+        {
+            "User Question": query,
+            "Session ID": sid[:8],
+            "Strategy Filter": method_filter or "All",
+            "Total Session Chunks": len(store.chunks),
+            "Top-K": top_k,
+            "Temperature": temperature,
+        },
+    )
 
     if query_rewrite_val and search_query != query:
-        RAGTracer.trace("RETRIEVAL", 2, 6, "Query Rewriting", {
-            "Original Question": query,
-            "Rewritten Search Query": search_query,
-        })
+        RAGTracer.trace(
+            "RETRIEVAL",
+            2,
+            6,
+            "Query Rewriting",
+            {
+                "Original Question": query,
+                "Rewritten Search Query": search_query,
+            },
+        )
 
     def annotate_openable(results: list[dict]) -> list[dict]:
         files_map = get_app_symbol("SESSION_FILES", SESSION_FILES)
@@ -213,7 +239,12 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
             }
 
     # Path 1: embeddings + LLM (if configured and vectors exist)
-    if fn_embeddings_configured() and fn_chat_configured() and active_store.vectors and len(active_store.vectors) == len(active_store.chunks):
+    if (
+        fn_embeddings_configured()
+        and fn_chat_configured()
+        and active_store.vectors
+        and len(active_store.vectors) == len(active_store.chunks)
+    ):
         try:
             if retrieval_mode_val == "hybrid-legacy":
                 raw_results = fn_hybrid(active_store, search_query, top_k=top_k)
@@ -231,34 +262,58 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
             else:
                 results = [r for r in raw_results if r["score"] >= embed_min_score_val]
 
-            RAGTracer.trace("RETRIEVAL", 3, 6, "Hybrid Retrieval & RRF Fusion", {
-                "Retrieval Mode": retrieval_mode_val,
-                "Top-K Requested": top_k,
-                "Raw Candidates Returned": len(raw_results),
-                "Above Min Threshold (" + str(embed_min_score_val) + ")": len(results),
-                "Admitted Candidates": len(results),
-                "Top Match Score": f"{near_miss['score']:.4f}" if near_miss else "0.0000",
-                "Top Source File": near_miss["filename"] if near_miss else "None",
-            })
+            RAGTracer.trace(
+                "RETRIEVAL",
+                3,
+                6,
+                "Hybrid Retrieval & RRF Fusion",
+                {
+                    "Retrieval Mode": retrieval_mode_val,
+                    "Top-K Requested": top_k,
+                    "Raw Candidates Returned": len(raw_results),
+                    "Above Min Threshold ("
+                    + str(embed_min_score_val)
+                    + ")": len(results),
+                    "Admitted Candidates": len(results),
+                    "Top Match Score": (
+                        f"{near_miss['score']:.4f}" if near_miss else "0.0000"
+                    ),
+                    "Top Source File": near_miss["filename"] if near_miss else "None",
+                },
+            )
 
             rerank_score = None
             if rerank_enabled_val and len(results) > 1:
                 results, rerank_score = fn_rerank(query, results)
-                RAGTracer.trace("RETRIEVAL", 4, 6, "LLM Reranker Evaluation", {
-                    "Reranker Status": "Active",
-                    "Candidates Evaluated": len(results),
-                    "Top Relevance Score": f"{rerank_score:.1f}/10" if rerank_score else "N/A",
-                })
+                RAGTracer.trace(
+                    "RETRIEVAL",
+                    4,
+                    6,
+                    "LLM Reranker Evaluation",
+                    {
+                        "Reranker Status": "Active",
+                        "Candidates Evaluated": len(results),
+                        "Top Relevance Score": (
+                            f"{rerank_score:.1f}/10" if rerank_score else "N/A"
+                        ),
+                    },
+                )
 
             results = fit_to_token_budget(results, max_context_tokens_val)
             valid = fn_validate(results, embed_min_score_val, query, rerank_score)
 
-            RAGTracer.trace("RETRIEVAL", 5, 6, "Context Validation Gate", {
-                "Threshold Gate": "PASSED" if valid else "FAILED",
-                "Min Required Score": embed_min_score_val,
-                "Context Token Budget": f"{max_context_tokens_val} tokens",
-                "Valid Grounding Chunks": len(results),
-            })
+            RAGTracer.trace(
+                "RETRIEVAL",
+                5,
+                6,
+                "Context Validation Gate",
+                {
+                    "Threshold Gate": "PASSED" if valid else "FAILED",
+                    "Min Required Score": embed_min_score_val,
+                    "Context Token Budget": f"{max_context_tokens_val} tokens",
+                    "Valid Grounding Chunks": len(results),
+                },
+            )
 
             if not valid:
                 log_ask_trace(
@@ -280,22 +335,32 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
                     "trace_id": trace_id,
                     "top_k": top_k,
                     "temperature": temperature,
-                    "closest_match": ({
-                        "filename": near_miss["filename"],
-                        "section": near_miss.get("section"),
-                        "page": near_miss.get("page"),
-                        "score": round(near_miss["score"], 4),
-                        "threshold": embed_min_score_val,
-                    } if near_miss else None),
+                    "closest_match": (
+                        {
+                            "filename": near_miss["filename"],
+                            "section": near_miss.get("section"),
+                            "page": near_miss.get("page"),
+                            "score": round(near_miss["score"], 4),
+                            "threshold": embed_min_score_val,
+                        }
+                        if near_miss
+                        else None
+                    ),
                 }
 
             answer = fn_generate(query, results, temperature=temperature)
-            RAGTracer.trace("RETRIEVAL", 6, 6, "LLM Answer Generation", {
-                "Model Identifier": llm_model_val,
-                "Temperature": temperature,
-                "Sources Grounded": len(results),
-                "Answer Character Count": len(answer),
-            })
+            RAGTracer.trace(
+                "RETRIEVAL",
+                6,
+                6,
+                "LLM Answer Generation",
+                {
+                    "Model Identifier": llm_model_val,
+                    "Temperature": temperature,
+                    "Sources Grounded": len(results),
+                    "Answer Character Count": len(answer),
+                },
+            )
             log_ask_trace(
                 retrieval_mode=retrieval_mode_val,
                 retrieved=results,
@@ -317,11 +382,16 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
                 "temperature": temperature,
             }
         except RetrievalBackendError as exc:
-            logger.error("❌ Vector database retrieval failed in /ask: %s", exc, exc_info=True)
-            return JSONResponse({
-                "error": f"Vector database retrieval failed: {exc}",
-                "status": 503,
-            }, status_code=503)
+            logger.error(
+                "❌ Vector database retrieval failed in /ask: %s", exc, exc_info=True
+            )
+            return JSONResponse(
+                {
+                    "error": f"Vector database retrieval failed: {exc}",
+                    "status": 503,
+                },
+                status_code=503,
+            )
         except urllib.error.HTTPError as exc:
             reason = {
                 400: "Bad request — check your API key format and model name.",
@@ -331,7 +401,8 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
             }.get(exc.code, f"Unexpected HTTP {exc.code} from LLM/Embedding API.")
             logger.warning(
                 "Embeddings/LLM path failed for a query — falling back to TF-IDF-only. %s",
-                reason, exc_info=True,
+                reason,
+                exc_info=True,
             )
         except Exception:
             logger.warning(
@@ -364,13 +435,17 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
             "trace_id": trace_id,
             "top_k": top_k,
             "temperature": temperature,
-            "closest_match": ({
-                "filename": near_miss["filename"],
-                "section": near_miss.get("section"),
-                "page": near_miss.get("page"),
-                "score": round(near_miss["score"], 4),
-                "threshold": tfidf_min_score_val,
-            } if near_miss else None),
+            "closest_match": (
+                {
+                    "filename": near_miss["filename"],
+                    "section": near_miss.get("section"),
+                    "page": near_miss.get("page"),
+                    "score": round(near_miss["score"], 4),
+                    "threshold": tfidf_min_score_val,
+                }
+                if near_miss
+                else None
+            ),
         }
 
     resp = fn_synthesize(query, results)
@@ -395,7 +470,9 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
 @router.get("/status", response_model=StatusResponse)
 def status(sid: OptionalSessionId):
     fn_get_store = get_app_symbol("_get_store", get_store)
-    fn_embeddings_configured = get_app_symbol("_embeddings_configured", embeddings_configured)
+    fn_embeddings_configured = get_app_symbol(
+        "_embeddings_configured", embeddings_configured
+    )
     files_map = get_app_symbol("SESSION_FILES", SESSION_FILES)
     retrieval_mode_val = get_app_symbol("RETRIEVAL_MODE", RETRIEVAL_MODE)
     vec_backend_val = get_app_symbol("VECTOR_BACKEND", VECTOR_BACKEND)
@@ -462,7 +539,9 @@ def clear(sid: OptionalSessionId):
 @router.get("/healthz", response_model=HealthzResponse)
 def healthz():
     """Liveness endpoint for deployment monitoring."""
-    fn_embeddings_configured = get_app_symbol("_embeddings_configured", embeddings_configured)
+    fn_embeddings_configured = get_app_symbol(
+        "_embeddings_configured", embeddings_configured
+    )
     fn_chat_configured = get_app_symbol("_chat_configured", chat_configured)
     retrieval_mode_val = get_app_symbol("RETRIEVAL_MODE", RETRIEVAL_MODE)
     vec_backend_val = get_app_symbol("VECTOR_BACKEND", VECTOR_BACKEND)
@@ -473,7 +552,9 @@ def healthz():
         chat_configured=fn_chat_configured(),
         chat_backend=CHAT_BACKEND,
         embeddings_backend=EMBED_BACKEND,
-        retrieval_mode=retrieval_mode_val if fn_embeddings_configured() else "tfidf-only",
+        retrieval_mode=(
+            retrieval_mode_val if fn_embeddings_configured() else "tfidf-only"
+        ),
         vector_backend=vec_backend_val,
         active_sessions=len(SESSION_ACCESS),
     )
@@ -489,6 +570,7 @@ def readyz(response: Response):
     if vec_backend_val == "qdrant":
         try:
             from backend.storage.qdrant_store import _client
+
             _client().get_collections()
             checks["qdrant"] = True
         except Exception as exc:
@@ -498,7 +580,9 @@ def readyz(response: Response):
 
     if EMBED_BACKEND == "ollama" or CHAT_BACKEND == "ollama":
         try:
-            req = urllib.request.Request(f"{OLLAMA_URL}/api/tags", headers={"User-Agent": "AskMyDocs-Readyz"})
+            req = urllib.request.Request(
+                f"{OLLAMA_URL}/api/tags", headers={"User-Agent": "AskMyDocs-Readyz"}
+            )
             with urllib.request.urlopen(req, timeout=2.0) as r:
                 if r.status == 200:
                     checks["ollama"] = True
@@ -506,10 +590,11 @@ def readyz(response: Response):
                     checks["ollama"] = False
                     status_code = 503
         except Exception as exc:
-            logger.warning("Readiness check: Ollama unreachable at %s: %s", OLLAMA_URL, exc)
+            logger.warning(
+                "Readiness check: Ollama unreachable at %s: %s", OLLAMA_URL, exc
+            )
             checks["ollama"] = False
             status_code = 503
 
     response.status_code = status_code
     return ReadyzResponse(ready=status_code == 200, checks=checks)
-

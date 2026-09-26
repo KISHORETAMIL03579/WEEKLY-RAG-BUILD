@@ -2,6 +2,7 @@
 audit_live_llm_judge.py — Comprehensive Audit of Live Ollama LLM Judge Evaluation
 Runs all 25 Week 6 benchmark cases through genuine live Ollama inference.
 """
+
 import os
 import sys
 import time
@@ -13,11 +14,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8', line_buffering=True)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
 
 from week6.assertions import run_all_assertions
 from week6.judge import parse_judge_output
+
 
 def query_ollama(prompt: str, timeout: int = 60) -> tuple:
     """
@@ -33,13 +35,13 @@ def query_ollama(prompt: str, timeout: int = 60) -> tuple:
             "temperature": 0.0,
             "top_p": 0.1,
             "num_predict": 16,
-            "stop": ["\n", "}", "```"]
-        }
+            "stop": ["\n", "}", "```"],
+        },
     }
     req = urllib.request.Request(
         "http://127.0.0.1:11434/api/generate",
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"}
+        headers={"Content-Type": "application/json"},
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -58,9 +60,12 @@ def query_ollama(prompt: str, timeout: int = 60) -> tuple:
         t_elapsed = (time.perf_counter() - t_start) * 1000
         return f"ERROR: {exc}", "ERROR", t_elapsed, {}
 
+
 def audit_all_25_cases():
     print("=" * 110)
-    print("                DEEP AUDIT: LIVE OLLAMA LLM JUDGE EVALUATION (ALL 25 CASES)                ")
+    print(
+        "                DEEP AUDIT: LIVE OLLAMA LLM JUDGE EVALUATION (ALL 25 CASES)                "
+    )
     print("=" * 110)
 
     cases_path = REPO_ROOT / "week6" / "eval_cases_25.json"
@@ -77,7 +82,9 @@ def audit_all_25_cases():
     v2_template = v2_path.read_text(encoding="utf-8")
 
     # 1. Warm-up Ollama
-    print("\n[Step 1] Warming up Ollama daemon on http://127.0.0.1:11434 with llama3.1:8b...")
+    print(
+        "\n[Step 1] Warming up Ollama daemon on http://127.0.0.1:11434 with llama3.1:8b..."
+    )
     warm_raw, warm_src, warm_ms, _ = query_ollama("Hello, test.", timeout=60)
     if warm_src == "LLM":
         print(f"  [OK] Ollama daemon is warm and ready ({warm_ms:.1f}ms).")
@@ -86,8 +93,12 @@ def audit_all_25_cases():
         return
 
     # 2. Run all 25 cases through genuine live Ollama inference
-    print("\n[Step 2] Executing live inference for 25 cases on Judge V1 and Judge V2...")
-    print(f"{'Case':<9} | {'Human':<5} | {'V1 Verd':<7} | {'V1 Src':<6} | {'V1 ms':<8} | {'V2 Verd':<7} | {'V2 Src':<6} | {'V2 ms':<8} | {'V1 Agree':<8} | {'V2 Agree':<8}")
+    print(
+        "\n[Step 2] Executing live inference for 25 cases on Judge V1 and Judge V2..."
+    )
+    print(
+        f"{'Case':<9} | {'Human':<5} | {'V1 Verd':<7} | {'V1 Src':<6} | {'V1 ms':<8} | {'V2 Verd':<7} | {'V2 Src':<6} | {'V2 ms':<8} | {'V1 Agree':<8} | {'V2 Agree':<8}"
+    )
     print("-" * 110)
 
     results = []
@@ -108,9 +119,11 @@ def audit_all_25_cases():
 
         # --- Evaluate Judge V1 ---
         t_prep_0 = time.perf_counter()
-        p1 = v1_template.replace("{question}", c.get("question", "").strip()) \
-                        .replace("{context}", c.get("retrieved_context", "").strip()) \
-                        .replace("{answer}", c.get("answer", "").strip())
+        p1 = (
+            v1_template.replace("{question}", c.get("question", "").strip())
+            .replace("{context}", c.get("retrieved_context", "").strip())
+            .replace("{answer}", c.get("answer", "").strip())
+        )
         t_prep_v1 = (time.perf_counter() - t_prep_0) * 1000
 
         v1_raw, v1_src, v1_infer_ms, v1_telemetry = query_ollama(p1, timeout=60)
@@ -125,15 +138,17 @@ def audit_all_25_cases():
 
         v1_latencies.append(v1_infer_ms)
         v1_verdict = parse_judge_output(v1_raw)
-        v1_is_agree = (v1_verdict == h_label)
+        v1_is_agree = v1_verdict == h_label
         if v1_is_agree:
             v1_agreed += 1
 
         # --- Evaluate Judge V2 ---
         t_prep_0 = time.perf_counter()
-        p2 = v2_template.replace("{question}", c.get("question", "").strip()) \
-                        .replace("{context}", c.get("retrieved_context", "").strip()) \
-                        .replace("{answer}", c.get("answer", "").strip())
+        p2 = (
+            v2_template.replace("{question}", c.get("question", "").strip())
+            .replace("{context}", c.get("retrieved_context", "").strip())
+            .replace("{answer}", c.get("answer", "").strip())
+        )
         t_prep_v2 = (time.perf_counter() - t_prep_0) * 1000
 
         v2_raw, v2_src, v2_infer_ms, v2_telemetry = query_ollama(p2, timeout=60)
@@ -148,7 +163,7 @@ def audit_all_25_cases():
 
         v2_latencies.append(v2_infer_ms)
         v2_verdict = parse_judge_output(v2_raw)
-        v2_is_agree = (v2_verdict == h_label)
+        v2_is_agree = v2_verdict == h_label
         if v2_is_agree:
             v2_agreed += 1
 
@@ -172,7 +187,9 @@ def audit_all_25_cases():
         }
         results.append(res_item)
 
-        print(f"[{idx:02d}/25] {cid:<6} | {h_label:<5} | {v1_verdict:<7} | {v1_src:<6} | {v1_infer_ms:6.1f}ms | {v2_verdict:<7} | {v2_src:<6} | {v2_infer_ms:6.1f}ms | {'[AGREE]' if v1_is_agree else '[DISAGREE]':<8} | {'[AGREE]' if v2_is_agree else '[DISAGREE]':<8}")
+        print(
+            f"[{idx:02d}/25] {cid:<6} | {h_label:<5} | {v1_verdict:<7} | {v1_src:<6} | {v1_infer_ms:6.1f}ms | {v2_verdict:<7} | {v2_src:<6} | {v2_infer_ms:6.1f}ms | {'[AGREE]' if v1_is_agree else '[DISAGREE]':<8} | {'[AGREE]' if v2_is_agree else '[DISAGREE]':<8}"
+        )
 
     wall_total = time.perf_counter() - wall_start
 
@@ -187,10 +204,14 @@ def audit_all_25_cases():
     p95_lat = sorted_lats[p95_idx]
 
     print("\n" + "=" * 110)
-    print("                                   AUDIT SUMMARY & METRICS                                  ")
+    print(
+        "                                   AUDIT SUMMARY & METRICS                                  "
+    )
     print("=" * 110)
     print(f"Total Evaluation Cases            : {len(cases)}")
-    print(f"Total Actual LLM Inferences       : {actual_llm_calls} ({int(actual_llm_calls/2)} V1 + {int(actual_llm_calls/2)} V2)")
+    print(
+        f"Total Actual LLM Inferences       : {actual_llm_calls} ({int(actual_llm_calls/2)} V1 + {int(actual_llm_calls/2)} V2)"
+    )
     print(f"Number of Cache Hits              : {cache_hits}")
     print(f"Number of Fallback Verdicts       : {fallback_count}")
     print(f"Number of Errors                  : {error_count}")
@@ -203,8 +224,12 @@ def audit_all_25_cases():
     print(f"Median Inference Time             : {med_lat:.2f} ms")
     print(f"P95 Inference Time                : {p95_lat:.2f} ms")
     print("-" * 110)
-    print(f"Judge V1 Agreement Rate           : {(v1_agreed / len(cases) * 100):.2f}% ({v1_agreed}/{len(cases)})")
-    print(f"Judge V2 Agreement Rate           : {(v2_agreed / len(cases) * 100):.2f}% ({v2_agreed}/{len(cases)})")
+    print(
+        f"Judge V1 Agreement Rate           : {(v1_agreed / len(cases) * 100):.2f}% ({v1_agreed}/{len(cases)})"
+    )
+    print(
+        f"Judge V2 Agreement Rate           : {(v2_agreed / len(cases) * 100):.2f}% ({v2_agreed}/{len(cases)})"
+    )
     print("=" * 110)
 
     # Save detailed audit report to JSON
@@ -231,7 +256,10 @@ def audit_all_25_cases():
         "cases": results,
     }
     audit_file.write_text(json.dumps(audit_data, indent=2), encoding="utf-8")
-    print(f"\n[Audit Saved] Detailed audit artifact written to: {audit_file.relative_to(REPO_ROOT)}")
+    print(
+        f"\n[Audit Saved] Detailed audit artifact written to: {audit_file.relative_to(REPO_ROOT)}"
+    )
+
 
 if __name__ == "__main__":
     audit_all_25_cases()

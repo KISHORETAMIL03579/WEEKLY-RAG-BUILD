@@ -6,7 +6,7 @@ import {
   RemoveResponse,
   ClearResponse,
   PagesResponse,
-} from '../types/api';
+} from "../types/api";
 import {
   EvalRunPayload,
   EvalRunResponse,
@@ -17,17 +17,20 @@ import {
   ActiveEvaluationRunResponse,
   Week6EvalResponse,
   Week6CaseResult,
-} from '../types/evaluation';
-import { TracesResponse, ReplayResponse } from '../types/trace';
-import { DatasetParseResult } from '../types/dataset';
+} from "../types/evaluation";
+import { TracesResponse, ReplayResponse } from "../types/trace";
+import { DatasetParseResult } from "../types/dataset";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
 async function handleResponse<T>(res: Response): Promise<T> {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const errorMsg =
-      data.error || data.message || (typeof data.detail === 'string' ? data.detail : null) || `Request failed with status ${res.status}`;
+      data.error ||
+      data.message ||
+      (typeof data.detail === "string" ? data.detail : null) ||
+      `Request failed with status ${res.status}`;
     throw new Error(errorMsg);
   }
   return data as T;
@@ -39,9 +42,12 @@ export const api = {
     return handleResponse<StatusResponse>(res);
   },
 
-  async uploadFiles(formData: FormData, signal?: AbortSignal): Promise<UploadResponse> {
+  async uploadFiles(
+    formData: FormData,
+    signal?: AbortSignal,
+  ): Promise<UploadResponse> {
     const res = await fetch(`${API_BASE}/upload`, {
-      method: 'POST',
+      method: "POST",
       body: formData,
       signal,
     });
@@ -50,8 +56,8 @@ export const api = {
 
   async cancelUpload(uploadId: string): Promise<{ ok: boolean }> {
     const res = await fetch(`${API_BASE}/upload-cancel`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ upload_id: uploadId }),
     });
     return handleResponse<{ ok: boolean }>(res);
@@ -59,34 +65,41 @@ export const api = {
 
   async askQuestion(
     query: string,
-    chunk_mode: string = 'structured',
+    chunk_mode: string = "structured",
     top_k: number = 8,
     temperature: number = 0.0,
-    signal?: AbortSignal
+    signal?: AbortSignal,
   ): Promise<AskResponse> {
     const res = await fetch(`${API_BASE}/ask`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query, chunk_mode, top_k, temperature }),
       signal,
     });
     return handleResponse<AskResponse>(res);
   },
 
-  async loadUrl(url: string, chunk_mode: string = 'structured', signal?: AbortSignal): Promise<LoadUrlResponse> {
+  async loadUrl(
+    url: string,
+    chunk_mode: string = "structured",
+    signal?: AbortSignal,
+  ): Promise<LoadUrlResponse> {
     const res = await fetch(`${API_BASE}/load-url`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url, chunk_mode }),
       signal,
     });
     return handleResponse<LoadUrlResponse>(res);
   },
 
-  async removeDoc(doc_id: string, signal?: AbortSignal): Promise<RemoveResponse> {
+  async removeDoc(
+    doc_id: string,
+    signal?: AbortSignal,
+  ): Promise<RemoveResponse> {
     const res = await fetch(`${API_BASE}/remove`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ doc_id }),
       signal,
     });
@@ -95,7 +108,7 @@ export const api = {
 
   async clearSession(signal?: AbortSignal): Promise<ClearResponse> {
     const res = await fetch(`${API_BASE}/clear`, {
-      method: 'POST',
+      method: "POST",
       signal,
     });
     return handleResponse<ClearResponse>(res);
@@ -106,57 +119,82 @@ export const api = {
     return handleResponse<TracesResponse>(res);
   },
 
-  async replayTrace(traceId: string, signal?: AbortSignal): Promise<ReplayResponse> {
-    const res = await fetch(`${API_BASE}/replay/${encodeURIComponent(traceId)}`, {
-      method: 'POST',
-      signal,
-    });
+  async replayTrace(
+    traceId: string,
+    signal?: AbortSignal,
+  ): Promise<ReplayResponse> {
+    const res = await fetch(
+      `${API_BASE}/replay/${encodeURIComponent(traceId)}`,
+      {
+        method: "POST",
+        signal,
+      },
+    );
     return handleResponse<ReplayResponse>(res);
   },
 
-  async getFilePages(docId: string, signal?: AbortSignal): Promise<PagesResponse> {
-    const res = await fetch(`${API_BASE}/file/${encodeURIComponent(docId)}/pages`, {
-      signal,
-    });
+  async getFilePages(
+    docId: string,
+    signal?: AbortSignal,
+  ): Promise<PagesResponse> {
+    const res = await fetch(
+      `${API_BASE}/file/${encodeURIComponent(docId)}/pages`,
+      {
+        signal,
+      },
+    );
     return handleResponse<PagesResponse>(res);
   },
 
-  async runEvaluation(payload: EvalRunPayload, signal?: AbortSignal): Promise<EvalRunResponse> {
+  async runEvaluation(
+    payload: EvalRunPayload,
+    signal?: AbortSignal,
+  ): Promise<EvalRunResponse> {
     const res = await fetch(`${API_BASE}/eval/run`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
       signal,
     });
     return handleResponse<EvalRunResponse>(res);
   },
 
-  async parseEvaluationFile(file: File, signal?: AbortSignal): Promise<ParseQaResponse> {
+  async parseEvaluationFile(
+    file: File,
+    signal?: AbortSignal,
+  ): Promise<ParseQaResponse> {
     const fd = new FormData();
-    fd.append('file', file);
+    fd.append("file", file);
     const res = await fetch(`${API_BASE}/eval/parse-qa-pdf`, {
-      method: 'POST',
+      method: "POST",
       body: fd,
       signal,
     });
     return handleResponse<ParseQaResponse>(res);
   },
 
-  async parseEvaluationDataset(file: File, evaluatorType: string = 'general', signal?: AbortSignal): Promise<DatasetParseResult> {
+  async parseEvaluationDataset(
+    file: File,
+    evaluatorType: string = "general",
+    signal?: AbortSignal,
+  ): Promise<DatasetParseResult> {
     const fd = new FormData();
-    fd.append('file', file);
-    const res = await fetch(`${API_BASE}/api/evaluation/dataset/parse?evaluator_type=${encodeURIComponent(evaluatorType)}`, {
-      method: 'POST',
-      body: fd,
-      signal,
-    });
+    fd.append("file", file);
+    const res = await fetch(
+      `${API_BASE}/api/evaluation/dataset/parse?evaluator_type=${encodeURIComponent(evaluatorType)}`,
+      {
+        method: "POST",
+        body: fd,
+        signal,
+      },
+    );
     return handleResponse<DatasetParseResult>(res);
   },
 
   async getOrphans(adminKey?: string, signal?: AbortSignal): Promise<unknown> {
     const headers: Record<string, string> = {};
     if (adminKey) {
-      headers['X-Admin-Key'] = adminKey;
+      headers["X-Admin-Key"] = adminKey;
     }
     const res = await fetch(`${API_BASE}/orphans`, { headers, signal });
     return handleResponse(res);
@@ -167,21 +205,31 @@ export const api = {
     runLlm: boolean = true,
     top_k: number = 5,
     temperature: number = 0.3,
-    model: string = 'llama3.1:8b',
-    signal?: AbortSignal
+    model: string = "llama3.1:8b",
+    signal?: AbortSignal,
   ): Promise<EvaluationRunStateResponse> {
     const res = await fetch(`${API_BASE}/api/evaluation/runs`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cases, run_llm: runLlm, top_k, temperature, model }),
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        cases,
+        run_llm: runLlm,
+        top_k,
+        temperature,
+        model,
+      }),
       signal,
     });
     return handleResponse<EvaluationRunStateResponse>(res);
   },
 
-  async getActiveEvaluationRun(signal?: AbortSignal): Promise<ActiveEvaluationRunResponse> {
+  async getActiveEvaluationRun(
+    signal?: AbortSignal,
+  ): Promise<ActiveEvaluationRunResponse> {
     try {
-      const res = await fetch(`${API_BASE}/api/evaluation/runs/active`, { signal });
+      const res = await fetch(`${API_BASE}/api/evaluation/runs/active`, {
+        signal,
+      });
       if (!res.ok) {
         return { active_run_id: null, run: null };
       }
@@ -191,21 +239,35 @@ export const api = {
     }
   },
 
-  async getEvaluationRun(runId: string, signal?: AbortSignal): Promise<EvaluationRunStateResponse> {
-    const res = await fetch(`${API_BASE}/api/evaluation/runs/${encodeURIComponent(runId)}`, { signal });
+  async getEvaluationRun(
+    runId: string,
+    signal?: AbortSignal,
+  ): Promise<EvaluationRunStateResponse> {
+    const res = await fetch(
+      `${API_BASE}/api/evaluation/runs/${encodeURIComponent(runId)}`,
+      { signal },
+    );
     return handleResponse<EvaluationRunStateResponse>(res);
   },
 
-  async listEvaluationRuns(signal?: AbortSignal): Promise<{ runs: EvaluationRunStateResponse[] }> {
+  async listEvaluationRuns(
+    signal?: AbortSignal,
+  ): Promise<{ runs: EvaluationRunStateResponse[] }> {
     const res = await fetch(`${API_BASE}/api/evaluation/runs`, { signal });
     return handleResponse<{ runs: EvaluationRunStateResponse[] }>(res);
   },
 
-  async cancelEvaluationRun(runId: string, signal?: AbortSignal): Promise<{ ok: boolean; status: string }> {
-    const res = await fetch(`${API_BASE}/api/evaluation/runs/${encodeURIComponent(runId)}/cancel`, {
-      method: 'POST',
-      signal,
-    });
+  async cancelEvaluationRun(
+    runId: string,
+    signal?: AbortSignal,
+  ): Promise<{ ok: boolean; status: string }> {
+    const res = await fetch(
+      `${API_BASE}/api/evaluation/runs/${encodeURIComponent(runId)}/cancel`,
+      {
+        method: "POST",
+        signal,
+      },
+    );
     return handleResponse<{ ok: boolean; status: string }>(res);
   },
 
@@ -214,20 +276,25 @@ export const api = {
     return handleResponse<JudgeEvalResponse>(res);
   },
 
-  async getJudgeResults(includeHistory: boolean = false, signal?: AbortSignal): Promise<JudgeEvalResponse> {
-    const query = includeHistory ? '?include_history=true' : '';
-    const res = await fetch(`${API_BASE}/api/evaluation/judges${query}`, { signal });
+  async getJudgeResults(
+    includeHistory: boolean = false,
+    signal?: AbortSignal,
+  ): Promise<JudgeEvalResponse> {
+    const query = includeHistory ? "?include_history=true" : "";
+    const res = await fetch(`${API_BASE}/api/evaluation/judges${query}`, {
+      signal,
+    });
     return handleResponse<JudgeEvalResponse>(res);
   },
 
   async evaluateJudges(
     cases?: JudgeCaseResult[],
     runLlm: boolean = true,
-    signal?: AbortSignal
+    signal?: AbortSignal,
   ): Promise<JudgeEvalResponse> {
     const res = await fetch(`${API_BASE}/api/evaluation/judges`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cases, run_llm: runLlm }),
       signal,
     });
@@ -239,7 +306,11 @@ export const api = {
     return this.getJudgeResults(false, signal);
   },
 
-  async evaluateWeek6(cases?: Week6CaseResult[], runLlm: boolean = true, signal?: AbortSignal): Promise<Week6EvalResponse> {
+  async evaluateWeek6(
+    cases?: Week6CaseResult[],
+    runLlm: boolean = true,
+    signal?: AbortSignal,
+  ): Promise<Week6EvalResponse> {
     return this.evaluateJudges(cases, runLlm, signal);
   },
 
@@ -254,30 +325,56 @@ export const api = {
     return handleResponse<any[]>(res);
   },
 
-  async runPolicyAgent(payload: { employee_id: string; question: string; case_id?: string; top_k?: number; temperature?: number; model?: string }, signal?: AbortSignal): Promise<any> {
+  async runPolicyAgent(
+    payload: {
+      employee_id: string;
+      question: string;
+      case_id?: string;
+      top_k?: number;
+      temperature?: number;
+      model?: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<any> {
     const res = await fetch(`${API_BASE}/api/policy/agent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
       signal,
     });
     return handleResponse<any>(res);
   },
 
-  async runPolicyWorkflow(payload: { employee_id: string; question: string; case_id?: string; top_k?: number }, signal?: AbortSignal): Promise<any> {
+  async runPolicyWorkflow(
+    payload: {
+      employee_id: string;
+      question: string;
+      case_id?: string;
+      top_k?: number;
+    },
+    signal?: AbortSignal,
+  ): Promise<any> {
     const res = await fetch(`${API_BASE}/api/policy/workflow`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
       signal,
     });
     return handleResponse<any>(res);
   },
 
-  async startPolicyBenchmark(payload?: { top_k?: number; temperature?: number; model?: string; cases?: any[] }, signal?: AbortSignal): Promise<any> {
+  async startPolicyBenchmark(
+    payload?: {
+      top_k?: number;
+      temperature?: number;
+      model?: string;
+      cases?: any[];
+    },
+    signal?: AbortSignal,
+  ): Promise<any> {
     const res = await fetch(`${API_BASE}/api/policy/benchmark`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...(payload || {}), background: true }),
       signal,
     });
@@ -286,51 +383,69 @@ export const api = {
 
   async runPolicyBenchmark(signal?: AbortSignal): Promise<any> {
     const res = await fetch(`${API_BASE}/api/policy/benchmark`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
       signal,
     });
     return handleResponse<any>(res);
   },
 
-  async getPolicyBenchmarkRun(runId: string, signal?: AbortSignal): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/policy/benchmark/runs/${runId}`, { signal });
-    return handleResponse<any>(res);
-  },
-
-  async getActivePolicyBenchmarkRun(signal?: AbortSignal): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/policy/benchmark/runs/active`, { signal });
-    return handleResponse<any>(res);
-  },
-
-  async cancelPolicyBenchmarkRun(runId: string, signal?: AbortSignal): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/policy/benchmark/runs/${runId}/cancel`, {
-      method: 'POST',
+  async getPolicyBenchmarkRun(
+    runId: string,
+    signal?: AbortSignal,
+  ): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/policy/benchmark/runs/${runId}`, {
       signal,
     });
     return handleResponse<any>(res);
   },
 
+  async getActivePolicyBenchmarkRun(signal?: AbortSignal): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/policy/benchmark/runs/active`, {
+      signal,
+    });
+    return handleResponse<any>(res);
+  },
+
+  async cancelPolicyBenchmarkRun(
+    runId: string,
+    signal?: AbortSignal,
+  ): Promise<any> {
+    const res = await fetch(
+      `${API_BASE}/api/policy/benchmark/runs/${runId}/cancel`,
+      {
+        method: "POST",
+        signal,
+      },
+    );
+    return handleResponse<any>(res);
+  },
+
   async getLatestBenchmarkResults(signal?: AbortSignal): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/policy/benchmark/latest`, { signal });
+    const res = await fetch(`${API_BASE}/api/policy/benchmark/latest`, {
+      signal,
+    });
     return handleResponse<any>(res);
   },
 
   // Auto-routed HR Policy Search (Week 7 production search)
-  async runPolicySearch(payload: {
-    employee_id: string;
-    question: string;
-    case_id?: string;
-    top_k?: number;
-    temperature?: number;
-    model?: string;
-    max_retries?: number;
-    force_mode?: string;
-  }, signal?: AbortSignal): Promise<any> {
+  async runPolicySearch(
+    payload: {
+      employee_id: string;
+      question: string;
+      case_id?: string;
+      top_k?: number;
+      temperature?: number;
+      model?: string;
+      max_retries?: number;
+      force_mode?: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<any> {
     const res = await fetch(`${API_BASE}/api/policy/search`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
       signal,
     });
@@ -338,10 +453,17 @@ export const api = {
   },
 
   // Preview routing decision without executing
-  async classifyPolicyQuestion(question: string, employeeId?: string, signal?: AbortSignal): Promise<any> {
+  async classifyPolicyQuestion(
+    question: string,
+    employeeId?: string,
+    signal?: AbortSignal,
+  ): Promise<any> {
     const params = new URLSearchParams({ question });
-    if (employeeId) params.append('employee_id', employeeId);
-    const res = await fetch(`${API_BASE}/api/policy/router/classify?${params.toString()}`, { signal });
+    if (employeeId) params.append("employee_id", employeeId);
+    const res = await fetch(
+      `${API_BASE}/api/policy/router/classify?${params.toString()}`,
+      { signal },
+    );
     return handleResponse<any>(res);
   },
 };

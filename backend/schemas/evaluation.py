@@ -104,4 +104,3 @@ class Week6EvalPayload(BaseModel):
 
 JudgeCasePayload = Week6CasePayload
 JudgeEvalPayload = Week6EvalPayload
-

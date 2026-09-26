@@ -16,12 +16,13 @@ class TestEvaluationClassification(unittest.TestCase):
             "retrieved_context": "Section 5.3.2 Minimum and Maximum entitlement...",
             "expected_numeric": "two working days",
             "out_of_jurisdiction": False,
-            "human_label": 1
+            "human_label": 1,
         }
         manager = EvaluationRunManager.get_instance()
         state = manager.start_run(cases=[case], eval_engine="deterministic")
         # Wait briefly for deterministic run worker
         import time
+
         for _ in range(20):
             time.sleep(0.05)
             if state.status == "COMPLETED":
@@ -40,11 +41,14 @@ class TestEvaluationClassification(unittest.TestCase):
             "retrieved_context": "5.3.2 Sick Leave. Minimum and Maximum entitlement... provided the staff member has completed at least two consecutive months of service...",
             "expected_numeric": "two working days",
             "out_of_jurisdiction": False,
-            "human_label": 0
+            "human_label": 0,
         }
         manager = EvaluationRunManager.get_instance()
-        state = manager.start_run(cases=[case], eval_engine="deterministic", labels={"case_01": 0})
+        state = manager.start_run(
+            cases=[case], eval_engine="deterministic", labels={"case_01": 0}
+        )
         import time
+
         for _ in range(20):
             time.sleep(0.05)
             if state.status == "COMPLETED":
@@ -64,11 +68,12 @@ class TestEvaluationClassification(unittest.TestCase):
             "retrieved_context": "Chapter 5 Leave...",
             "expected_numeric": None,
             "out_of_jurisdiction": False,
-            "human_label": 1
+            "human_label": 1,
         }
         manager = EvaluationRunManager.get_instance()
         state = manager.start_run(cases=[case], eval_engine="deterministic")
         import time
+
         for _ in range(20):
             time.sleep(0.05)
             if state.status == "COMPLETED":
@@ -81,4 +86,3 @@ class TestEvaluationClassification(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

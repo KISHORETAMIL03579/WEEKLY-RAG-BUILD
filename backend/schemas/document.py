@@ -39,4 +39,3 @@ class RemoveResponse(BaseModel):
     ok: bool = True
     removed_chunks: int = 0
     warning: Optional[str] = None
-

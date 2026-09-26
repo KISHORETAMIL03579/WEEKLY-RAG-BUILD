@@ -47,17 +47,28 @@ def _gemini_embed_batch(texts: List[str]) -> List[List[float]]:
                 data = json.loads(resp.read().decode("utf-8"))
             elapsed = time.time() - t0
             vectors = [e["values"] for e in data["embeddings"]]
-            logger.info("🧠 Gemini Embedding batch of %d chunks succeeded in %.2fs (vector dim: %d)",
-                        len(texts), elapsed, len(vectors[0]) if vectors else 0)
+            logger.info(
+                "🧠 Gemini Embedding batch of %d chunks succeeded in %.2fs (vector dim: %d)",
+                len(texts),
+                elapsed,
+                len(vectors[0]) if vectors else 0,
+            )
             return vectors
         except urllib.error.HTTPError as exc:
             if exc.code in (429, 500, 503) and attempt < max_retries:
                 delay = base_delay * (2 ** (attempt - 1))
-                logger.warning("⏳ Gemini Embeddings rate-limited (HTTP %d). Retrying in %.1fs (attempt %d/%d)...",
-                               exc.code, delay, attempt, max_retries)
+                logger.warning(
+                    "⏳ Gemini Embeddings rate-limited (HTTP %d). Retrying in %.1fs (attempt %d/%d)...",
+                    exc.code,
+                    delay,
+                    attempt,
+                    max_retries,
+                )
                 time.sleep(delay)
             else:
-                logger.error("❌ Gemini Embeddings batch failed with HTTP %d: %s", exc.code, exc)
+                logger.error(
+                    "❌ Gemini Embeddings batch failed with HTTP %d: %s", exc.code, exc
+                )
                 raise
         except Exception as exc:
             logger.error("❌ Gemini Embeddings batch exception: %s", exc, exc_info=True)
@@ -80,13 +91,20 @@ def _ollama_embed_batch(texts: List[str]) -> List[List[float]]:
             data = json.loads(resp.read().decode("utf-8"))
         elapsed = time.time() - t0
         vectors = data.get("embeddings", [])
-        logger.info("🧠 Ollama embedding batch of %d chunks succeeded in %.2fs (vector dim: %d, model: %s)",
-                    len(texts), elapsed, len(vectors[0]) if vectors else 0, OLLAMA_EMBED_MODEL)
+        logger.info(
+            "🧠 Ollama embedding batch of %d chunks succeeded in %.2fs (vector dim: %d, model: %s)",
+            len(texts),
+            elapsed,
+            len(vectors[0]) if vectors else 0,
+            OLLAMA_EMBED_MODEL,
+        )
         return vectors
     except urllib.error.URLError as exc:
         logger.error(
             "❌ Could not reach Ollama at %s — is `ollama serve` running and `%s` pulled? (%s)",
-            OLLAMA_URL, OLLAMA_EMBED_MODEL, exc,
+            OLLAMA_URL,
+            OLLAMA_EMBED_MODEL,
+            exc,
         )
         raise
     except Exception as exc:
@@ -101,12 +119,26 @@ def embed_texts(texts: List[str]) -> List[List[float]]:
     out: List[List[float]] = []
     total_batches = math.ceil(len(texts) / EMBED_BATCH)
     backend_label = "Ollama (local)" if EMBED_BACKEND == "ollama" else "Gemini"
-    logger.info("🧠 Starting batch embedding for %d total chunks (%d batch(es) of max %d) via %s",
-                len(texts), total_batches, EMBED_BATCH, backend_label)
+    logger.info(
+        "🧠 Starting batch embedding for %d total chunks (%d batch(es) of max %d) via %s",
+        len(texts),
+        total_batches,
+        EMBED_BATCH,
+        backend_label,
+    )
     for idx, i in enumerate(range(0, len(texts), EMBED_BATCH), start=1):
-        batch = texts[i:i + EMBED_BATCH]
-        logger.info("🧠 Processing embedding batch %d/%d (%d chunks)...", idx, total_batches, len(batch))
-        vectors = (_ollama_embed_batch(batch) if EMBED_BACKEND == "ollama" else _gemini_embed_batch(batch))
+        batch = texts[i : i + EMBED_BATCH]
+        logger.info(
+            "🧠 Processing embedding batch %d/%d (%d chunks)...",
+            idx,
+            total_batches,
+            len(batch),
+        )
+        vectors = (
+            _ollama_embed_batch(batch)
+            if EMBED_BACKEND == "ollama"
+            else _gemini_embed_batch(batch)
+        )
         out.extend(vectors)
     return out
 
@@ -126,4 +158,3 @@ def embeddings_configured() -> bool:
 _embeddings_configured = embeddings_configured
 _embed_text = embed_text
 _embed_texts = embed_texts
-

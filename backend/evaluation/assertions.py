@@ -19,4 +19,3 @@ assert_policy_section_reference_resolves = policy_section_reference_resolves
 assert_handbook_version_present = handbook_version_present
 assert_numeric_policy_value_present = numeric_policy_value_present
 assert_out_of_jurisdiction_refusal = out_of_jurisdiction_refusal
-

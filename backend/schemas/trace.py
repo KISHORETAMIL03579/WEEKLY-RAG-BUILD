@@ -27,4 +27,3 @@ class ReplayResponse(BaseModel):
     original: Dict[str, Any]
     replayed: Dict[str, Any]
     match: bool
-

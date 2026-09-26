@@ -160,7 +160,9 @@ class TestFastApiErrorHandlers(unittest.TestCase):
 
         @test_app.get("/test/unhandled")
         def route_unhandled():
-            raise RuntimeError("Database connection string postgres://user:secret@db.lan/test crashed")
+            raise RuntimeError(
+                "Database connection string postgres://user:secret@db.lan/test crashed"
+            )
 
         client = TestClient(test_app, raise_server_exceptions=False)
 

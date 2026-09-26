@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { SourceInfo } from '../../types/api';
+import React, { useState } from "react";
+import { SourceInfo } from "../../types/api";
 
 interface SourceItemProps {
   src: SourceInfo;
@@ -8,17 +8,21 @@ interface SourceItemProps {
 
 export const SourceItem: React.FC<SourceItemProps> = ({ src, index }) => {
   const [expanded, setExpanded] = useState(false);
-  const scorePct = Math.max(0, Math.min(100, Math.round((src.score || 0) * 100)));
-  const scoreClass = scorePct >= 80 ? 'score-high' : scorePct >= 60 ? 'score-mid' : 'score-low';
+  const scorePct = Math.max(
+    0,
+    Math.min(100, Math.round((src.score || 0) * 100)),
+  );
+  const scoreClass =
+    scorePct >= 80 ? "score-high" : scorePct >= 60 ? "score-mid" : "score-low";
 
   const openHref = (() => {
     const params = new URLSearchParams();
-    if (src.page) params.set('page', String(src.page));
-    const snippet = (src.text || '').trim().slice(0, 100);
-    if (snippet) params.set('hl', snippet);
+    if (src.page) params.set("page", String(src.page));
+    const snippet = (src.text || "").trim().slice(0, 100);
+    if (snippet) params.set("hl", snippet);
     const qs = params.toString();
     const safeDocId = encodeURIComponent(String(src.doc_id));
-    return `/file/${safeDocId}${qs ? `?${qs}` : ''}`;
+    return `/file/${safeDocId}${qs ? `?${qs}` : ""}`;
   })();
 
   return (
@@ -47,9 +51,13 @@ export const SourceItem: React.FC<SourceItemProps> = ({ src, index }) => {
             className="view-content-toggle"
             onClick={() => setExpanded((v) => !v)}
             aria-expanded={expanded}
-            aria-label={expanded ? `Hide excerpt for source ${index + 1}` : `View excerpt for source ${index + 1}`}
+            aria-label={
+              expanded
+                ? `Hide excerpt for source ${index + 1}`
+                : `View excerpt for source ${index + 1}`
+            }
           >
-            {expanded ? '▲ Hide' : '▼ View Content'}
+            {expanded ? "▲ Hide" : "▼ View Content"}
           </button>
         )}
       </div>
@@ -57,7 +65,12 @@ export const SourceItem: React.FC<SourceItemProps> = ({ src, index }) => {
         <div className="source-excerpt-wrap">
           <div className="source-excerpt-label">
             📄 DOCUMENT EXCERPT [{index + 1}]
-            {src.method && <span className="source-excerpt-strategy"> · STRATEGY: {src.method.toUpperCase()}</span>}
+            {src.method && (
+              <span className="source-excerpt-strategy">
+                {" "}
+                · STRATEGY: {src.method.toUpperCase()}
+              </span>
+            )}
           </div>
           <div className="source-excerpt">{src.text}</div>
         </div>
@@ -65,4 +78,3 @@ export const SourceItem: React.FC<SourceItemProps> = ({ src, index }) => {
     </div>
   );
 };
-

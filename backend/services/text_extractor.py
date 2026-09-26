@@ -36,7 +36,11 @@ def extract_pdf_pages(filepath: str) -> List[dict]:
     try:
         doc = fitz.open(filepath)
     except Exception:
-        logger.info("Could not open PDF %s (corrupt, encrypted, or not a real PDF)", filepath, exc_info=True)
+        logger.info(
+            "Could not open PDF %s (corrupt, encrypted, or not a real PDF)",
+            filepath,
+            exc_info=True,
+        )
         return []
     for page_num, page in enumerate(doc, start=1):
         text = page.get_text("text").strip()
@@ -72,21 +76,25 @@ def _gemini_vision_ocr(img_b64: str, mime_type: str, filename: str) -> str:
                 "parts": [
                     {"inline_data": {"mime_type": mime_type, "data": img_b64}},
                     {"text": _OCR_PROMPT},
-                ]
+                ],
             }
         ],
-        "generationConfig": {"temperature": 0}
+        "generationConfig": {"temperature": 0},
     }
     req = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
-        method="POST"
+        method="POST",
     )
     with urllib.request.urlopen(req, timeout=90) as resp:
         data = json.loads(resp.read().decode("utf-8"))
     extracted_text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-    logger.info("🖼️ Gemini Vision OCR extracted %d characters from image %s", len(extracted_text), filename)
+    logger.info(
+        "🖼️ Gemini Vision OCR extracted %d characters from image %s",
+        len(extracted_text),
+        filename,
+    )
     return extracted_text
 
 
@@ -104,13 +112,17 @@ def _ollama_vision_ocr(img_b64: str, filename: str) -> str:
         url,
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
-        method="POST"
+        method="POST",
     )
     with urllib.request.urlopen(req, timeout=180) as resp:
         data = json.loads(resp.read().decode("utf-8"))
     extracted_text = (data.get("response") or "").strip()
-    logger.info("🖼️ Ollama (%s) Vision OCR extracted %d characters from image %s",
-                OLLAMA_VISION_MODEL, len(extracted_text), filename)
+    logger.info(
+        "🖼️ Ollama (%s) Vision OCR extracted %d characters from image %s",
+        OLLAMA_VISION_MODEL,
+        len(extracted_text),
+        filename,
+    )
     return extracted_text
 
 
@@ -131,7 +143,12 @@ def extract_image_pages(filepath: str) -> List[dict]:
 
     if VISION_BACKEND == "gemini" and not GEMINI_API_KEY:
         logger.warning("⚠️ Gemini API Key missing for Image Vision OCR: %s", filename)
-        return [{"page": 1, "text": f"Document Image: {filename}\nNote: Configure GEMINI_API_KEY to enable full Vision OCR extraction."}]
+        return [
+            {
+                "page": 1,
+                "text": f"Document Image: {filename}\nNote: Configure GEMINI_API_KEY to enable full Vision OCR extraction.",
+            }
+        ]
 
     try:
         with open(filepath, "rb") as img_file:
@@ -142,11 +159,24 @@ def extract_image_pages(filepath: str) -> List[dict]:
         else:
             extracted_text = _gemini_vision_ocr(img_b64, mime_type, filename)
 
-        return [{"page": 1, "text": f"# Image OCR Content: {filename}\n\n{extracted_text}"}]
+        return [
+            {"page": 1, "text": f"# Image OCR Content: {filename}\n\n{extracted_text}"}
+        ]
     except Exception as exc:
         backend_label = "Ollama" if VISION_BACKEND == "ollama" else "Gemini"
-        logger.error("❌ %s Vision OCR failed for %s: %s", backend_label, filename, exc, exc_info=True)
-        return [{"page": 1, "text": f"Image Document: {filename}\n(Error during image text extraction)"}]
+        logger.error(
+            "❌ %s Vision OCR failed for %s: %s",
+            backend_label,
+            filename,
+            exc,
+            exc_info=True,
+        )
+        return [
+            {
+                "page": 1,
+                "text": f"Image Document: {filename}\n(Error during image text extraction)",
+            }
+        ]
 
 
 def extract_docx_pages(filepath: str) -> List[dict]:
@@ -161,14 +191,18 @@ def extract_docx_pages(filepath: str) -> List[dict]:
                 full_text.append(p.text.strip())
         for t in doc.tables:
             for row in t.rows:
-                row_text = " | ".join(cell.text.strip() for cell in row.cells if cell.text.strip())
+                row_text = " | ".join(
+                    cell.text.strip() for cell in row.cells if cell.text.strip()
+                )
                 if row_text:
                     full_text.append(f"| {row_text} |")
         text = "\n\n".join(full_text)
         sections = [s.strip() for s in re.split(r"\n{3,}", text) if s.strip()] or [text]
         return [{"page": i + 1, "text": s} for i, s in enumerate(sections)]
     except Exception as exc:
-        logger.info("Falling back to plain text read for Word document %s: %s", filepath, exc)
+        logger.info(
+            "Falling back to plain text read for Word document %s: %s", filepath, exc
+        )
         return extract_txt_pages(filepath)
 
 
@@ -212,14 +246,43 @@ def extract_document_pages(filepath: str, ext: str) -> List[dict]:
         return extract_docx_pages(filepath)
     elif ext in ("csv", "tsv", "json", "yaml", "yml", "xml"):
         return extract_data_pages(filepath, ext)
-    elif ext in ("py", "js", "ts", "jsx", "tsx", "html", "css", "c", "cpp", "h", "hpp", "java", "go", "rs", "php", "sql", "sh", "bat", "ps1"):
+    elif ext in (
+        "py",
+        "js",
+        "ts",
+        "jsx",
+        "tsx",
+        "html",
+        "css",
+        "c",
+        "cpp",
+        "h",
+        "hpp",
+        "java",
+        "go",
+        "rs",
+        "php",
+        "sql",
+        "sh",
+        "bat",
+        "ps1",
+    ):
         return extract_code_pages(filepath, ext)
     else:
         return extract_txt_pages(filepath)
 
 
 # Web page extraction
-_IGNORE_TAGS = {"script", "style", "noscript", "svg", "canvas", "nav", "header", "footer"}
+_IGNORE_TAGS = {
+    "script",
+    "style",
+    "noscript",
+    "svg",
+    "canvas",
+    "nav",
+    "header",
+    "footer",
+}
 
 
 class _TextExtractor(html.parser.HTMLParser):
@@ -283,14 +346,17 @@ def _is_public_ip(ip_str: str) -> bool:
     except ValueError:
         return False
     return not (
-        ip.is_private or ip.is_loopback or ip.is_link_local
-        or ip.is_multicast or ip.is_reserved or ip.is_unspecified
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
     )
 
 
 def _is_private_ip(ip_str: str) -> bool:
     return not _is_public_ip(ip_str)
-
 
 
 def _validate_url_is_public(url: str) -> None:
@@ -302,12 +368,19 @@ def _validate_url_is_public(url: str) -> None:
         raise ValueError("URL has no hostname")
 
     h_lower = hostname.lower()
-    if (h_lower in ("localhost", "0.0.0.0", "127.0.0.1", "::1", "169.254.169.254")
-            or h_lower.endswith(".local") or h_lower.endswith(".internal")):
-        raise ValueError(f"URL hostname '{hostname}' resolves to a non-public/internal address — refusing to fetch")
+    if (
+        h_lower in ("localhost", "0.0.0.0", "127.0.0.1", "::1", "169.254.169.254")
+        or h_lower.endswith(".local")
+        or h_lower.endswith(".internal")
+    ):
+        raise ValueError(
+            f"URL hostname '{hostname}' resolves to a non-public/internal address — refusing to fetch"
+        )
 
     if parsed.port and parsed.port not in (80, 443, 8080, 8443):
-        raise ValueError(f"Port {parsed.port} is not allowed for web document ingestion")
+        raise ValueError(
+            f"Port {parsed.port} is not allowed for web document ingestion"
+        )
 
     try:
         infos = socket.getaddrinfo(hostname, None)
@@ -320,7 +393,9 @@ def _validate_url_is_public(url: str) -> None:
     for family, _, _, _, sockaddr in infos:
         ip_str = sockaddr[0]
         if not _is_public_ip(ip_str):
-            raise ValueError(f"URL '{hostname}' resolves to a non-public address ({ip_str}) — refusing to fetch")
+            raise ValueError(
+                f"URL '{hostname}' resolves to a non-public address ({ip_str}) — refusing to fetch"
+            )
 
 
 class _NoAutoRedirect(urllib.request.HTTPRedirectHandler):
@@ -337,20 +412,26 @@ def fetch_web_page(url: str, max_redirects: int = 5) -> Tuple[str, str]:
         _validate_url_is_public(current)
         req = urllib.request.Request(
             current,
-            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 AskMyDocs/1.0"},
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 AskMyDocs/1.0"
+            },
         )
         try:
             with opener.open(req, timeout=URL_FETCH_TIMEOUT) as resp:
                 raw_bytes = resp.read(MAX_URL_FETCH_BYTES + 1)
                 if len(raw_bytes) > MAX_URL_FETCH_BYTES:
-                    raise ValueError(f"Page exceeded {MAX_URL_FETCH_BYTES // (1024 * 1024)} MB size limit")
+                    raise ValueError(
+                        f"Page exceeded {MAX_URL_FETCH_BYTES // (1024 * 1024)} MB size limit"
+                    )
                 raw = raw_bytes.decode("utf-8", errors="ignore")
             break
         except urllib.error.HTTPError as e:
             if e.code in (301, 302, 303, 307, 308):
                 location = e.headers.get("Location")
                 if not location:
-                    raise ValueError(f"Redirect ({e.code}) with no Location header") from e
+                    raise ValueError(
+                        f"Redirect ({e.code}) with no Location header"
+                    ) from e
                 current = urllib.parse.urljoin(current, location)
                 continue
             raise

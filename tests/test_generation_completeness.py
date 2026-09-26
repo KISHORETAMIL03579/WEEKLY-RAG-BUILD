@@ -19,7 +19,10 @@ class TestGenerationCompleteness(unittest.TestCase):
         prompt_text = get_prompt(QA_PROMPT_VERSION)
         self.assertIsNotNone(prompt_text)
         self.assertIn("COMPLETENESS & CLAUSE COVERAGE CONTRACT", prompt_text)
-        self.assertIn("include all relevant clauses needed to provide a complete answer", prompt_text)
+        self.assertIn(
+            "include all relevant clauses needed to provide a complete answer",
+            prompt_text,
+        )
         self.assertIn("NEVER omit a relevant condition", prompt_text)
         self.assertIn("NEVER stop after listing only the first one or two", prompt_text)
         self.assertIn("I don't know.", prompt_text)
@@ -53,7 +56,10 @@ class TestGenerationCompleteness(unittest.TestCase):
         user_prompt = build_qa_user_prompt(query, synthetic_chunks)
 
         self.assertIn("QUESTION: " + query, user_prompt)
-        self.assertIn("[1] SyntheticPolicy.pdf (page 1), section: 1.1 Benefit Eligibility", user_prompt)
+        self.assertIn(
+            "[1] SyntheticPolicy.pdf (page 1), section: 1.1 Benefit Eligibility",
+            user_prompt,
+        )
         self.assertIn("Condition A", user_prompt)
         self.assertIn("Condition B", user_prompt)
         self.assertIn("Condition C", user_prompt)
@@ -63,4 +69,3 @@ class TestGenerationCompleteness(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

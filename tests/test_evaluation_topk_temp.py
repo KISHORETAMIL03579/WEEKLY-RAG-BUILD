@@ -43,7 +43,9 @@ class TestEvaluationTopKTemperature(unittest.TestCase):
         """Verifies that the exact temperature requested (0.3) is transmitted in the options payload to Ollama."""
         mock_resp = MagicMock()
         mock_resp.status = 200
-        mock_resp.read.return_value = json.dumps({"response": '{"verdict": 1}'}).encode("utf-8")
+        mock_resp.read.return_value = json.dumps({"response": '{"verdict": 1}'}).encode(
+            "utf-8"
+        )
         mock_urlopen.return_value.__enter__.return_value = mock_resp
 
         ans, src, lat = call_llm_judge_detailed(
@@ -87,8 +89,12 @@ class TestEvaluationTopKTemperature(unittest.TestCase):
         # 2. Context budget loss: required clause in retrieved chunks, but omitted from final context
         cat, diag, reason, res = diagnose_case_evidence(
             case_id="case_01",
-            retrieved_chunks=[{"text": "Entitled to two working days per month of completed service"}],
-            final_context_chunks=[{"text": "Truncated context without mandatory clause"}],
+            retrieved_chunks=[
+                {"text": "Entitled to two working days per month of completed service"}
+            ],
+            final_context_chunks=[
+                {"text": "Truncated context without mandatory clause"}
+            ],
             answer="Sick leave is granted.",
             h_label=0,
             is_v2_agreed=True,
@@ -100,8 +106,12 @@ class TestEvaluationTopKTemperature(unittest.TestCase):
         # 3. Generator completeness omission: clause in final context, but missing from answer
         cat, diag, reason, res = diagnose_case_evidence(
             case_id="case_01",
-            retrieved_chunks=[{"text": "Entitled to two working days per month of completed service"}],
-            final_context_chunks=[{"text": "Entitled to two working days per month of completed service"}],
+            retrieved_chunks=[
+                {"text": "Entitled to two working days per month of completed service"}
+            ],
+            final_context_chunks=[
+                {"text": "Entitled to two working days per month of completed service"}
+            ],
             answer="Staff are entitled to sick leave at one day per month.",
             h_label=0,
             is_v2_agreed=True,
@@ -128,7 +138,13 @@ class TestEvaluationTopKTemperature(unittest.TestCase):
         manager = EvaluationRunManager.get_instance()
 
         sample_cases = [
-            {"case_id": "case_01", "question": "Under what circumstances is an employee entitled to paid sick leave?", "answer": "Answer 1", "taxonomy_mode": "Low-K Multi-Clause Truncation", "human_label": 0}
+            {
+                "case_id": "case_01",
+                "question": "Under what circumstances is an employee entitled to paid sick leave?",
+                "answer": "Answer 1",
+                "taxonomy_mode": "Low-K Multi-Clause Truncation",
+                "human_label": 0,
+            }
         ]
 
         # Run A: K=5, T=0.3
@@ -137,7 +153,7 @@ class TestEvaluationTopKTemperature(unittest.TestCase):
             eval_engine="deterministic",
             top_k=5,
             temperature=0.3,
-            model="llama3.1:8b"
+            model="llama3.1:8b",
         )
         self.assertEqual(run_a.top_k, 5)
         self.assertAlmostEqual(run_a.temperature, 0.3)
@@ -148,7 +164,7 @@ class TestEvaluationTopKTemperature(unittest.TestCase):
             eval_engine="deterministic",
             top_k=8,
             temperature=0.0,
-            model="llama3.1:8b"
+            model="llama3.1:8b",
         )
         self.assertEqual(run_b.top_k, 8)
         self.assertAlmostEqual(run_b.temperature, 0.0)

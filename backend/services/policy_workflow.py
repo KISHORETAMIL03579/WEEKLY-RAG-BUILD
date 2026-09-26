@@ -41,15 +41,19 @@ def run_workflow_case(
     t0 = time.perf_counter()
     emp_record = execute_tool_call("get_employee_record", {"employee_id": employee_id})
     t_ms = (time.perf_counter() - t0) * 1000
-    tool_calls_record.append({
-        "step": 1,
-        "tool_name": "get_employee_record",
-        "arguments": {"employee_id": employee_id},
-        "output": emp_record,
-        "latency_ms": round(max(0.01, t_ms), 3),
-    })
+    tool_calls_record.append(
+        {
+            "step": 1,
+            "tool_name": "get_employee_record",
+            "arguments": {"employee_id": employee_id},
+            "output": emp_record,
+            "latency_ms": round(max(0.01, t_ms), 3),
+        }
+    )
 
-    emp_status = emp_record.get("employment_status", "Confirmed") if emp_record else "Confirmed"
+    emp_status = (
+        emp_record.get("employment_status", "Confirmed") if emp_record else "Confirmed"
+    )
     tenure_m = emp_record.get("tenure_months", 0) if emp_record else 0
     jurisdiction = emp_record.get("jurisdiction", "Kenya") if emp_record else "Kenya"
     sep_reason = emp_record.get("separation_reason", "") if emp_record else ""
@@ -62,14 +66,18 @@ def run_workflow_case(
     q_lower = question.lower()
     if "annual leave" in q_lower or "carry" in q_lower:
         search_query = "annual leave entitlement carry forward Section 5.2"
-    elif "severance" in q_lower or "redundancy" in q_lower or "unsatisfactory" in q_lower:
+    elif (
+        "severance" in q_lower or "redundancy" in q_lower or "unsatisfactory" in q_lower
+    ):
         search_query = "severance redundancy performance separation Section 10.5"
     elif "notice" in q_lower or "resign" in q_lower:
         search_query = "resignation notice probation confirmed Section 10.1"
     elif "sick leave" in q_lower:
         search_query = "paid sick leave qualifying consecutive months Section 5.3.2"
     elif "pension" in q_lower:
-        search_query = "pension contribution allowance probation eligibility Section 4.4.1"
+        search_query = (
+            "pension contribution allowance probation eligibility Section 4.4.1"
+        )
     elif "commute" in q_lower or "cash" in q_lower:
         search_query = "commutation accrued annual leave separation Section 10.7"
     else:
@@ -79,15 +87,19 @@ def run_workflow_case(
     # Step 3: Fetch Policy Rule & Synthesize Fixed Output
     # -----------------------------------------------------------------------
     t0 = time.perf_counter()
-    handbook_results = execute_tool_call("search_handbook", {"query": search_query, "top_k": top_k})
+    handbook_results = execute_tool_call(
+        "search_handbook", {"query": search_query, "top_k": top_k}
+    )
     t_ms = (time.perf_counter() - t0) * 1000
-    tool_calls_record.append({
-        "step": 2,
-        "tool_name": "search_handbook",
-        "arguments": {"query": search_query, "top_k": top_k},
-        "output": handbook_results,
-        "latency_ms": round(max(0.01, t_ms), 3),
-    })
+    tool_calls_record.append(
+        {
+            "step": 2,
+            "tool_name": "search_handbook",
+            "arguments": {"query": search_query, "top_k": top_k},
+            "output": handbook_results,
+            "latency_ms": round(max(0.01, t_ms), 3),
+        }
+    )
 
     if on_stage:
         on_stage("Step 3: Deterministic calculation")
@@ -100,11 +112,15 @@ def run_workflow_case(
         explanation = f"{emp_name} is a confirmed employee with {tenure_m} months of service. Under Section 5.2.1, standard annual leave entitlement is 24 days per year at 2 days per month."
 
     elif "carry" in q_lower:
-        entitlement_value = "Maximum of 5 days (must be taken by June 30th of following year)"
+        entitlement_value = (
+            "Maximum of 5 days (must be taken by June 30th of following year)"
+        )
         rule_cited = "Section 5.2.7"
         explanation = f"Under Section 5.2.7, staff members cannot carry forward more than 5 days of unused annual leave beyond December 31st without CEO approval."
 
-    elif "severance" in q_lower or "redundancy" in q_lower or "unsatisfactory" in q_lower:
+    elif (
+        "severance" in q_lower or "redundancy" in q_lower or "unsatisfactory" in q_lower
+    ):
         if sep_reason == "Redundancy" or "redundancy" in q_lower:
             completed_years = tenure_m // 12
             severance_days = completed_years * 15
@@ -116,7 +132,9 @@ def run_workflow_case(
             rule_cited = "Section 10.5.2"
             explanation = f"{emp_name} is separated due to Unsatisfactory Performance. Under Section 10.5.2, staff separated for unsatisfactory performance are not entitled to severance payments."
         else:
-            entitlement_value = "Standard severance calculations apply based on separation ground."
+            entitlement_value = (
+                "Standard severance calculations apply based on separation ground."
+            )
             rule_cited = "Section 10.5"
             explanation = "Standard separation provisions apply."
 
@@ -132,7 +150,9 @@ def run_workflow_case(
 
     elif "sick leave" in q_lower:
         if tenure_m < 2:
-            entitlement_value = "Ineligible (requires at least 2 consecutive months of service)"
+            entitlement_value = (
+                "Ineligible (requires at least 2 consecutive months of service)"
+            )
             rule_cited = "Section 5.3.2"
             explanation = f"{emp_name} has only completed {tenure_m} month of service. Under Section 5.3.2, paid sick leave entitlement is strictly conditional on completing at least 2 consecutive months of service."
         else:
@@ -146,7 +166,9 @@ def run_workflow_case(
             rule_cited = "Section 4.4.1"
             explanation = f"{emp_name} is currently on probation ({tenure_m} months tenure). Under Section 4.4.1, the 10% pension contribution allowance is only provided upon successful confirmation of probation."
         else:
-            entitlement_value = "10% of basic monthly salary pension contribution allowance"
+            entitlement_value = (
+                "10% of basic monthly salary pension contribution allowance"
+            )
             rule_cited = "Section 4.4.1"
             explanation = f"{emp_name} is confirmed ({tenure_m} months tenure) and entitled to 10% pension contribution allowance under Section 4.4.1."
 
@@ -157,7 +179,11 @@ def run_workflow_case(
 
     else:
         entitlement_value = "Entitlement calculated from handbook rules."
-        rule_cited = handbook_results[0].get("section", "Section 5.0") if handbook_results else "Section 5.0"
+        rule_cited = (
+            handbook_results[0].get("section", "Section 5.0")
+            if handbook_results
+            else "Section 5.0"
+        )
         explanation = f"Evaluated for {emp_name} based on {rule_cited}."
 
     # Fixed single-pass token consumption

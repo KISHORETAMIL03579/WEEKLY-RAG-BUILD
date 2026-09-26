@@ -5,7 +5,10 @@ import unittest
 from fastapi.testclient import TestClient
 
 from backend.main import create_app
-from backend.services.policy_benchmark_runner import PolicyBenchmarkRunManager, PolicyBenchmarkRunState
+from backend.services.policy_benchmark_runner import (
+    PolicyBenchmarkRunManager,
+    PolicyBenchmarkRunState,
+)
 
 
 class TestBenchmarkProgress(unittest.TestCase):
@@ -66,7 +69,9 @@ class TestBenchmarkProgress(unittest.TestCase):
 
     def test_fastapi_benchmark_routes(self):
         # 1. Start background benchmark
-        resp = self.client.post("/api/policy/benchmark/start", json={"top_k": 5, "temperature": 0.3})
+        resp = self.client.post(
+            "/api/policy/benchmark/start", json={"top_k": 5, "temperature": 0.3}
+        )
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertIn("run_id", data)

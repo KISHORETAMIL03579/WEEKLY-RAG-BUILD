@@ -330,7 +330,7 @@ Before declaring the task complete, produce:
 ### Findings
 
 | Severity | File | Issue | Impact | Recommendation |
-|----------|------|-------|--------|----------------|
+| -------- | ---- | ----- | ------ | -------------- |
 
 Severity:
 

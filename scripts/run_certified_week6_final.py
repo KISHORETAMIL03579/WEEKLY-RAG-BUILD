@@ -7,6 +7,7 @@ Executes genuine live Ollama llama3.1:8b inference for all 25 cases with:
 - SHA-256 prompt hashing for tamper-proof audit trails
 - Comparison against blind human ground truth
 """
+
 import os
 import sys
 import time
@@ -19,14 +20,16 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8', line_buffering=True)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
 
 from week6.assertions import run_all_assertions
 from week6.judge import parse_judge_output, evaluate_case_deterministically
 
+
 def compute_prompt_hash(prompt_text: str) -> str:
     return hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()[:16]
+
 
 def query_ollama(prompt: str, timeout: int = 180, retries: int = 3) -> tuple:
     t_start = time.perf_counter()
@@ -38,13 +41,13 @@ def query_ollama(prompt: str, timeout: int = 180, retries: int = 3) -> tuple:
             "temperature": 0.0,
             "top_p": 0.1,
             "num_predict": 16,
-            "stop": ["\n", "}", "```"]
-        }
+            "stop": ["\n", "}", "```"],
+        },
     }
     req = urllib.request.Request(
         "http://127.0.0.1:11434/api/generate",
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"}
+        headers={"Content-Type": "application/json"},
     )
     for attempt in range(1, retries + 1):
         try:
@@ -54,7 +57,9 @@ def query_ollama(prompt: str, timeout: int = 180, retries: int = 3) -> tuple:
                 t_elapsed = (time.perf_counter() - t_start) * 1000
                 telemetry = {
                     "prompt_eval_count": data.get("prompt_eval_count", 0),
-                    "prompt_eval_ms": round(data.get("prompt_eval_duration", 0) / 1e6, 2),
+                    "prompt_eval_ms": round(
+                        data.get("prompt_eval_duration", 0) / 1e6, 2
+                    ),
                     "eval_count": data.get("eval_count", 0),
                     "eval_ms": round(data.get("eval_duration", 0) / 1e6, 2),
                     "total_ms": round(data.get("total_duration", 0) / 1e6, 2),
@@ -67,9 +72,12 @@ def query_ollama(prompt: str, timeout: int = 180, retries: int = 3) -> tuple:
             t_elapsed = (time.perf_counter() - t_start) * 1000
             return f"ERROR: {exc}", "ERROR", t_elapsed, {}
 
+
 def run_certified_final_evaluation():
     print("=" * 125)
-    print("                 FINAL CERTIFIED EVALUATION RUN: ALL 25 CASES (GENUINE LIVE OLLAMA LLM)                 ")
+    print(
+        "                 FINAL CERTIFIED EVALUATION RUN: ALL 25 CASES (GENUINE LIVE OLLAMA LLM)                 "
+    )
     print("=" * 125)
 
     cases_path = REPO_ROOT / "week6" / "eval_cases_25.json"
@@ -86,12 +94,20 @@ def run_certified_final_evaluation():
     v2_template = v2_path.read_text(encoding="utf-8")
 
     # Warm-up check
-    print("\n[Step 1/3] Verifying Ollama daemon health on http://127.0.0.1:11434 with llama3.1:8b...")
+    print(
+        "\n[Step 1/3] Verifying Ollama daemon health on http://127.0.0.1:11434 with llama3.1:8b..."
+    )
     warm_raw, warm_src, warm_ms, _ = query_ollama("Judge health check.", timeout=60)
-    print(f"  [OK] Ollama daemon responsive. Warm-up latency: {warm_ms:.1f}ms | Source: {warm_src}\n")
+    print(
+        f"  [OK] Ollama daemon responsive. Warm-up latency: {warm_ms:.1f}ms | Source: {warm_src}\n"
+    )
 
-    print("[Step 2/3] Executing 100% blind live inference across all 25 benchmark cases on Judge V2...")
-    print(f"{'Case ID':<8} | {'Human':<5} | {'V2 Verd':<7} | {'Source':<6} | {'LLM OK':<6} | {'Prompt Hash':<12} | {'Prompt ms':<10} | {'Gen ms':<8} | {'Total ms':<9} | {'Status':<10}")
+    print(
+        "[Step 2/3] Executing 100% blind live inference across all 25 benchmark cases on Judge V2..."
+    )
+    print(
+        f"{'Case ID':<8} | {'Human':<5} | {'V2 Verd':<7} | {'Source':<6} | {'LLM OK':<6} | {'Prompt Hash':<12} | {'Prompt ms':<10} | {'Gen ms':<8} | {'Total ms':<9} | {'Status':<10}"
+    )
     print("-" * 125)
 
     results = []
@@ -110,13 +126,15 @@ def run_certified_final_evaluation():
         assertions = run_all_assertions(c)
 
         # STRICT DATA INTEGRITY: ONLY {question}, {context}, {answer} are formatted
-        prompt_v2 = v2_template.replace("{question}", c.get("question", "").strip()) \
-                               .replace("{context}", c.get("retrieved_context", "").strip()) \
-                               .replace("{answer}", c.get("answer", "").strip())
+        prompt_v2 = (
+            v2_template.replace("{question}", c.get("question", "").strip())
+            .replace("{context}", c.get("retrieved_context", "").strip())
+            .replace("{answer}", c.get("answer", "").strip())
+        )
         prompt_hash = compute_prompt_hash(prompt_v2)
 
         raw_resp, src, latency_ms, telemetry = query_ollama(prompt_v2, timeout=180)
-        llm_completed = (src == "LLM")
+        llm_completed = src == "LLM"
         if src == "LLM":
             actual_llm_calls += 1
         elif src == "ERROR":
@@ -133,7 +151,7 @@ def run_certified_final_evaluation():
         combined_verdict = 1 if (parsed_verdict == 1 and det_verdict == 1) else 0
 
         # Agreement against Human Ground Truth (compared strictly AFTER inference)
-        is_match = (combined_verdict == h_label)
+        is_match = combined_verdict == h_label
         if is_match:
             agreed_count += 1
 
@@ -142,28 +160,32 @@ def run_certified_final_evaluation():
         eval_ms = telemetry.get("eval_ms", 0.0)
         status_str = "MATCH" if is_match else "MISMATCH"
 
-        print(f"[{idx:02d}/25] {cid:<5} | {h_label:<5} | {combined_verdict:<7} | {src:<6} | {str(llm_completed):<6} | {prompt_hash:<12} | {p_eval_ms:8.1f}ms | {eval_ms:6.1f}ms | {latency_ms:7.1f}ms | {status_str:<10}")
+        print(
+            f"[{idx:02d}/25] {cid:<5} | {h_label:<5} | {combined_verdict:<7} | {src:<6} | {str(llm_completed):<6} | {prompt_hash:<12} | {p_eval_ms:8.1f}ms | {eval_ms:6.1f}ms | {latency_ms:7.1f}ms | {status_str:<10}"
+        )
 
-        results.append({
-            "case_id": cid,
-            "question": c.get("question", ""),
-            "answer": c.get("answer", ""),
-            "taxonomy_mode": c.get("taxonomy_mode", "General"),
-            "source": src,
-            "llm_completed": llm_completed,
-            "model": "llama3.1:8b",
-            "prompt_hash": prompt_hash,
-            "prompt_eval_ms": p_eval_ms,
-            "eval_ms": eval_ms,
-            "latency_ms": round(latency_ms, 2),
-            "raw_judge_response": raw_resp,
-            "parsed_llm_verdict": parsed_verdict,
-            "deterministic_assertion_verdict": det_verdict,
-            "combined_evaluated_verdict": combined_verdict,
-            "human_label": h_label,
-            "match": is_match,
-            "assertions": assertions,
-        })
+        results.append(
+            {
+                "case_id": cid,
+                "question": c.get("question", ""),
+                "answer": c.get("answer", ""),
+                "taxonomy_mode": c.get("taxonomy_mode", "General"),
+                "source": src,
+                "llm_completed": llm_completed,
+                "model": "llama3.1:8b",
+                "prompt_hash": prompt_hash,
+                "prompt_eval_ms": p_eval_ms,
+                "eval_ms": eval_ms,
+                "latency_ms": round(latency_ms, 2),
+                "raw_judge_response": raw_resp,
+                "parsed_llm_verdict": parsed_verdict,
+                "deterministic_assertion_verdict": det_verdict,
+                "combined_evaluated_verdict": combined_verdict,
+                "human_label": h_label,
+                "match": is_match,
+                "assertions": assertions,
+            }
+        )
 
     wall_total = time.perf_counter() - wall_start
 
@@ -177,15 +199,23 @@ def run_certified_final_evaluation():
     p95_lat = sorted_lats[p95_idx]
 
     print("\n" + "=" * 125)
-    print("                                            FINAL AUDIT SUMMARY                                            ")
+    print(
+        "                                            FINAL AUDIT SUMMARY                                            "
+    )
     print("=" * 125)
     print(f"Total Benchmark Cases Evaluated           : {len(cases)} / 25")
-    print(f"Genuine Live LLM Calls                    : {actual_llm_calls} / 25 (100% genuine LLM execution)")
+    print(
+        f"Genuine Live LLM Calls                    : {actual_llm_calls} / 25 (100% genuine LLM execution)"
+    )
     print(f"Number of Fallback Verdicts               : {fallback_count} (0)")
     print(f"Number of Errors / Timeouts               : {error_count} (0)")
     print(f"Number of Cache Hits / Mocks              : {cache_count} (0)")
-    print(f"Total Wall-Clock Evaluation Time          : {wall_total:.2f} seconds ({wall_total/60:.2f} minutes)")
-    print(f"Sum of All LLM Inferences Time            : {sum(latencies)/1000:.2f} seconds")
+    print(
+        f"Total Wall-Clock Evaluation Time          : {wall_total:.2f} seconds ({wall_total/60:.2f} minutes)"
+    )
+    print(
+        f"Sum of All LLM Inferences Time            : {sum(latencies)/1000:.2f} seconds"
+    )
     print("-" * 125)
     print(f"Minimum Case Latency                      : {min_lat:.2f} ms")
     print(f"Maximum Case Latency                      : {max_lat:.2f} ms")
@@ -193,7 +223,9 @@ def run_certified_final_evaluation():
     print(f"Median Case Latency                       : {med_lat:.2f} ms")
     print(f"P95 Case Latency                          : {p95_lat:.2f} ms")
     print("-" * 125)
-    print(f"Final Accuracy vs Human Ground Truth      : {(agreed_count / len(cases) * 100):.2f}% ({agreed_count}/{len(cases)})")
+    print(
+        f"Final Accuracy vs Human Ground Truth      : {(agreed_count / len(cases) * 100):.2f}% ({agreed_count}/{len(cases)})"
+    )
     print("=" * 125)
 
     # Save to disk
@@ -219,8 +251,10 @@ def run_certified_final_evaluation():
         "cases": results,
     }
     audit_file.write_text(json.dumps(audit_data, indent=2), encoding="utf-8")
-    print(f"\n[Artifact Saved] Certified final results written to: {audit_file.relative_to(REPO_ROOT)}")
+    print(
+        f"\n[Artifact Saved] Certified final results written to: {audit_file.relative_to(REPO_ROOT)}"
+    )
+
 
 if __name__ == "__main__":
     run_certified_final_evaluation()
-

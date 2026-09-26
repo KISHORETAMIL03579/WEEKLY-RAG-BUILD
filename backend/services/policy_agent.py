@@ -44,7 +44,7 @@ def check_ollama_available(timeout: float = 0.05) -> bool:
         s.settimeout(timeout)
         res = s.connect_ex(("127.0.0.1", 11434))
         s.close()
-        _cached_ollama_status = (res == 0)
+        _cached_ollama_status = res == 0
         _last_ollama_check_time = now
         return _cached_ollama_status
     except Exception:
@@ -71,14 +71,12 @@ def _call_ollama_step(
         "options": {
             "temperature": float(temperature),
             "num_predict": 32,
-            "stop": ["Observation:", "User:"]
-        }
+            "stop": ["Observation:", "User:"],
+        },
     }
     encoded = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
-        endpoint,
-        data=encoded,
-        headers={"Content-Type": "application/json"}
+        endpoint, data=encoded, headers={"Content-Type": "application/json"}
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -104,7 +102,9 @@ def run_agent_case(
     max_tokens: int = MAX_TOKENS,
     max_cost: float = MAX_COST,
     max_wall_clock: float = MAX_WALL_CLOCK_SECONDS,
-    force_budget_trap: Optional[str] = None,  # "iterations" | "tokens" | "cost" | "wall_clock"
+    force_budget_trap: Optional[
+        str
+    ] = None,  # "iterations" | "tokens" | "cost" | "wall_clock"
     top_k: int = 5,
     temperature: float = 0.3,
     model: str = DEFAULT_AGENT_MODEL,
@@ -168,13 +168,17 @@ Final Answer: {{"entitlement_value": "<exact entitlement>", "rule_cited": "<sect
         if force_budget_trap == "tokens":
             total_tokens = max_tokens + 100
             termination_reason = "BUDGET_TOKENS"
-            explanation = f"Terminated by MAX_TOKENS budget ({total_tokens} > {max_tokens})."
+            explanation = (
+                f"Terminated by MAX_TOKENS budget ({total_tokens} > {max_tokens})."
+            )
             break
 
         if force_budget_trap == "cost":
             cost_usd = max_cost + 0.01
             termination_reason = "BUDGET_COST"
-            explanation = f"Terminated by MAX_COST budget (${cost_usd:.6f} > ${max_cost:.4f})."
+            explanation = (
+                f"Terminated by MAX_COST budget (${cost_usd:.6f} > ${max_cost:.4f})."
+            )
             break
 
         if force_budget_trap == "wall_clock":
@@ -211,12 +215,16 @@ Final Answer: {{"entitlement_value": "<exact entitlement>", "rule_cited": "<sect
         # Real Budget Enforcement
         if total_tokens > max_tokens:
             termination_reason = "BUDGET_TOKENS"
-            explanation = f"Terminated by MAX_TOKENS budget ({total_tokens} > {max_tokens})."
+            explanation = (
+                f"Terminated by MAX_TOKENS budget ({total_tokens} > {max_tokens})."
+            )
             break
 
         if cost_usd > max_cost:
             termination_reason = "BUDGET_COST"
-            explanation = f"Terminated by MAX_COST budget (${cost_usd:.6f} > ${max_cost:.4f})."
+            explanation = (
+                f"Terminated by MAX_COST budget (${cost_usd:.6f} > ${max_cost:.4f})."
+            )
             break
 
         if elapsed_sec > max_wall_clock:
@@ -231,18 +239,22 @@ Final Answer: {{"entitlement_value": "<exact entitlement>", "rule_cited": "<sect
             if on_stage:
                 on_stage("Executing tool: get_employee_record")
             t0 = time.perf_counter()
-            emp_record = execute_tool_call("get_employee_record", {"employee_id": employee_id})
+            emp_record = execute_tool_call(
+                "get_employee_record", {"employee_id": employee_id}
+            )
             t_ms = (time.perf_counter() - t0) * 1000
-            tool_calls_record.append({
-                "step": iteration,
-                "tool_name": "get_employee_record",
-                "arguments": {"employee_id": employee_id},
-                "output": emp_record,
-                "latency_ms": round(max(0.01, t_ms), 3),
-            })
+            tool_calls_record.append(
+                {
+                    "step": iteration,
+                    "tool_name": "get_employee_record",
+                    "arguments": {"employee_id": employee_id},
+                    "output": emp_record,
+                    "latency_ms": round(max(0.01, t_ms), 3),
+                }
+            )
             if on_stage:
                 on_stage("Processing tool result")
-            conversation_history += f"\nAction: get_employee_record\nAction Input: {{\"employee_id\": \"{employee_id}\"}}\nObservation: {json.dumps(emp_record)}"
+            conversation_history += f'\nAction: get_employee_record\nAction Input: {{"employee_id": "{employee_id}"}}\nObservation: {json.dumps(emp_record)}'
             continue
 
         # -------------------------------------------------------------------
@@ -252,14 +264,20 @@ Final Answer: {{"entitlement_value": "<exact entitlement>", "rule_cited": "<sect
             q_lower = question.lower()
             if "annual leave" in q_lower or "carry" in q_lower or "vacation" in q_lower:
                 search_q = "annual leave entitlement accrual carry forward Section 5.2"
-            elif "redundancy" in q_lower or "severance" in q_lower or "unsatisfactory" in q_lower:
+            elif (
+                "redundancy" in q_lower
+                or "severance" in q_lower
+                or "unsatisfactory" in q_lower
+            ):
                 search_q = "severance payment redundancy unsatisfactory performance Section 10.5"
             elif "notice" in q_lower or "resign" in q_lower or "probation" in q_lower:
                 search_q = "notice of resignation probation confirmed Section 10.1"
             elif "sick leave" in q_lower:
                 search_q = "paid sick leave qualifying consecutive months Section 5.3.2"
             elif "pension" in q_lower:
-                search_q = "pension contribution allowance probation eligibility Section 4.4.1"
+                search_q = (
+                    "pension contribution allowance probation eligibility Section 4.4.1"
+                )
             elif "commute" in q_lower or "cash" in q_lower:
                 search_q = "commutation accrued annual leave separation Section 10.7"
             else:
@@ -268,16 +286,20 @@ Final Answer: {{"entitlement_value": "<exact entitlement>", "rule_cited": "<sect
             if on_stage:
                 on_stage("Executing tool: search_handbook")
             t0 = time.perf_counter()
-            handbook_excerpts = execute_tool_call("search_handbook", {"query": search_q, "top_k": top_k})
+            handbook_excerpts = execute_tool_call(
+                "search_handbook", {"query": search_q, "top_k": top_k}
+            )
             t_ms = (time.perf_counter() - t0) * 1000
-            tool_calls_record.append({
-                "step": iteration,
-                "tool_name": "search_handbook",
-                "arguments": {"query": search_q, "top_k": top_k},
-                "output": handbook_excerpts,
-                "latency_ms": round(max(0.01, t_ms), 3),
-            })
-            conversation_history += f"\nAction: search_handbook\nAction Input: {{\"query\": \"{search_q}\", \"top_k\": {top_k}}}\nObservation: {json.dumps(handbook_excerpts)}"
+            tool_calls_record.append(
+                {
+                    "step": iteration,
+                    "tool_name": "search_handbook",
+                    "arguments": {"query": search_q, "top_k": top_k},
+                    "output": handbook_excerpts,
+                    "latency_ms": round(max(0.01, t_ms), 3),
+                }
+            )
+            conversation_history += f'\nAction: search_handbook\nAction Input: {{"query": "{search_q}", "top_k": {top_k}}}\nObservation: {json.dumps(handbook_excerpts)}'
             continue
 
         # -------------------------------------------------------------------
@@ -295,23 +317,34 @@ Final Answer: {{"entitlement_value": "<exact entitlement>", "rule_cited": "<sect
             q_lower = question.lower()
 
             if "accrual" in q_lower and "annual leave" in q_lower:
-                entitlement_value = "24 working days per annum, accruing at 2 days per month"
+                entitlement_value = (
+                    "24 working days per annum, accruing at 2 days per month"
+                )
                 rule_cited = "Section 5.2.1"
                 explanation = f"{emp_name} is a {emp_status.lower()} full-time employee with {tenure_m} months of service. Under Section 5.2.1, standard annual leave entitlement is 24 working days per annum, accruing at 2 working days per month of completed service."
 
             elif "carry" in q_lower:
-                entitlement_value = "Maximum of 5 days (must be taken by June 30th of following year)"
+                entitlement_value = (
+                    "Maximum of 5 days (must be taken by June 30th of following year)"
+                )
                 rule_cited = "Section 5.2.7"
                 explanation = f"Under Section 5.2.7, staff members cannot carry forward more than 5 days of unused annual leave beyond December 31st without CEO approval. Approved carryover leave must be taken before June 30th."
 
-            elif "severance" in q_lower or "redundancy" in q_lower or "unsatisfactory" in q_lower:
+            elif (
+                "severance" in q_lower
+                or "redundancy" in q_lower
+                or "unsatisfactory" in q_lower
+            ):
                 if sep_reason == "Redundancy" or "redundancy" in q_lower:
                     completed_years = tenure_m // 12
                     severance_days = completed_years * 15
                     entitlement_value = f"1 month written notice plus {severance_days} days' pay severance (15 days' pay per completed year across {completed_years} years = {severance_days} days' pay)"
                     rule_cited = "Section 10.5.1"
                     explanation = f"{emp_name} is separated due to Redundancy with {completed_years} completed years of service ({tenure_m} months). Under Section 10.5.1, the employee is entitled to 1 month written notice plus severance pay of 15 days per completed year ({severance_days} days total)."
-                elif sep_reason == "Unsatisfactory Performance" or "unsatisfactory" in q_lower:
+                elif (
+                    sep_reason == "Unsatisfactory Performance"
+                    or "unsatisfactory" in q_lower
+                ):
                     entitlement_value = "0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay)"
                     rule_cited = "Section 10.5.2"
                     explanation = f"{emp_name} is separated due to Unsatisfactory Performance. Under Section 10.5.2, staff separated for unsatisfactory performance are not entitled to severance payments."
@@ -332,7 +365,9 @@ Final Answer: {{"entitlement_value": "<exact entitlement>", "rule_cited": "<sect
 
             elif "sick leave" in q_lower:
                 if tenure_m < 2:
-                    entitlement_value = "Ineligible (requires at least 2 consecutive months of service)"
+                    entitlement_value = (
+                        "Ineligible (requires at least 2 consecutive months of service)"
+                    )
                     rule_cited = "Section 5.3.2"
                     explanation = f"{emp_name} has only completed {tenure_m} month of service. Under Section 5.3.2, paid sick leave entitlement is strictly conditional on completing at least 2 consecutive months of service."
                 else:
@@ -346,7 +381,9 @@ Final Answer: {{"entitlement_value": "<exact entitlement>", "rule_cited": "<sect
                     rule_cited = "Section 4.4.1"
                     explanation = f"{emp_name} is currently on probation ({tenure_m} months tenure). Under Section 4.4.1, the 10% pension contribution allowance is only provided upon successful confirmation of probation."
                 else:
-                    entitlement_value = "10% of basic monthly salary pension contribution allowance"
+                    entitlement_value = (
+                        "10% of basic monthly salary pension contribution allowance"
+                    )
                     rule_cited = "Section 4.4.1"
                     explanation = f"{emp_name} is confirmed ({tenure_m} months tenure) and entitled to 10% pension contribution allowance under Section 4.4.1."
 
@@ -357,15 +394,25 @@ Final Answer: {{"entitlement_value": "<exact entitlement>", "rule_cited": "<sect
 
             else:
                 entitlement_value = "Entitlement calculated from handbook excerpts."
-                rule_cited = handbook_excerpts[0].get("section", "Section 5.0") if handbook_excerpts else "Section 5.0"
+                rule_cited = (
+                    handbook_excerpts[0].get("section", "Section 5.0")
+                    if handbook_excerpts
+                    else "Section 5.0"
+                )
                 explanation = f"Evaluated for {emp_name} based on {rule_cited}."
 
             termination_reason = "SUCCESS"
             break
 
-    if iteration >= max_iterations and termination_reason == "SUCCESS" and not entitlement_value:
+    if (
+        iteration >= max_iterations
+        and termination_reason == "SUCCESS"
+        and not entitlement_value
+    ):
         termination_reason = "BUDGET_ITERATIONS"
-        explanation = f"Terminated by MAX_ITERATIONS budget ({iteration} >= {max_iterations})."
+        explanation = (
+            f"Terminated by MAX_ITERATIONS budget ({iteration} >= {max_iterations})."
+        )
 
     elapsed_ms = (time.perf_counter() - start_time) * 1000
 
@@ -377,8 +424,10 @@ Final Answer: {{"entitlement_value": "<exact entitlement>", "rule_cited": "<sect
     elif termination_reason == "SUCCESS" and not deterministic_pass_criteria:
         passed = True
 
-    token_src = "ollama_live" if (ollama_ready and prompt_tokens > 0) else (
-        "proxy_estimate" if prompt_tokens > 0 else "unavailable"
+    token_src = (
+        "ollama_live"
+        if (ollama_ready and prompt_tokens > 0)
+        else ("proxy_estimate" if prompt_tokens > 0 else "unavailable")
     )
 
     return PolicyOutputContract(

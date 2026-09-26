@@ -23,7 +23,9 @@ def cosine(a: List[float], b: List[float]) -> float:
 class VectorStore:
     """A tiny persistent vector index: chunk metadata + embedding vectors."""
 
-    def __init__(self, sid: str, index_builder: Optional[Callable[[List[dict]], dict]] = None):
+    def __init__(
+        self, sid: str, index_builder: Optional[Callable[[List[dict]], dict]] = None
+    ):
         self.sid = sid
         self.chunks: List[dict] = []
         self.vectors: List[List[float]] = []
@@ -54,11 +56,17 @@ class VectorStore:
                 self.vectors = data["vectors"]
                 self._tfidf_index_cache = None
             except Exception:
-                logger.warning("Corrupted vector store at %s — starting fresh", self.path, exc_info=True)
+                logger.warning(
+                    "Corrupted vector store at %s — starting fresh",
+                    self.path,
+                    exc_info=True,
+                )
                 self.chunks, self.vectors = [], []
 
     def save(self) -> None:
-        self.path.write_bytes(pickle.dumps({"chunks": self.chunks, "vectors": self.vectors}))
+        self.path.write_bytes(
+            pickle.dumps({"chunks": self.chunks, "vectors": self.vectors})
+        )
 
     def add(self, chunks: List[dict], vectors: List[List[float]]) -> None:
         self.chunks.extend(chunks)
@@ -73,10 +81,13 @@ class VectorStore:
                 self._tfidf_index_cache = self._index_builder(self.chunks)
             else:
                 from backend.services.search import build_index
+
                 self._tfidf_index_cache = build_index(self.chunks)
         return self._tfidf_index_cache
 
-    def query(self, vector: List[float], top_k: int = 5, min_score: float = 0.0) -> List[dict]:
+    def query(
+        self, vector: List[float], top_k: int = 5, min_score: float = 0.0
+    ) -> List[dict]:
         scored = [(i, cosine(vector, v)) for i, v in enumerate(self.vectors)]
         scored = [(i, s) for i, s in scored if s >= min_score]
         scored.sort(key=lambda x: -x[1])
@@ -94,7 +105,9 @@ class VectorStore:
     def remove_doc(self, doc_id: str) -> int:
         """Remove all chunks + vectors for a doc. Returns how many were removed."""
         before = len(self.chunks)
-        kept = [(c, v) for c, v in zip(self.chunks, self.vectors) if c["doc_id"] != doc_id]
+        kept = [
+            (c, v) for c, v in zip(self.chunks, self.vectors) if c["doc_id"] != doc_id
+        ]
         self.chunks = [c for c, _ in kept]
         self.vectors = [v for _, v in kept]
         removed = before - len(self.chunks)

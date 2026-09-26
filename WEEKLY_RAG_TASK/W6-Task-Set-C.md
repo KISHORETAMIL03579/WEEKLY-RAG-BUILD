@@ -1,25 +1,24 @@
 <!-- Soft Suave · The AI Engineering League -->
+
 # Week 6 Practical — Task Set C
 
 ## Validate the policy-answer judge before you trust its number
 
-| | |
-|---|---|
-| Domain | HR policy |
-| Week | 6 — Evals — Measuring Whether a Change Actually Helped |
-| Module | M3 — Evals & Error Analysis · THE CORE |
-| Sat on | Week 7 · Monday |
-| Marks | 100 |
+|        |                                                        |
+| ------ | ------------------------------------------------------ |
+| Domain | HR policy                                              |
+| Week   | 6 — Evals — Measuring Whether a Change Actually Helped |
+| Module | M3 — Evals & Error Analysis · THE CORE                 |
+| Sat on | Week 7 · Monday                                        |
+| Marks  | 100                                                    |
 
 > **This is an extension of the app you already built in Week 6.** It is not a build from scratch, and it tests only this week's concepts. Bring your numbers written down.
-
 
 ---
 
 ## 1. Problem statement
 
 Your eval prints a correctness score for every answer your HR assistant gives about the handbook, and that whole number comes out of an LLM judge nobody has ever checked against a human. HR is about to sign off on self-service using that score. Prove the judge agrees with you — or find out it doesn't — and move the agreement figure with evidence.
-
 
 ---
 
@@ -31,36 +30,32 @@ Your eval prints a correctness score for every answer your HR assistant gives ab
 4. Run the judge, compute agreement with your labels as a percentage, then iterate the judge prompt using 2 of its OWN disagreements as few-shot examples and re-measure; report agreement before -> after as two numbers.
 5. File a one-sentence written prediction of what the iteration would fix BEFORE iterating, then report where the prediction was wrong.
 
-
 ---
 
 ## 3. Expected output
 
 labels_25.json (committed first), judge_v1.txt and judge_v2.txt, prediction.txt, the one-command eval table (pass rate by mode), agreement_before and agreement_after as numbers, and a short note on 2 disagreements naming who was right.
 
-
 ---
 
 ## 4. Evaluation rubric
 
-| Criterion | Points |
-|---|---|
-| Blind protocol: 25 hand labels exist and provably predate the judge run (commit order / timestamps). No ordering evidence = 0 here, regardless of the numbers. | 25 |
-| Agreement measured and reported before -> after, with the iteration driven by the judge's own disagreements as examples | 30 |
-| Assertion/judge split: assertable criteria named, implemented as assertions, and removed from the judge prompt | 20 |
-| Disagreement analysis: 2+ disagreements read, a verdict on who was right, and the prediction honestly scored against the outcome | 15 |
-| Eval still runs in one command over 25+ mode-tagged cases including real regression cases | 10 |
-| **Total** | **100** |
+| Criterion                                                                                                                                                      | Points  |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| Blind protocol: 25 hand labels exist and provably predate the judge run (commit order / timestamps). No ordering evidence = 0 here, regardless of the numbers. | 25      |
+| Agreement measured and reported before -> after, with the iteration driven by the judge's own disagreements as examples                                        | 30      |
+| Assertion/judge split: assertable criteria named, implemented as assertions, and removed from the judge prompt                                                 | 20      |
+| Disagreement analysis: 2+ disagreements read, a verdict on who was right, and the prediction honestly scored against the outcome                               | 15      |
+| Eval still runs in one command over 25+ mode-tagged cases including real regression cases                                                                      | 10      |
+| **Total**                                                                                                                                                      | **100** |
 
-*Zero points for polish, UI, or "it works". This mirrors the House rubric: failure-finding and a number that moved are what score.*
-
+_Zero points for polish, UI, or "it works". This mirrors the House rubric: failure-finding and a number that moved are what score._
 
 ---
 
 ## 5. Bonus challenge
 
 Add RAGAS faithfulness and context precision to the handbook-backed cases. Find one answer that scores 0.9+ faithfulness while citing a superseded handbook version's section — confidently, faithfully wrong — and show the two numbers plus why the overall average hides it.
-
 
 ---
 
@@ -72,7 +67,6 @@ Add RAGAS faithfulness and context precision to the handbook-backed cases. Find 
 - [ ] Terminal output of the single eval command showing pass rate by mode
 - [ ] agreement_before / agreement_after, plus assertion count vs judged criteria count
 
-
 ---
 
 ## 7. Common mistakes
@@ -83,7 +77,6 @@ Add RAGAS faithfulness and context precision to the handbook-backed cases. Find 
 - **Scoring policy correctness 1-10 and calling within-1 a match; the model cannot tell a 6 from a 7 and neither can you, and the tolerance inflates agreement into meaninglessness.**
 - **Reporting one overall pass rate; the average will happily hide a regression on the eligibility/tenure mode while the easy leave-entitlement mode carries the number.**
 
-
 ---
 
-*Set C of 6. Sets A–F are equivalent in difficulty and objectives; only the domain differs.*
+_Set C of 6. Sets A–F are equivalent in difficulty and objectives; only the domain differs._

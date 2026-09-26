@@ -11,6 +11,7 @@ and are explicitly marked as such (not real Ollama token counts).
 
 DO NOT fabricate latency, token counts, or pass results.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,8 +27,12 @@ from backend.services.policy_workflow import run_workflow_case
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="HR Policy Fixed Workflow Benchmark Runner")
-    parser.add_argument("--top-k", type=int, default=5, help="Top-K handbook retrieval (default: 5)")
+    parser = argparse.ArgumentParser(
+        description="HR Policy Fixed Workflow Benchmark Runner"
+    )
+    parser.add_argument(
+        "--top-k", type=int, default=5, help="Top-K handbook retrieval (default: 5)"
+    )
     parser.add_argument(
         "--cases",
         type=str,
@@ -47,8 +52,12 @@ def main() -> None:
     print("=" * 80)
     print("HR POLICY WORKFLOW BENCHMARK: Fixed 3-Step Deterministic Workflow")
     print("=" * 80)
-    print(f"  Configuration: top_k={args.top_k}  temperature=N/A (no LLM)  model=N/A (deterministic)")
-    print(f"  Token accounting: proxy estimates (no Ollama call — fixed-path synthesis)")
+    print(
+        f"  Configuration: top_k={args.top_k}  temperature=N/A (no LLM)  model=N/A (deterministic)"
+    )
+    print(
+        f"  Token accounting: proxy estimates (no Ollama call — fixed-path synthesis)"
+    )
     print(f"  Cases loaded: {len(cases)} from {cases_file}")
     print("=" * 80)
 
@@ -98,11 +107,17 @@ def main() -> None:
     print(f"  Pass Rate      : {passed}/{n} = {(passed/n*100):.1f}%")
     print(f"  p50 Latency    : {p50:.3f} ms  (real time.perf_counter())")
     print(f"  p95 Latency    : {p95:.3f} ms")
-    print(f"  Total Tokens   : {total_tokens:,} (proxy estimates — no LLM call in workflow)")
-    print(f"  Cost / Question: ${cost_per_q:.6f}  (token-cost proxy rate: $0.50/1M tokens)")
+    print(
+        f"  Total Tokens   : {total_tokens:,} (proxy estimates — no LLM call in workflow)"
+    )
+    print(
+        f"  Cost / Question: ${cost_per_q:.6f}  (token-cost proxy rate: $0.50/1M tokens)"
+    )
     print(f"  Total Wall Time: {overall_elapsed_ms:.1f} ms")
     print("=" * 80)
-    print("\nWorkflow run complete. Note: token counts are fixed-path proxy estimates, not Ollama metadata.")
+    print(
+        "\nWorkflow run complete. Note: token counts are fixed-path proxy estimates, not Ollama metadata."
+    )
 
 
 if __name__ == "__main__":

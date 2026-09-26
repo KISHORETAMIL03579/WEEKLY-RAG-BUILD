@@ -224,10 +224,7 @@
           "top_k": 4,
           "trace_id": "64d8a643-69d6-4afb-9f2b-58f62ed4cef8",
           "chunk_count": 2,
-          "chunk_ids": [
-            "6265e267::c302",
-            "6265e267::c72"
-          ],
+          "chunk_ids": ["6265e267::c302", "6265e267::c72"],
           "answer": "I don't know.",
           "latency_ms": 6638.3,
           "observation": "Baseline run with K=4, T=0.0. Retrieved 2 chunks."
@@ -237,10 +234,7 @@
           "top_k": 9,
           "trace_id": "e8dd8884-aeeb-40e5-ae15-51acc407db8e",
           "chunk_count": 2,
-          "chunk_ids": [
-            "24b6a333::c302",
-            "24b6a333::c72"
-          ],
+          "chunk_ids": ["24b6a333::c302", "24b6a333::c72"],
           "answer": "I don't know.",
           "latency_ms": 47001.6,
           "observation": "K changed 4->9 (chunks: 2->2, +2 new); T changed 0.0->0.5; Answer content identical"
@@ -250,10 +244,7 @@
           "top_k": 10,
           "trace_id": "34a545d6-51d3-46c8-854f-9edf7f91ad5a",
           "chunk_count": 2,
-          "chunk_ids": [
-            "6265e267::c302",
-            "6265e267::c72"
-          ],
+          "chunk_ids": ["6265e267::c302", "6265e267::c72"],
           "answer": "I don't know.",
           "latency_ms": 7869.3,
           "observation": "K changed 4->10 (chunks: 2->2, +0 new); T changed 0.0->0.7; Answer content identical"
@@ -1002,11 +993,7 @@
           "top_k": 4,
           "trace_id": "1666a48b-f054-4263-adea-bf26e3e3283c",
           "chunk_count": 3,
-          "chunk_ids": [
-            "6265e267::c119",
-            "6265e267::c120",
-            "6265e267::c121"
-          ],
+          "chunk_ids": ["6265e267::c119", "6265e267::c120", "6265e267::c121"],
           "answer": "The standard daily working hours are 9.00 am to 5:30 pm, Monday to Friday [1]. Staff members are also required to take one hour for lunch [1].",
           "latency_ms": 16681.7,
           "observation": "Baseline run with K=4, T=0.0. Retrieved 3 chunks."
@@ -1016,11 +1003,7 @@
           "top_k": 10,
           "trace_id": "12371cb1-12e6-4a85-8cc9-813a09b5d0b7",
           "chunk_count": 3,
-          "chunk_ids": [
-            "6265e267::c119",
-            "6265e267::c120",
-            "6265e267::c121"
-          ],
+          "chunk_ids": ["6265e267::c119", "6265e267::c120", "6265e267::c121"],
           "answer": "The standard daily working hours are 9:00 am to 5:30 pm, with one hour for lunch. [1]",
           "latency_ms": 12072.2,
           "observation": "K changed 4->10 (chunks: 3->3, +0 new); T changed 0.0->0.7; Answer rephrased/adapted"

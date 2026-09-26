@@ -82,7 +82,9 @@ def create_app() -> FastAPI:
         if index_html.exists():
             return FileResponse(str(index_html))
         return JSONResponse(
-            {"message": "React frontend not built. Run 'npm run build' in the frontend/ directory."},
+            {
+                "message": "React frontend not built. Run 'npm run build' in the frontend/ directory."
+            },
             status_code=503,
         )
 
@@ -93,12 +95,21 @@ def create_app() -> FastAPI:
             FRONTEND_DIST / "rag.svg",
         ):
             if path.exists():
-                media_type = "image/x-icon" if path.suffix == ".ico" else "image/svg+xml"
+                media_type = (
+                    "image/x-icon" if path.suffix == ".ico" else "image/svg+xml"
+                )
                 return FileResponse(path, media_type=media_type)
         return JSONResponse({"error": "Favicon not found"}, status_code=404)
 
     # Register all modular routers
-    for r in (chat_router, ingestion_router, documents_router, traces_router, evaluation_router, policy_router):
+    for r in (
+        chat_router,
+        ingestion_router,
+        documents_router,
+        traces_router,
+        evaluation_router,
+        policy_router,
+    ):
         app.include_router(r)
 
     # Startup event to load orphans

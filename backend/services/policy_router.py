@@ -19,7 +19,6 @@ import uuid
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-
 # ── Complexity levels ──────────────────────────────────────────────────────────
 COMPLEXITY_SIMPLE = "SIMPLE"
 COMPLEXITY_MODERATE = "MODERATE"
@@ -33,11 +32,12 @@ MODE_AGENT = "agent"
 @dataclass
 class RoutingDecision:
     """Structured routing decision returned to the caller and the UI."""
-    mode: str                       # "workflow" | "agent"
-    complexity: str                 # "SIMPLE" | "MODERATE" | "COMPLEX"
-    reason: str                     # Human-readable explanation
-    requires_agent: bool            # Convenience boolean
-    routing_ms: float = 0.0         # Time taken to make the routing decision
+
+    mode: str  # "workflow" | "agent"
+    complexity: str  # "SIMPLE" | "MODERATE" | "COMPLEX"
+    reason: str  # Human-readable explanation
+    requires_agent: bool  # Convenience boolean
+    routing_ms: float = 0.0  # Time taken to make the routing decision
     routing_id: str = field(default_factory=lambda: f"route_{uuid.uuid4().hex[:8]}")
     matched_signals: List[str] = field(default_factory=list)  # Which rules triggered
 
@@ -59,61 +59,127 @@ class RoutingDecision:
 
 _AGENT_PATTERNS: List[tuple[str, str]] = [
     # Statutory vs organisational comparison: requires both handbook + jurisdiction tool
-    (r"\bcompare\b.*\bstatutory\b|\bstatutory\b.*\bcompare\b", "Cross-comparison of statutory and organisational rules requires dynamic multi-tool execution"),
-    (r"\boverride\b.*\bpolicy\b|\bpolicy\b.*\boverride\b", "Determining whether local law overrides policy requires dynamic tool discovery"),
-    (r"\bstatutory\b.*\bminimum\b|\bminimum\b.*\bstatutory\b", "Statutory minimum comparison requires jurisdiction lookup after employee discovery"),
+    (
+        r"\bcompare\b.*\bstatutory\b|\bstatutory\b.*\bcompare\b",
+        "Cross-comparison of statutory and organisational rules requires dynamic multi-tool execution",
+    ),
+    (
+        r"\boverride\b.*\bpolicy\b|\bpolicy\b.*\boverride\b",
+        "Determining whether local law overrides policy requires dynamic tool discovery",
+    ),
+    (
+        r"\bstatutory\b.*\bminimum\b|\bminimum\b.*\bstatutory\b",
+        "Statutory minimum comparison requires jurisdiction lookup after employee discovery",
+    ),
     # Cross-category questions: e.g., "leave AND pension AND notice"
-    (r"\band\b.*\band\b", "Question crosses multiple policy domains requiring dynamic exploration"),
+    (
+        r"\band\b.*\band\b",
+        "Question crosses multiple policy domains requiring dynamic exploration",
+    ),
     # Conditional: "if she resigns AND is on probation AND has worked less than..."
-    (r"\bif\b.*\band\b.*\bor\b|\bif\b.*\bor\b.*\band\b", "Complex conditional branching cannot be predetermined"),
+    (
+        r"\bif\b.*\band\b.*\bor\b|\bif\b.*\bor\b.*\band\b",
+        "Complex conditional branching cannot be predetermined",
+    ),
     # Discovery-dependent: next step depends on whether employee qualifies
-    (r"\beligible\b.*\band\b.*\bif\b|\bif\b.*\beligible\b", "Eligibility combined with conditional follow-up requires agent discovery"),
+    (
+        r"\beligible\b.*\band\b.*\bif\b|\bif\b.*\beligible\b",
+        "Eligibility combined with conditional follow-up requires agent discovery",
+    ),
     # Comparison between two employees
-    (r"\bemp\d+\b.*\bemp\d+\b", "Comparison between two employees requires independent lookup paths"),
+    (
+        r"\bemp\d+\b.*\bemp\d+\b",
+        "Comparison between two employees requires independent lookup paths",
+    ),
     # Open-ended investigation
-    (r"\bwhat all\b|\bwhat are all\b|\blist all\b|\blist every\b", "Open-ended enumeration requires agent to discover scope dynamically"),
+    (
+        r"\bwhat all\b|\bwhat are all\b|\blist all\b|\blist every\b",
+        "Open-ended enumeration requires agent to discover scope dynamically",
+    ),
     # Scenario with unknown employee attribute
-    (r"\bdepending on\b|\bsubject to\b.*\bdiscovery\b", "Path depends on runtime discovery"),
+    (
+        r"\bdepending on\b|\bsubject to\b.*\bdiscovery\b",
+        "Path depends on runtime discovery",
+    ),
     # Jurisdiction-specific question that must first find the employee's duty station
-    (r"\bjurisdiction\b.*\bapply\b|\bapply\b.*\bjurisdiction\b|\bwhich jurisdiction\b", "Applicable jurisdiction cannot be determined without employee lookup first"),
+    (
+        r"\bjurisdiction\b.*\bapply\b|\bapply\b.*\bjurisdiction\b|\bwhich jurisdiction\b",
+        "Applicable jurisdiction cannot be determined without employee lookup first",
+    ),
     # Questions that combine notice period with severance and jurisdiction
-    (r"\bnotice\b.*\bseverance\b.*\bjurisdiction\b|\bseverance\b.*\bnotice\b.*\bjurisdiction\b", "Notice + severance + jurisdiction requires dynamic 3-tool chain"),
+    (
+        r"\bnotice\b.*\bseverance\b.*\bjurisdiction\b|\bseverance\b.*\bnotice\b.*\bjurisdiction\b",
+        "Notice + severance + jurisdiction requires dynamic 3-tool chain",
+    ),
 ]
 
 # ── WORKFLOW-matching signals (definitive single-path questions) ────────────────
 _WORKFLOW_PATTERNS: List[tuple[str, str]] = [
-    (r"\bannual leave entitlement\b|\bleave entitlement\b|\bmonthly accrual\b", "Annual leave entitlement follows known employee→handbook sequence"),
-    (r"\bcarry.?forward\b|\bcarryover\b", "Carry-forward cap is a single policy lookup"),
-    (r"\bresignation notice\b|\bnotice.*resign\b|\bresign.*notice\b", "Resignation notice requires employee status then handbook lookup — deterministic"),
-    (r"\bsick leave\b.*\baccrual\b|\baccrual\b.*\bsick leave\b", "Sick leave accrual rate is a single policy lookup"),
-    (r"\bsick leave\b.*\beligib\b|\beligib\b.*\bsick leave\b", "Sick leave eligibility is determined by tenure threshold — deterministic"),
-    (r"\bpension\b.*\bcontribution\b|\bcontribution\b.*\bpension\b", "Pension contribution lookup is a single employee-status check"),
-    (r"\bseverance\b.*\bredundan\b|\bredundan\b.*\bseverance\b", "Redundancy severance follows fixed formula — deterministic"),
-    (r"\bunsatisfactory performance\b|\bperformance.*terminat\b", "Unsatisfactory performance severance is a fixed policy rule"),
-    (r"\bcommut\b.*\bann.*leave\b|\bann.*leave\b.*\bcommut\b", "Leave commutation cap is a single policy lookup"),
-    (r"\bpension.*allowance\b|\ballowance.*pension\b", "Pension allowance eligibility is a single status check"),
+    (
+        r"\bannual leave entitlement\b|\bleave entitlement\b|\bmonthly accrual\b",
+        "Annual leave entitlement follows known employee→handbook sequence",
+    ),
+    (
+        r"\bcarry.?forward\b|\bcarryover\b",
+        "Carry-forward cap is a single policy lookup",
+    ),
+    (
+        r"\bresignation notice\b|\bnotice.*resign\b|\bresign.*notice\b",
+        "Resignation notice requires employee status then handbook lookup — deterministic",
+    ),
+    (
+        r"\bsick leave\b.*\baccrual\b|\baccrual\b.*\bsick leave\b",
+        "Sick leave accrual rate is a single policy lookup",
+    ),
+    (
+        r"\bsick leave\b.*\beligib\b|\beligib\b.*\bsick leave\b",
+        "Sick leave eligibility is determined by tenure threshold — deterministic",
+    ),
+    (
+        r"\bpension\b.*\bcontribution\b|\bcontribution\b.*\bpension\b",
+        "Pension contribution lookup is a single employee-status check",
+    ),
+    (
+        r"\bseverance\b.*\bredundan\b|\bredundan\b.*\bseverance\b",
+        "Redundancy severance follows fixed formula — deterministic",
+    ),
+    (
+        r"\bunsatisfactory performance\b|\bperformance.*terminat\b",
+        "Unsatisfactory performance severance is a fixed policy rule",
+    ),
+    (
+        r"\bcommut\b.*\bann.*leave\b|\bann.*leave\b.*\bcommut\b",
+        "Leave commutation cap is a single policy lookup",
+    ),
+    (
+        r"\bpension.*allowance\b|\ballowance.*pension\b",
+        "Pension allowance eligibility is a single status check",
+    ),
     (r"\bnotice period\b", "Notice period is deterministic based on employment status"),
-    (r"\bleave balance\b|\bannual leave balance\b", "Leave balance is a direct employee record lookup"),
+    (
+        r"\bleave balance\b|\bannual leave balance\b",
+        "Leave balance is a direct employee record lookup",
+    ),
 ]
 
 # ── COMPLEXITY classification ──────────────────────────────────────────────────
 
 _COMPLEX_SIGNALS: List[str] = [
-    r"\band\b.*\band\b",           # Multiple AND conditions
-    r"\bif\b.*\bthen\b",           # Conditional logic
-    r"\bcompare\b",                # Comparison
-    r"\bversus\b|\bvs\.?\b",      # Versus comparison
-    r"\bstatutory\b",              # Statutory law reference
-    r"\bjurisdiction\b",           # Jurisdiction-specific
-    r"\bmultiple\b",               # Multiple items
+    r"\band\b.*\band\b",  # Multiple AND conditions
+    r"\bif\b.*\bthen\b",  # Conditional logic
+    r"\bcompare\b",  # Comparison
+    r"\bversus\b|\bvs\.?\b",  # Versus comparison
+    r"\bstatutory\b",  # Statutory law reference
+    r"\bjurisdiction\b",  # Jurisdiction-specific
+    r"\bmultiple\b",  # Multiple items
 ]
 
 _MODERATE_SIGNALS: List[str] = [
-    r"\bseverance\b",              # Involves calculation
-    r"\bnotice.*resign\b",         # Two-step lookup
-    r"\beligib\b",                 # Eligibility check
-    r"\bpension\b",                # Pension involves status branch
-    r"\bcommut\b",                 # Commutation involves separation check
+    r"\bseverance\b",  # Involves calculation
+    r"\bnotice.*resign\b",  # Two-step lookup
+    r"\beligib\b",  # Eligibility check
+    r"\bpension\b",  # Pension involves status branch
+    r"\bcommut\b",  # Commutation involves separation check
 ]
 
 

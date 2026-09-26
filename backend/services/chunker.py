@@ -39,11 +39,13 @@ def parse_blocks(text: str, base_section: str = "Overview") -> List[dict]:
             return
         words = len(joined.split())
         if block_type in ("code", "table") or words > 4:
-            blocks.append({
-                "type": block_type,
-                "section": current_section,
-                "text": joined,
-            })
+            blocks.append(
+                {
+                    "type": block_type,
+                    "section": current_section,
+                    "text": joined,
+                }
+            )
         buffer.clear()
 
     for line in lines:
@@ -107,8 +109,25 @@ def parse_blocks(text: str, base_section: str = "Overview") -> List[dict]:
 
 
 SENTENCE_ABBREV = {
-    "e.g", "i.e", "etc", "vs", "dr", "mr", "mrs", "ms", "prof", "st",
-    "inc", "ltd", "co", "no", "vol", "fig", "al", "et", "approx",
+    "e.g",
+    "i.e",
+    "etc",
+    "vs",
+    "dr",
+    "mr",
+    "mrs",
+    "ms",
+    "prof",
+    "st",
+    "inc",
+    "ltd",
+    "co",
+    "no",
+    "vol",
+    "fig",
+    "al",
+    "et",
+    "approx",
 }
 
 _ABBREV_RE = re.compile(
@@ -119,7 +138,9 @@ _ABBREV_RE = re.compile(
 def split_sentences(text: str) -> List[str]:
     """Split text into sentences without breaking on common abbreviations or decimals."""
     protected = _ABBREV_RE.sub(lambda m: m.group(0).replace(".", "\x00"), text)
-    protected = re.sub(r"\b(\d+)\.(\d+)\b", lambda m: m.group(1) + "\x00" + m.group(2), protected)
+    protected = re.sub(
+        r"\b(\d+)\.(\d+)\b", lambda m: m.group(1) + "\x00" + m.group(2), protected
+    )
 
     parts = re.split(r"(?<=[.!?])\s+(?=[A-Z\u4e00-\u9fff])|(?<=[.!?])$", protected)
 
@@ -224,7 +245,9 @@ def structured_chunk(doc_info: dict, pages: List[dict]) -> List[dict]:
     return chunks
 
 
-def fixed_chunk(doc_info: dict, pages: List[dict], chunk_size: int, overlap_ratio: float = 0.2) -> List[dict]:
+def fixed_chunk(
+    doc_info: dict, pages: List[dict], chunk_size: int, overlap_ratio: float = 0.2
+) -> List[dict]:
     """Split document text into overlapping fixed-size word chunks."""
     overlap = max(1, int(chunk_size * overlap_ratio))
     step = max(1, chunk_size - overlap)
@@ -238,17 +261,19 @@ def fixed_chunk(doc_info: dict, pages: List[dict], chunk_size: int, overlap_rati
             end = min(i + chunk_size, len(words))
             text = " ".join(words[i:end])
             if text.strip():
-                chunks.append({
-                    "id": f"{doc_info['doc_id']}::p{page_data['page']}::c{chunk_index}",
-                    "doc_id": doc_info["doc_id"],
-                    "filename": doc_info["filename"],
-                    "page": page_data["page"],
-                    "section": None,
-                    "block_type": "paragraph",
-                    "text": text,
-                    "chunk_index": chunk_index,
-                    "method": f"{chunk_size}",
-                })
+                chunks.append(
+                    {
+                        "id": f"{doc_info['doc_id']}::p{page_data['page']}::c{chunk_index}",
+                        "doc_id": doc_info["doc_id"],
+                        "filename": doc_info["filename"],
+                        "page": page_data["page"],
+                        "section": None,
+                        "block_type": "paragraph",
+                        "text": text,
+                        "chunk_index": chunk_index,
+                        "method": f"{chunk_size}",
+                    }
+                )
                 chunk_index += 1
             i += step
 
@@ -271,4 +296,3 @@ _chunk_text_structured = structured_chunk
 _chunk_text_fixed = fixed_chunk
 _extract_blocks = extract_blocks
 _split_sentences = split_sentences
-

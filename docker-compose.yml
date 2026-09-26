@@ -28,7 +28,11 @@ services:
       - qdrant_data:/qdrant/storage
     healthcheck:
       # qdrant/qdrant:v1.13.4 minimal base does not ship with curl; test readiness via native bash socket probe
-      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333 && echo -e \"GET /readyz HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n\" >&3 && cat <&3 | grep -q \"200 OK\"' || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333 && echo -e \"GET /readyz HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n\" >&3 && cat <&3 | grep -q \"200 OK\"' || exit 1",
+        ]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -191,7 +195,11 @@ services:
       ollama_init:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:5000/healthz\")' || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c ''import urllib.request; urllib.request.urlopen("http://localhost:5000/healthz")'' || exit 1',
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
