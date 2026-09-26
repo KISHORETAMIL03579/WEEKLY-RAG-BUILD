@@ -276,47 +276,21 @@ Because the app is now FastAPI, the whole JSON API is self-documenting: **Swagge
 
 ---
 
-## 4. Deep Dive: Week 6 (Evaluation Suite) & Week 7 (Policy Routing & ReAct Agent)
+## 4. Deep Dive: Evaluation Suite & Metrics (`/eval`)
 
-> For full sequence diagrams, tool data contracts, budget definitions, and class diagrams, see **[WORKFLOW_ARCHITECTURE.md](WORKFLOW_ARCHITECTURE.md)**.
+### 4.1 Failure Mode Categorization
+- **`Success`**: Right document/section retrieved in top-K, correct answer synthesized.
+- **`Retrieval Failure`**: Target ground-truth document was missing from top-K candidates (`Hit-Rate@K == 0`).
+- **`Generation Failure`**: Right document retrieved, but the chat model failed to synthesize a correct answer.
 
-### 4.1 Week 6: RAG Evaluation & LLM-as-a-Judge
-- **Benchmark Suite**: 25 frozen test cases (`week6/eval_cases_25.json`) with human ground-truth labels (`week6/labels_25.json`).
-- **5 Deterministic Assertions**:
-  1. `assert_numeric_value`: Verifies exact numerical policy limits (e.g. `24` days annual leave, `5` days carryover).
-  2. `assert_refusal_behavior`: Validates that out-of-scope or unanswerable queries return honest refusals.
-  3. `assert_section_present`: Ensures citations contain valid section identifiers (e.g. `Section 5.2.1`).
-  4. `assert_section_resolves`: Checks that cited sections exist in the indexed handbook.
-  5. `assert_version_present`: Confirms prompt and policy manual version tracking.
-- **LLM Judges (V1 vs V2)**: Evaluates semantic accuracy, faithfulness, and hallucination rates with strict JSON output parsing.
-- **Error Taxonomy**: Root-cause clustering across Retrieval Failure, Generator Omission, Out-of-Domain, and Extraction Failure.
-
-### 4.2 Week 7: Production HR Policy Search & Auto-Routing
-- **Linguistic Complexity Router (`backend/services/policy_router.py`)**:
-  - Automatically classifies questions as `SIMPLE`, `MODERATE`, or `COMPLEX`.
-  - Routes `SIMPLE`/`MODERATE` deterministic queries to **Normal Workflow**.
-  - Routes `COMPLEX`, cross-jurisdiction, or multi-step queries to **ReAct Agent Mode**.
-- **Dynamic ReAct Policy Agent (`backend/services/policy_agent.py`)**:
-  - Implements the Thought $\to$ Action $\to$ Observation loop over 3 canonical policy tools:
-    1. `get_employee_record(employee_id)`: Tenure, status (Probation/Confirmed), duty station, leave balance.
-    2. `search_handbook(query, top_k)`: Verified semantic search across `HRPolicy.pdf` clauses.
-    3. `get_jurisdiction_rules(jurisdiction, policy_category)`: Statutory minimums and labor laws for Kenya, Ireland, Côte d'Ivoire, Rwanda, and Global.
-- **4 Strict Resource Budgets**:
-  - `MAX_ITERATIONS = 5`
-  - `MAX_TOKENS = 4,000`
-  - `MAX_COST = $0.05` (`$2.00 / 1M` tokens)
-  - `MAX_WALL_CLOCK_SECONDS = 30.0s`
-- **Transient Retry Engine (`MAX_RETRIES = 2`)**:
-  - Retries transient network/model errors up to 3 total attempts while preserving execution mode (Agent retries as Agent).
-  - Accumulates total tokens, latency, and cost across all attempts in `retry_history`.
-  - Deterministically terminates non-retryable budget exhaustion to prevent runaway loops.
-- **Real Provenance & Telemetry**:
-  - Zero fabricated metrics. Live Ollama token counts (`prompt_eval_count`, `eval_count`), high-resolution wall-clock timer, and unique `run_id`.
+### 4.2 Quantitative Evaluation Metrics
+- **`Hit-Rate@K`** (e.g. `Hit-Rate@3`): Percentage of test questions where the correct document appeared in the top-K retrieved candidates.
+- **`MRR` (Mean Reciprocal Rank)**: Measures average reciprocal rank ($1/\text{rank}$) across all test queries.
+- **`Recall@K`**: Ratio of expected section coverage.
 
 ---
 
 ## 5. Backend API Endpoints Architecture
-
 
 | HTTP Method | Route | Description |
 | :--- | :--- | :--- |

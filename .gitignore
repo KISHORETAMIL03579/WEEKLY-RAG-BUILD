@@ -3,7 +3,7 @@
 .env.*
 !.env.example
 
-# Python bytecode & caches
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -39,9 +39,11 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
-# Application runtime storage & logs
+# Application runtime storage
 uploads/
 vectorstore/
+uploads/
+__pycache__/
 *.log
 server.log
 server.err.log
@@ -61,19 +63,12 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Operating System & Office Temporary Lock Files
-.DS_Store
-Thumbs.db
-desktop.ini
-ehthumbs.db
-~$*
-~$*.docx
-~$*.xlsx
-~$*.pptx
-*.tmp
-
-# IDE & Editor swap/temporary files
+# IDE & Editor files
+.vscode/
 .idea/
 *.swp
 *.swo
 *~
+.DS_Store
+Thumbs.db
+frontend/dist/
