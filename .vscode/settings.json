@@ -25,6 +25,7 @@
     "**/node_modules/**": true,
     "**/__pycache__/**": true,
     "**/.pytest_cache/**": true
-  }
+  },
+  "editor.linkedEditing": true
 }
 
