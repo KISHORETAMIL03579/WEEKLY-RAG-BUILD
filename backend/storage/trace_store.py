@@ -10,6 +10,7 @@ import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
+from filelock import FileLock
 
 from backend.config import BASE_DIR, TRACE_LOG_PATH, logger
 
@@ -133,8 +134,9 @@ class TraceStore:
 
         line = json.dumps(record, ensure_ascii=False)
         with self._lock:
-            with self.path.open("a", encoding="utf-8") as f:
-                f.write(line + "\n")
+            with FileLock(str(self.path) + ".lock", timeout=10):
+                with self.path.open("a", encoding="utf-8") as f:
+                    f.write(line + "\n")
         return record["trace_id"]
 
     def all(self) -> List[dict]:
@@ -142,21 +144,22 @@ class TraceStore:
         if not self.path.exists():
             return []
         out = []
-        with self.path.open("r", encoding="utf-8") as f:
-            for line_no, line in enumerate(f, 1):
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    out.append(json.loads(line))
-                except json.JSONDecodeError as err:
-                    logger.warning(
-                        "Skipping corrupted trace line %d in %s: %s (Error: %s)",
-                        line_no,
-                        self.path,
-                        line[:60],
-                        err,
-                    )
+        with self._lock, FileLock(str(self.path) + ".lock", timeout=10):
+            with self.path.open("r", encoding="utf-8") as f:
+                for line_no, line in enumerate(f, 1):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        out.append(json.loads(line))
+                    except json.JSONDecodeError as err:
+                        logger.warning(
+                            "Skipping corrupted trace line %d in %s: %s (Error: %s)",
+                            line_no,
+                            self.path,
+                            line[:60],
+                            err,
+                        )
         return out
 
     def all_ids(self) -> List[str]:

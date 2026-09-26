@@ -4,16 +4,26 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import statistics
 import threading
 import time
 import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from backend.config import BASE_DIR, logger
+from backend.config import BASE_DIR, OLLAMA_CHAT_MODEL, logger
 from backend.schemas.policy import PolicyOutputContract, TOKEN_COST_PROXY_RATE
 from backend.services.policy_agent import run_agent_case
 from backend.services.policy_workflow import run_workflow_case
+from backend.errors import ConflictError
+from backend.storage.shared_state import (
+    ActiveSharedRunError,
+    create_background_run,
+    get_active_background_run_id,
+    get_background_run,
+    request_background_run_cancellation,
+    save_background_run,
+)
 
 logger = logging.getLogger("ask_my_docs.policy_benchmark_runner")
 
@@ -27,7 +37,7 @@ class PolicyBenchmarkRunState:
         cases: List[Dict[str, Any]],
         top_k: int = 5,
         temperature: float = 0.3,
-        model: Optional[str] = "llama3.1:8b",
+        model: Optional[str] = OLLAMA_CHAT_MODEL,
     ):
         self.run_id = run_id
         self.top_k = top_k
@@ -97,7 +107,7 @@ class PolicyBenchmarkRunState:
         with self.lock:
             elapsed = (
                 time.time() - self.start_time
-                if self.status == "RUNNING"
+                if self.status in ("RUNNING", "CANCELLING")
                 else self.elapsed_seconds
             )
             progress_pct = (
@@ -121,12 +131,60 @@ class PolicyBenchmarkRunState:
                 "agent_completed_count": self.agent_completed_count,
                 "workflow_completed_count": self.workflow_completed_count,
                 "elapsed_seconds": round(elapsed, 1),
+                "cancellation_requested": self.cancellation_requested,
                 "cases_status": [dict(c) for c in self.cases_status],
                 "summary": self.summary,
                 "error_message": self.error_message,
                 "agent_results": [r.model_dump() for r in self.raw_agent_results],
                 "workflow_results": [r.model_dump() for r in self.raw_workflow_results],
             }
+
+    @classmethod
+    def from_snapshot(cls, snapshot: Dict[str, Any]) -> PolicyBenchmarkRunState:
+        case_statuses = snapshot.get("cases_status", [])
+        cases = [
+            {
+                "case_id": case.get("case_id", ""),
+                "employee_id": case.get("employee_id", ""),
+                "question": case.get("question", ""),
+                "expected_value": case.get("ground_truth", ""),
+                "source_section": case.get("source_section", ""),
+                "deterministic_pass_criteria": case.get("pass_criteria", []),
+            }
+            for case in case_statuses
+        ]
+        run = cls(
+            run_id=snapshot["run_id"],
+            cases=cases,
+            top_k=snapshot.get("top_k", 5),
+            temperature=snapshot.get("temperature", 0.3),
+            model=snapshot.get("model"),
+        )
+        with run.lock:
+            run.status = snapshot.get("status", "ERROR")
+            run.total_cases = snapshot.get("total_cases", len(cases))
+            run.completed_cases = snapshot.get("completed_cases", 0)
+            run.current_case_id = snapshot.get("current_case_id")
+            run.current_question = snapshot.get("current_question")
+            run.current_agent_stage = snapshot.get("current_agent_stage")
+            run.current_workflow_stage = snapshot.get("current_workflow_stage")
+            run.agent_completed_count = snapshot.get("agent_completed_count", 0)
+            run.workflow_completed_count = snapshot.get("workflow_completed_count", 0)
+            run.elapsed_seconds = snapshot.get("elapsed_seconds", 0.0)
+            run.start_time = time.time() - run.elapsed_seconds
+            run.cancellation_requested = snapshot.get("cancellation_requested", False)
+            run.error_message = snapshot.get("error_message")
+            run.cases_status = [dict(case) for case in case_statuses]
+            run.summary = snapshot.get("summary")
+            run.raw_agent_results = [
+                PolicyOutputContract.model_validate(result)
+                for result in snapshot.get("agent_results", [])
+            ]
+            run.raw_workflow_results = [
+                PolicyOutputContract.model_validate(result)
+                for result in snapshot.get("workflow_results", [])
+            ]
+        return run
 
 
 class PolicyBenchmarkRunManager:
@@ -148,48 +206,84 @@ class PolicyBenchmarkRunManager:
             return cls._instance
 
     def get_active_run(self) -> Optional[PolicyBenchmarkRunState]:
+        run_id = get_active_background_run_id("policy_benchmark")
         with self._manager_lock:
-            if self._active_run_id:
-                return self._runs.get(self._active_run_id)
-            return None
+            self._active_run_id = run_id
+        return self.get_run(run_id) if run_id else None
 
     def get_run(self, run_id: str) -> Optional[PolicyBenchmarkRunState]:
         with self._manager_lock:
-            return self._runs.get(run_id)
+            local_run = self._runs.get(run_id)
+        snapshot = get_background_run("policy_benchmark", run_id)
+        if snapshot is None:
+            return None
+        if snapshot.get("status") not in {"RUNNING", "CANCELLING"}:
+            restored = PolicyBenchmarkRunState.from_snapshot(snapshot)
+            with self._manager_lock:
+                self._runs[run_id] = restored
+                if self._active_run_id == run_id:
+                    self._active_run_id = None
+            return restored
+        if local_run:
+            with local_run.lock:
+                if snapshot.get("cancellation_requested"):
+                    local_run.cancellation_requested = True
+                    local_run.status = "CANCELLING"
+                if local_run.status in ("RUNNING", "CANCELLING"):
+                    return local_run
+        restored = PolicyBenchmarkRunState.from_snapshot(snapshot)
+        with self._manager_lock:
+            self._runs[run_id] = restored
+        return restored
+
+    @staticmethod
+    def _persist_run(run_state: PolicyBenchmarkRunState) -> None:
+        saved_status = save_background_run(
+            "policy_benchmark",
+            run_state.run_id,
+            run_state.status,
+            run_state.to_dict(),
+        )
+        if saved_status != run_state.status:
+            with run_state.lock:
+                run_state.status = saved_status
+                run_state.cancellation_requested = saved_status in {
+                    "CANCELLING",
+                    "CANCELLED",
+                }
+
+    def _refresh_cancellation(self, run_state: PolicyBenchmarkRunState) -> bool:
+        snapshot = get_background_run("policy_benchmark", run_state.run_id)
+        if snapshot and snapshot.get("cancellation_requested"):
+            with run_state.lock:
+                run_state.cancellation_requested = True
+                run_state.status = "CANCELLING"
+                run_state.updated_at = time.time()
+        return run_state.cancellation_requested
 
     def cancel_run(self, run_id: str) -> bool:
+        snapshot = request_background_run_cancellation("policy_benchmark", run_id)
+        if snapshot is None:
+            return False
         with self._manager_lock:
             run = self._runs.get(run_id)
-            if not run:
-                return False
-            with run.lock:
-                if run.status == "RUNNING":
+            if run:
+                with run.lock:
                     run.cancellation_requested = True
-                    run.status = "CANCELLED"
-                    run.elapsed_seconds = time.time() - run.start_time
-                    logger.info(
-                        f"Cancellation requested for policy benchmark run {run_id}"
-                    )
-                    return True
-            return False
+                    run.status = "CANCELLING"
+                    run.updated_at = time.time()
+        if run:
+            self._persist_run(run)
+        return True
 
     def start_benchmark(
         self,
         cases: List[Dict[str, Any]],
         top_k: int = 5,
         temperature: float = 0.3,
-        model: Optional[str] = "llama3.1:8b",
+        model: Optional[str] = OLLAMA_CHAT_MODEL,
     ) -> PolicyBenchmarkRunState:
         with self._manager_lock:
-            # If there's an existing running job, request cancellation
-            if self._active_run_id:
-                existing = self._runs.get(self._active_run_id)
-                if existing and existing.status == "RUNNING":
-                    with existing.lock:
-                        existing.cancellation_requested = True
-                        existing.status = "CANCELLED"
-                        existing.elapsed_seconds = time.time() - existing.start_time
-
             run_id = f"bench_{uuid.uuid4().hex[:12]}"
             run_state = PolicyBenchmarkRunState(
                 run_id=run_id,
@@ -198,17 +292,35 @@ class PolicyBenchmarkRunManager:
                 temperature=temperature,
                 model=model,
             )
+            try:
+                create_background_run(
+                    "policy_benchmark", run_id, run_state.status, run_state.to_dict()
+                )
+            except ActiveSharedRunError as exc:
+                raise ConflictError(
+                    "A policy benchmark is already active",
+                    details={"active_run_id": exc.run_id},
+                ) from exc
             self._runs[run_id] = run_state
             self._active_run_id = run_id
 
-            worker = threading.Thread(
-                target=self._execute_benchmark_worker,
-                args=(run_state, cases),
-                daemon=True,
-                name=f"PolicyBenchmark-{run_id}",
-            )
+        worker = threading.Thread(
+            target=self._execute_benchmark_worker,
+            args=(run_state, cases),
+            daemon=True,
+            name=f"PolicyBenchmark-{run_id}",
+        )
+        try:
             worker.start()
-            return run_state
+        except Exception:
+            logger.exception("Could not start policy benchmark worker %s", run_id)
+            with run_state.lock:
+                run_state.status = "ERROR"
+                run_state.error_message = "Policy benchmark worker could not be started. Check server logs for details."
+                run_state.elapsed_seconds = time.time() - run_state.start_time
+            self._persist_run(run_state)
+            raise
+        return run_state
 
     def _execute_benchmark_worker(
         self,
@@ -221,6 +333,7 @@ class PolicyBenchmarkRunManager:
         )
         try:
             for idx, c in enumerate(cases):
+                self._refresh_cancellation(run_state)
                 # Check cancellation
                 with run_state.lock:
                     if (
@@ -246,12 +359,14 @@ class PolicyBenchmarkRunManager:
                     run_state.cases_status[idx]["status"] = "RUNNING"
                     run_state.cases_status[idx]["agent_status"] = "RUNNING"
                     run_state.cases_status[idx]["workflow_status"] = "RUNNING"
+                self._persist_run(run_state)
 
                 # Define stage update callbacks
                 def make_agent_stage_cb(case_idx: int):
                     def cb(stage: str):
                         with run_state.lock:
                             run_state.current_agent_stage = stage
+                        self._persist_run(run_state)
 
                     return cb
 
@@ -259,6 +374,7 @@ class PolicyBenchmarkRunManager:
                     def cb(stage: str):
                         with run_state.lock:
                             run_state.current_workflow_stage = stage
+                        self._persist_run(run_state)
 
                     return cb
 
@@ -271,18 +387,18 @@ class PolicyBenchmarkRunManager:
                         deterministic_pass_criteria=crit,
                         top_k=run_state.top_k,
                         temperature=run_state.temperature,
-                        model=run_state.model or "llama3.1:8b",
+                        model=run_state.model or OLLAMA_CHAT_MODEL,
                         on_stage=make_agent_stage_cb(idx),
                     )
-                except Exception as a_err:
-                    logger.error(f"Agent execution failed on case {cid}: {a_err}")
+                except Exception:
+                    logger.exception("Agent execution failed on case %s", cid)
                     a_res = PolicyOutputContract(
                         case_id=cid,
                         employee_id=empid,
                         question=q,
                         entitlement_value="ERROR",
                         rule_cited="None",
-                        explanation=f"Error: {str(a_err)}",
+                        explanation="Agent execution failed unexpectedly.",
                         passed=False,
                         implementation="agent",
                         tool_calls=[],
@@ -318,8 +434,10 @@ class PolicyBenchmarkRunManager:
                     run_state.cases_status[idx]["agent_cost_usd"] = a_res.cost_usd
                     run_state.cases_status[idx]["agent_result"] = a_res.model_dump()
                     run_state.raw_agent_results.append(a_res)
+                self._persist_run(run_state)
 
                 # Check cancellation between agent and workflow
+                self._refresh_cancellation(run_state)
                 with run_state.lock:
                     if (
                         run_state.cancellation_requested
@@ -337,15 +455,15 @@ class PolicyBenchmarkRunManager:
                         top_k=run_state.top_k,
                         on_stage=make_wf_stage_cb(idx),
                     )
-                except Exception as w_err:
-                    logger.error(f"Workflow execution failed on case {cid}: {w_err}")
+                except Exception:
+                    logger.exception("Workflow execution failed on case %s", cid)
                     w_res = PolicyOutputContract(
                         case_id=cid,
                         employee_id=empid,
                         question=q,
                         entitlement_value="ERROR",
                         rule_cited="None",
-                        explanation=f"Error: {str(w_err)}",
+                        explanation="Workflow execution failed unexpectedly.",
                         passed=False,
                         implementation="workflow",
                         tool_calls=[],
@@ -399,10 +517,15 @@ class PolicyBenchmarkRunManager:
                         run_state.cases_status[idx]["status"] = (
                             "FAIL" if (a_res.passed or w_res.passed) else "FAIL"
                         )
+                self._persist_run(run_state)
 
             # Finalize summary
+            self._refresh_cancellation(run_state)
             with run_state.lock:
-                if run_state.status != "CANCELLED":
+                if run_state.cancellation_requested or run_state.status == "CANCELLING":
+                    run_state.status = "CANCELLED"
+                    run_state.elapsed_seconds = time.time() - run_state.start_time
+                else:
                     run_state.status = "COMPLETED"
                     run_state.elapsed_seconds = time.time() - run_state.start_time
                     run_state.summary = self._compute_summary(
@@ -413,19 +536,19 @@ class PolicyBenchmarkRunManager:
             # Persist results to CSV if completed
             if run_state.status == "COMPLETED":
                 self._save_results_csv(run_state)
+            self._persist_run(run_state)
 
             logger.info(
                 f"Policy benchmark run {run_state.run_id} finished with status={run_state.status}"
             )
 
-        except Exception as exc:
-            logger.exception(
-                f"Policy benchmark worker encountered unhandled error: {exc}"
-            )
+        except Exception:
+            logger.exception("Policy benchmark worker encountered an unhandled error")
             with run_state.lock:
                 run_state.status = "ERROR"
-                run_state.error_message = str(exc)
+                run_state.error_message = "Policy benchmark failed unexpectedly. Check server logs for details."
                 run_state.elapsed_seconds = time.time() - run_state.start_time
+            self._persist_run(run_state)
 
     @staticmethod
     def _compute_summary(
@@ -436,7 +559,7 @@ class PolicyBenchmarkRunManager:
             n = len(results)
             passed = sum(1 for r in results if r.passed)
             lats = sorted([r.latency_ms for r in results])
-            p50 = lats[n // 2] if n else 0.0
+            p50 = statistics.median(lats) if n else 0.0
             tot_tok = sum(r.total_tokens for r in results)
             tot_cost = sum(r.cost_usd for r in results)
             cost_per_q = tot_cost / n if n else 0.0

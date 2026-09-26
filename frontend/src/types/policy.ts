@@ -23,6 +23,12 @@ export interface PolicyQueryRequest {
   model?: string;
 }
 
+export interface OllamaModelListResponse {
+  default_model: string;
+  models: string[];
+  agent_models: string[];
+}
+
 export interface ToolCallRecord {
   step: number;
   tool_name: string;

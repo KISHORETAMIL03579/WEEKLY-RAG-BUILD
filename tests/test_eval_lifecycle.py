@@ -90,7 +90,11 @@ class TestEvaluationLifecycle(unittest.TestCase):
         self.assertEqual(res_cancel.status_code, 200)
         cancel_data = res_cancel.json()
         self.assertTrue(cancel_data.get("ok"))
-        self.assertEqual(cancel_data.get("status"), "CANCELLED")
+        self.assertIn(
+            cancel_data.get("status"), ("CANCELLING", "CANCELLED", "COMPLETED")
+        )
+        if cancel_data.get("status") == "CANCELLING":
+            self.assertTrue(cancel_data.get("cancellation_requested"))
 
     def test_05_stale_judge_run_error_contract(self):
         """Verify stale run ID (e.g. eval_6e2692a623ef) returns 404 with canonical error contract."""

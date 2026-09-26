@@ -157,6 +157,13 @@ class TestEvaluationTopKTemperature(unittest.TestCase):
         )
         self.assertEqual(run_a.top_k, 5)
         self.assertAlmostEqual(run_a.temperature, 0.3)
+        import time
+
+        for _ in range(200):
+            if run_a.status in ("COMPLETED", "CANCELLED", "ERROR"):
+                break
+            time.sleep(0.01)
+        self.assertEqual(run_a.status, "COMPLETED")
 
         # Run B: K=8, T=0.0
         run_b = manager.start_run(

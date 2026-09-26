@@ -51,6 +51,29 @@ def run_workflow_case(
         }
     )
 
+    if not emp_record.get("found"):
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        return PolicyOutputContract(
+            case_id=case_id,
+            employee_id=employee_id,
+            question=question,
+            entitlement_value="",
+            rule_cited="",
+            explanation=emp_record.get(
+                "error", f"Employee record '{employee_id}' was not found."
+            ),
+            passed=False,
+            implementation="workflow",
+            execution_mode="workflow",
+            tool_calls=tool_calls_record,
+            iterations=1,
+            token_source="unavailable",
+            provider_cost="N/A",
+            latency_ms=round(max(0.01, elapsed_ms), 3),
+            termination_reason="INVALID_EMPLOYEE",
+            top_k=top_k,
+        )
+
     emp_status = (
         emp_record.get("employment_status", "Confirmed") if emp_record else "Confirmed"
     )

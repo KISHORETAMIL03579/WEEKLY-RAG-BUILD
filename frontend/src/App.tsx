@@ -23,7 +23,12 @@ export const App: React.FC = () => {
 
   if (currentPath.startsWith("/file/")) {
     const segments = currentPath.split("/");
-    const docId = segments[2] ? decodeURIComponent(segments[2]) : undefined;
+    let docId: string | undefined;
+    try {
+      docId = segments[2] ? decodeURIComponent(segments[2]) : undefined;
+    } catch {
+      docId = undefined;
+    }
     return <ViewerPage initialDocId={docId} />;
   }
 

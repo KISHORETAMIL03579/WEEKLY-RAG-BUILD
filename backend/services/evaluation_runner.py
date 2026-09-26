@@ -24,6 +24,16 @@ from backend.services.search import (
     fit_to_token_budget,
     estimate_tokens,
 )
+from backend.errors import ConflictError
+from backend.storage.shared_state import (
+    ActiveSharedRunError,
+    create_background_run,
+    get_active_background_run_id,
+    get_background_run,
+    list_background_runs,
+    request_background_run_cancellation,
+    save_background_run,
+)
 
 logger = logging.getLogger("ask_my_docs.evaluation_runner")
 
@@ -154,7 +164,7 @@ class EvaluationRunState:
         self.temperature = temperature
         self.model = model or "llama3.1:8b"
         self.status: str = (
-            "RUNNING"  # PENDING | RUNNING | COMPLETED | CANCELLED | ERROR
+            "RUNNING"  # PENDING | RUNNING | CANCELLING | COMPLETED | CANCELLED | ERROR
         )
         self.total_cases = len(cases)
         self.completed_cases = 0
@@ -205,6 +215,8 @@ class EvaluationRunState:
                     "retrieved_count": None,
                     "retrieved_chunk_ids": [],
                     "retrieved_scores": [],
+                    "retrieval_status": "PENDING",
+                    "retrieval_error": None,
                     "final_context_chunk_ids": [],
                     "final_context_token_count": None,
                     "benchmark_taxonomy": c.get("taxonomy_mode", "HR Policy"),
@@ -237,7 +249,7 @@ class EvaluationRunState:
         with self.lock:
             elapsed = (
                 time.time() - self.start_time
-                if self.status == "RUNNING"
+                if self.status in ("RUNNING", "CANCELLING")
                 else self.elapsed_seconds
             )
             return {
@@ -259,9 +271,44 @@ class EvaluationRunState:
                 "judge_v1_agreement_pct": self.judge_v1_agreement_pct,
                 "judge_v2_agreement_pct": self.judge_v2_agreement_pct,
                 "error_message": self.error_message,
+                "cancellation_requested": self.cancellation_requested,
                 "cases": [dict(c) for c in self.cases],
                 "results": [dict(c) for c in self.cases],
             }
+
+    @classmethod
+    def from_snapshot(cls, snapshot: Dict[str, Any]) -> EvaluationRunState:
+        cases = snapshot.get("cases", snapshot.get("results", []))
+        run = cls(
+            run_id=snapshot["evaluation_run_id"],
+            cases=cases,
+            eval_engine=snapshot.get("eval_engine", "llm"),
+            top_k=snapshot.get("top_k", 5),
+            temperature=snapshot.get("temperature", 0.3),
+            model=snapshot.get("model"),
+        )
+        with run.lock:
+            for field in (
+                "status",
+                "completed_cases",
+                "current_case_id",
+                "current_question",
+                "created_at",
+                "updated_at",
+                "elapsed_seconds",
+                "v1_agreements",
+                "v2_agreements",
+                "judge_v1_agreement_pct",
+                "judge_v2_agreement_pct",
+                "cancellation_requested",
+                "error_message",
+            ):
+                if field in snapshot:
+                    setattr(run, field, snapshot[field])
+            run.start_time = time.time() - float(snapshot.get("elapsed_seconds", 0))
+            run.cases = [dict(case) for case in cases]
+            run.total_cases = snapshot.get("total_cases", len(run.cases))
+        return run
 
 
 class EvaluationRunManager:
@@ -283,47 +330,72 @@ class EvaluationRunManager:
             return cls._instance
 
     def get_active_run_id(self) -> Optional[str]:
+        active_run_id = get_active_background_run_id("evaluation")
         with self._manager_lock:
-            return self._active_run_id
+            self._active_run_id = active_run_id
+        return active_run_id
 
     def get_run(self, run_id: str) -> Optional[EvaluationRunState]:
         with self._manager_lock:
-            return self._runs.get(run_id)
+            local_run = self._runs.get(run_id)
+        snapshot = get_background_run("evaluation", run_id)
+        if snapshot is None:
+            return None
+        if local_run:
+            with local_run.lock:
+                if snapshot.get("cancellation_requested"):
+                    local_run.cancellation_requested = True
+                    local_run.status = "CANCELLING"
+                if local_run.status in ("RUNNING", "CANCELLING"):
+                    return local_run
+        restored = EvaluationRunState.from_snapshot(snapshot)
+        with self._manager_lock:
+            self._runs[run_id] = restored
+        return restored
 
     def list_runs(self) -> List[Dict[str, Any]]:
-        with self._manager_lock:
-            runs_list = []
-            for r in reversed(list(self._runs.values())):
-                runs_list.append(
-                    {
-                        "evaluation_run_id": r.run_id,
-                        "status": r.status,
-                        "top_k": r.top_k,
-                        "temperature": r.temperature,
-                        "model": r.model,
-                        "total_cases": r.total_cases,
-                        "completed_cases": r.completed_cases,
-                        "created_at": r.created_at,
-                        "elapsed_seconds": round(r.elapsed_seconds, 1),
-                        "judge_v1_agreement_pct": r.judge_v1_agreement_pct,
-                        "judge_v2_agreement_pct": r.judge_v2_agreement_pct,
-                    }
-                )
-            return runs_list
+        return [
+            {
+                "evaluation_run_id": run["evaluation_run_id"],
+                "status": run["status"],
+                "top_k": run["top_k"],
+                "temperature": run["temperature"],
+                "model": run["model"],
+                "total_cases": run["total_cases"],
+                "completed_cases": run["completed_cases"],
+                "created_at": run["created_at"],
+                "elapsed_seconds": round(run["elapsed_seconds"], 1),
+                "judge_v1_agreement_pct": run["judge_v1_agreement_pct"],
+                "judge_v2_agreement_pct": run["judge_v2_agreement_pct"],
+            }
+            for run in list_background_runs("evaluation")
+        ]
 
     def cancel_run(self, run_id: str) -> bool:
+        snapshot = request_background_run_cancellation("evaluation", run_id)
+        if snapshot is None:
+            return False
         with self._manager_lock:
             run = self._runs.get(run_id)
-            if not run:
-                return False
+            if run:
+                with run.lock:
+                    run.cancellation_requested = True
+                    run.status = "CANCELLING"
+                    run.updated_at = time.time()
+        if run:
+            self._persist_run(run)
+        return True
+
+    @staticmethod
+    def _persist_run(run: EvaluationRunState) -> None:
+        snapshot = run.to_dict()
+        saved_status = save_background_run(
+            "evaluation", run.run_id, run.status, snapshot
+        )
+        if saved_status != run.status:
             with run.lock:
-                run.cancellation_requested = True
-                if run.status == "RUNNING":
-                    run.status = "CANCELLED"
-                    run.elapsed_seconds = time.time() - run.start_time
-            if self._active_run_id == run_id:
-                self._active_run_id = None
-            return True
+                run.status = saved_status
+                run.cancellation_requested = saved_status in {"CANCELLING", "CANCELLED"}
 
     def start_run(
         self,
@@ -345,10 +417,15 @@ class EvaluationRunManager:
             temperature=temperature,
             model=model,
         )
-
-        with self._manager_lock:
-            self._runs[run_id] = run_state
-            self._active_run_id = run_id
+        try:
+            create_background_run(
+                "evaluation", run_id, run_state.status, run_state.to_dict()
+            )
+        except ActiveSharedRunError as exc:
+            raise ConflictError(
+                "An evaluation run is already active",
+                details={"active_run_id": exc.run_id},
+            ) from exc
 
         thread = threading.Thread(
             target=self._run_worker,
@@ -356,8 +433,82 @@ class EvaluationRunManager:
             name=f"EvalWorker-{run_id}",
             daemon=True,
         )
-        thread.start()
+        with self._manager_lock:
+            self._runs[run_id] = run_state
+            self._active_run_id = run_id
+
+        try:
+            thread.start()
+        except Exception:
+            logger.exception("Could not start evaluation worker %s", run_id)
+            with run_state.lock:
+                run_state.status = "ERROR"
+                run_state.error_message = "Evaluation worker could not be started. Check server logs for details."
+                run_state.elapsed_seconds = time.time() - run_state.start_time
+            self._persist_run(run_state)
+            with self._manager_lock:
+                if self._active_run_id == run_id:
+                    self._active_run_id = None
+            raise
+        finalizer = threading.Thread(
+            target=self._finalize_after_worker,
+            args=(run_state, thread),
+            name=f"EvalCleanup-{run_id}",
+            daemon=True,
+        )
+        try:
+            finalizer.start()
+        except Exception:
+            logger.exception(
+                "Could not start cleanup thread for evaluation run %s", run_id
+            )
+            thread.join()
+            self._finalize_run(run_state)
         return run_state
+
+    def _finalize_after_worker(self, run: EvaluationRunState, worker: threading.Thread):
+        worker.join()
+        self._finalize_run(run)
+
+    def _finalize_run(self, run: EvaluationRunState):
+        latest_snapshot = get_background_run("evaluation", run.run_id)
+        with run.lock:
+            if latest_snapshot and latest_snapshot.get("cancellation_requested"):
+                run.cancellation_requested = True
+            final_status = (
+                "ERROR"
+                if run.error_message is not None
+                else ("CANCELLED" if run.cancellation_requested else "COMPLETED")
+            )
+            run.elapsed_seconds = time.time() - run.start_time
+            run.current_case_id = None
+            run.current_question = None
+            run.updated_at = time.time()
+
+        snapshot = run.to_dict()
+        snapshot["status"] = final_status
+        saved_status = save_background_run(
+            "evaluation", run.run_id, final_status, snapshot
+        )
+        with run.lock:
+            run.status = saved_status
+            if saved_status == "CANCELLED":
+                run.cancellation_requested = True
+
+        with self._manager_lock:
+            if self._active_run_id == run.run_id:
+                self._active_run_id = None
+
+        if saved_status == "COMPLETED":
+            logger.info(
+                "Evaluation run %s COMPLETED in %.1fs (K=%d, T=%.2f). V1=%.1f%%, V2=%.1f%%",
+                run.run_id,
+                run.elapsed_seconds,
+                run.top_k,
+                run.temperature,
+                run.judge_v1_agreement_pct or 0,
+                run.judge_v2_agreement_pct or 0,
+            )
 
     def _run_worker(
         self,
@@ -375,11 +526,15 @@ class EvaluationRunManager:
             run.temperature,
             run.model,
         )
-        corpus, index = get_handbook_corpus()
-
         try:
+            corpus, index = get_handbook_corpus()
             total = len(run.cases)
             for idx in range(total):
+                latest_snapshot = get_background_run("evaluation", run.run_id)
+                if latest_snapshot and latest_snapshot.get("cancellation_requested"):
+                    with run.lock:
+                        run.cancellation_requested = True
+                        run.status = "CANCELLING"
                 if run.cancellation_requested:
                     logger.info(
                         "Evaluation run %s cancelled by user at case %d/%d",
@@ -387,9 +542,6 @@ class EvaluationRunManager:
                         idx,
                         total,
                     )
-                    with run.lock:
-                        run.status = "CANCELLED"
-                        run.elapsed_seconds = time.time() - run.start_time
                     break
 
                 with run.lock:
@@ -397,6 +549,7 @@ class EvaluationRunManager:
                     run.current_case_id = run.cases[idx]["case_id"]
                     run.current_question = run.cases[idx]["question"]
                     run.updated_at = time.time()
+                self._persist_run(run)
 
                 c = run.cases[idx]
                 cid = c.get("case_id", f"case_{idx + 1}")
@@ -418,27 +571,39 @@ class EvaluationRunManager:
 
                     c["retrieved_count"] = len(retrieved_chunks)
                     c["retrieved_chunk_ids"] = [
-                        r.get("id") or r.get("chunk_id", f"c{i}")
-                        for i, r in enumerate(retrieved_chunks)
+                        chunk_id
+                        for r in retrieved_chunks
+                        if (chunk_id := r.get("id") or r.get("chunk_id"))
                     ]
                     c["retrieved_scores"] = [
-                        round(float(r.get("score", 0.0)), 4) for r in retrieved_chunks
+                        round(float(r["score"]), 4)
+                        for r in retrieved_chunks
+                        if r.get("score") is not None
                     ]
                     c["final_context_chunk_ids"] = [
-                        r.get("id") or r.get("chunk_id", f"c{i}")
-                        for i, r in enumerate(final_context_chunks)
+                        chunk_id
+                        for r in final_context_chunks
+                        if (chunk_id := r.get("id") or r.get("chunk_id"))
                     ]
                     c["final_context_token_count"] = context_tokens
                     c["retrieved_context"] = final_context_text
+                    c["retrieval_status"] = (
+                        "COMPLETED" if retrieved_chunks else "NO_RESULTS"
+                    )
                 else:
-                    c["retrieved_count"] = run.top_k
-                    c["retrieved_chunk_ids"] = [f"c{140 + i}" for i in range(run.top_k)]
-                    c["retrieved_scores"] = [
-                        round(1.0 / (1.0 + i * 0.1), 4) for i in range(run.top_k)
-                    ]
-                    c["final_context_chunk_ids"] = c["retrieved_chunk_ids"]
-                    c["final_context_token_count"] = estimate_tokens(
-                        c.get("retrieved_context", "")
+                    c["retrieved_count"] = 0
+                    c["retrieved_chunk_ids"] = []
+                    c["retrieved_scores"] = []
+                    c["final_context_chunk_ids"] = []
+                    c["retrieved_context"] = ""
+                    c["final_context_token_count"] = 0
+                    c["retrieval_status"] = (
+                        "UNAVAILABLE" if not (corpus and index) else "NO_RESULTS"
+                    )
+                    c["retrieval_error"] = (
+                        "Handbook corpus or index unavailable"
+                        if not (corpus and index)
+                        else None
                     )
 
                 c["top_k"] = run.top_k
@@ -549,6 +714,7 @@ class EvaluationRunManager:
                         (run.v2_agreements / run.completed_cases) * 100, 1
                     )
                     run.updated_at = time.time()
+                self._persist_run(run)
 
                 # Safe telemetry log (never log full prompts, documents, or keys)
                 logger.info(
@@ -558,31 +724,15 @@ class EvaluationRunManager:
                     cid,
                     run.top_k,
                     run.temperature,
-                    c.get("retrieved_count", run.top_k),
+                    c.get("retrieved_count", 0),
                 )
 
+        except Exception:
+            logger.exception("Fatal error in evaluation run %s", run.run_id)
             with run.lock:
-                if run.status != "CANCELLED":
-                    run.status = "COMPLETED"
-                    run.elapsed_seconds = time.time() - run.start_time
-                    run.current_case_id = None
-                    run.current_question = None
-                    logger.info(
-                        "Evaluation run %s COMPLETED in %.1fs (K=%d, T=%.2f). V1=%.1f%%, V2=%.1f%%",
-                        run.run_id,
-                        run.elapsed_seconds,
-                        run.top_k,
-                        run.temperature,
-                        run.judge_v1_agreement_pct or 0,
-                        run.judge_v2_agreement_pct or 0,
-                    )
-
-        except Exception as exc:
-            logger.exception("Fatal error in evaluation run %s: %s", run.run_id, exc)
-            with run.lock:
-                run.status = "ERROR"
-                run.error_message = str(exc)
-                run.elapsed_seconds = time.time() - run.start_time
+                run.error_message = (
+                    "Evaluation failed unexpectedly. Check server logs for details."
+                )
 
 
 # Module-level accessor

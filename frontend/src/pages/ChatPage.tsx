@@ -28,6 +28,8 @@ export const ChatPage: React.FC = () => {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const activeAbortControllerRef = useRef<AbortController | null>(null);
+  const activeChatRunIdRef = useRef<string | null>(null);
+  const isMountedRef = useRef(true);
   const toastTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
   );
@@ -68,6 +70,23 @@ export const ChatPage: React.FC = () => {
     return () => {
       toastTimersRef.current.forEach((timer) => clearTimeout(timer));
       toastTimersRef.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      const controller = activeAbortControllerRef.current;
+      const runId = activeChatRunIdRef.current;
+      activeAbortControllerRef.current = null;
+      activeChatRunIdRef.current = null;
+      controller?.abort();
+      if (runId) {
+        void api.cancelAsk(runId).catch((err: unknown) => {
+          console.warn("Could not cancel chat run during navigation:", err);
+        });
+      }
     };
   }, []);
 
@@ -310,18 +329,54 @@ export const ChatPage: React.FC = () => {
     }
   };
 
-  const handleSend = async (query: string) => {
-    if (isThinking || isUploading) return;
-    const userMsg: ChatMessage = {
-      id: generateId("user-msg"),
-      role: "user",
-      text: query,
-    };
-    setMessages((prev) => [...prev, userMsg]);
-    setIsThinking(true);
+  const handleStop = () => {
+    const controller = activeAbortControllerRef.current;
+    if (!controller) return;
+    const runId = activeChatRunIdRef.current;
+    activeAbortControllerRef.current = null;
+    activeChatRunIdRef.current = null;
+    controller.abort();
+    setIsThinking(false);
+    if (runId) {
+      void api.cancelAsk(runId).catch((err: unknown) => {
+        const error = err as Error;
+        if (isMountedRef.current) {
+          showToast(
+            "Could not cancel the active request: " + error.message,
+            "error",
+          );
+        }
+      });
+    }
+  };
 
+  const handleSend = async (query: string, existingTurnId?: string) => {
+    if (activeAbortControllerRef.current || isUploading) return;
+    const turnId = existingTurnId || generateId("turn");
+    const runId = generateId("run");
+    const userMessageId = generateId("user-msg");
+    const assistantMessageId = generateId("ai-msg");
     const controller = new AbortController();
     activeAbortControllerRef.current = controller;
+    activeChatRunIdRef.current = runId;
+
+    setMessages((previous) => {
+      const hasTurn = previous.some(
+        (message) => message.role === "user" && message.turnId === turnId,
+      );
+      if (!hasTurn) {
+        return [
+          ...previous,
+          { id: userMessageId, turnId, role: "user", text: query },
+        ];
+      }
+      return previous.map((message) =>
+        message.role === "user" && message.turnId === turnId
+          ? { ...message, text: query }
+          : message,
+      );
+    });
+    setIsThinking(true);
 
     try {
       const res = await api.askQuestion(
@@ -330,36 +385,60 @@ export const ChatPage: React.FC = () => {
         topK,
         temperature,
         controller.signal,
+        turnId,
+        runId,
       );
+      if (controller.signal.aborted) return;
       const aiMsg: ChatMessage = {
-        id: generateId("ai-msg"),
+        id: assistantMessageId,
+        turnId,
         role: "ai",
         text: res.answer || "I don't know.",
         sources: res.sources || [],
         query,
+        runId: res.run_id || res.trace_id,
         topK: res.top_k != null ? res.top_k : topK,
         temperature: res.temperature != null ? res.temperature : temperature,
       };
-      setMessages((prev) => [...prev, aiMsg]);
+      setMessages((previous) => {
+        const existingIndex = previous.findIndex(
+          (message) => message.role === "ai" && message.turnId === turnId,
+        );
+        if (existingIndex === -1) return [...previous, aiMsg];
+        return previous.map((message, index) =>
+          index === existingIndex ? { ...aiMsg, id: message.id } : message,
+        );
+      });
     } catch (err: unknown) {
       const e = err as Error;
-      if (e.name === "AbortError") {
-        return;
-      }
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: generateId("err-msg"),
-          role: "ai",
-          text: "Error executing query: " + e.message,
-          topK,
-          temperature,
-        },
-      ]);
+      if (controller.signal.aborted || e.name === "AbortError") return;
+      const errorMessage: ChatMessage = {
+        id: assistantMessageId,
+        turnId,
+        role: "ai",
+        text: "Error executing query: " + e.message,
+        query,
+        topK,
+        temperature,
+      };
+      setMessages((previous) => {
+        const existingIndex = previous.findIndex(
+          (message) => message.role === "ai" && message.turnId === turnId,
+        );
+        if (existingIndex === -1) return [...previous, errorMessage];
+        return previous.map((message, index) =>
+          index === existingIndex
+            ? { ...errorMessage, id: message.id }
+            : message,
+        );
+      });
       showToast("Query error: " + e.message, "error", 6000);
     } finally {
-      setIsThinking(false);
-      activeAbortControllerRef.current = null;
+      if (activeAbortControllerRef.current === controller) {
+        activeAbortControllerRef.current = null;
+        activeChatRunIdRef.current = null;
+        setIsThinking(false);
+      }
     }
   };
 
@@ -404,6 +483,7 @@ export const ChatPage: React.FC = () => {
       <ChatArea
         messages={messages}
         onSend={handleSend}
+        onStop={handleStop}
         isThinking={isThinking}
         filesCount={files.length}
         selectedFilesCount={selectedFiles.length}

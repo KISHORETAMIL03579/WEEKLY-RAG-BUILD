@@ -10,6 +10,7 @@ from backend.storage.session_manager import (
     RequiredSessionId,
     RequiredStore,
     SESSION_FILES,
+    load_session_manifest,
 )
 
 router = APIRouter(tags=["documents"])
@@ -42,6 +43,7 @@ def serve_file(request: Request, doc_id: str, store: RequiredStore):
 @router.get("/file/{doc_id}/raw")
 def serve_file_raw(doc_id: str, sid: RequiredSessionId):
     """Stream the raw PDF bytes (used by the viewer page's embedded viewer)."""
+    load_session_manifest(sid)
     info = SESSION_FILES.get(sid, {}).get(doc_id)
     if not info or not info["path"].exists():
         return JSONResponse(

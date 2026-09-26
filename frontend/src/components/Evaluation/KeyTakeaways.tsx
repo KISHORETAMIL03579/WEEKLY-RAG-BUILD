@@ -1,5 +1,6 @@
 import React from "react";
 import { EvalModeResult } from "../../types/evaluation";
+import { Card } from "../common/Card";
 
 export const PRESETS: Record<string, { label: string; desc: string }> = {
   tfidf: { label: "TF-IDF baseline", desc: "Sparse keyword matching" },
@@ -80,7 +81,7 @@ export const KeyTakeaways: React.FC<KeyTakeawaysProps> = ({ modes, k }) => {
       : null;
 
   return (
-    <div className="card" style={{ marginBottom: "24px" }}>
+    <Card style={{ marginBottom: "24px" }}>
       <h3
         style={{
           fontSize: "0.84rem",
@@ -165,6 +166,6 @@ export const KeyTakeaways: React.FC<KeyTakeawaysProps> = ({ modes, k }) => {
           Recall are evaluated against candidate chunks.
         </li>
       </ul>
-    </div>
+    </Card>
   );
 };

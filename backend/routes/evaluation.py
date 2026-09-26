@@ -678,7 +678,13 @@ def cancel_evaluation_run(run_id: str):
     success = run_manager.cancel_run(run_id)
     if not success:
         raise NotFoundError(f"Evaluation run '{run_id}' not found")
-    return {"ok": True, "evaluation_run_id": run_id, "status": "CANCELLED"}
+    run = run_manager.get_run(run_id)
+    return {
+        "ok": True,
+        "evaluation_run_id": run_id,
+        "status": run.status if run else "CANCELLING",
+        "cancellation_requested": run.cancellation_requested if run else True,
+    }
 
 
 @router.post("/api/evaluation/judges")

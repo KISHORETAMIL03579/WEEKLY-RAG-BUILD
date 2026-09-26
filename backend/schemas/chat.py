@@ -16,6 +16,12 @@ class AskPayload(_LenientModel):
     chunk_mode: Optional[str] = None
     top_k: Optional[int] = None
     temperature: Optional[float] = None
+    turn_id: Optional[str] = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$"
+    )
+    run_id: Optional[str] = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$"
+    )
 
 
 AskRequest = AskPayload

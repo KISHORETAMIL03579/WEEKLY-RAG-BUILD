@@ -28,6 +28,8 @@ export interface AskRequest {
   chunk_mode?: string;
   top_k?: number;
   temperature?: number;
+  turn_id?: string;
+  run_id?: string;
 }
 
 export interface AskResponse {
@@ -36,6 +38,7 @@ export interface AskResponse {
   top_k: number;
   temperature: number;
   query?: string;
+  run_id?: string;
   trace_id?: string;
   error?: string;
 }

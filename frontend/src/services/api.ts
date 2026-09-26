@@ -20,20 +20,34 @@ import {
 } from "../types/evaluation";
 import { TracesResponse, ReplayResponse } from "../types/trace";
 import { DatasetParseResult } from "../types/dataset";
+import { OllamaModelListResponse } from "../types/policy";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
 async function handleResponse<T>(res: Response): Promise<T> {
-  const data = await res.json().catch(() => ({}));
+  const payload: unknown = await res.json().catch(() => ({}));
+  const data =
+    payload && typeof payload === "object" && !Array.isArray(payload)
+      ? (payload as Record<string, unknown>)
+      : {};
   if (!res.ok) {
+    const apiError = data.error;
+    const structuredError =
+      apiError && typeof apiError === "object" && !Array.isArray(apiError)
+        ? (apiError as Record<string, unknown>).message
+        : null;
     const errorMsg =
-      data.error ||
-      data.message ||
+      (typeof data.error === "string" ? data.error : structuredError) ||
+      (typeof data.message === "string" ? data.message : null) ||
       (typeof data.detail === "string" ? data.detail : null) ||
       `Request failed with status ${res.status}`;
-    throw new Error(errorMsg);
+    throw new Error(
+      typeof errorMsg === "string"
+        ? errorMsg
+        : `Request failed with status ${res.status}`,
+    );
   }
-  return data as T;
+  return payload as T;
 }
 
 export const api = {
@@ -69,14 +83,34 @@ export const api = {
     top_k: number = 8,
     temperature: number = 0.0,
     signal?: AbortSignal,
+    turn_id?: string,
+    run_id?: string,
   ): Promise<AskResponse> {
     const res = await fetch(`${API_BASE}/ask`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, chunk_mode, top_k, temperature }),
+      body: JSON.stringify({
+        query,
+        chunk_mode,
+        top_k,
+        temperature,
+        ...(turn_id ? { turn_id } : {}),
+        ...(run_id ? { run_id } : {}),
+      }),
       signal,
     });
     return handleResponse<AskResponse>(res);
+  },
+
+  async cancelAsk(runId: string): Promise<{ ok: boolean; run_id: string }> {
+    const res = await fetch(
+      `${API_BASE}/ask/${encodeURIComponent(runId)}/cancel`,
+      {
+        method: "POST",
+      },
+    );
+    if (res.status === 404) return { ok: false, run_id: runId };
+    return handleResponse<{ ok: boolean; run_id: string }>(res);
   },
 
   async loadUrl(
@@ -430,6 +464,13 @@ export const api = {
   },
 
   // Auto-routed HR Policy Search (Week 7 production search)
+  async getAvailableOllamaModels(
+    signal?: AbortSignal,
+  ): Promise<OllamaModelListResponse> {
+    const res = await fetch(`${API_BASE}/api/policy/models`, { signal });
+    return handleResponse<OllamaModelListResponse>(res);
+  },
+
   async runPolicySearch(
     payload: {
       employee_id: string;

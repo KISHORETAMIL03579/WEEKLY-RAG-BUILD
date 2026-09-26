@@ -43,6 +43,11 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
   const [topK, setTopK] = useState<number>(5);
   const [temperature, setTemperature] = useState<number>(0.3);
+  const [model, setModel] = useState<string>("");
+  const [defaultModel, setDefaultModel] = useState<string>("");
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState<boolean>(true);
+  const [modelsError, setModelsError] = useState<string | null>(null);
 
   // Common Dataset State
   const [datasetMode, setDatasetMode] = useState<DatasetMode>("builtin");
@@ -83,6 +88,40 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
       alert(msg);
     }
   };
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api
+      .getAvailableOllamaModels(controller.signal)
+      .then(({ default_model, models }) => {
+        if (controller.signal.aborted) return;
+        setAvailableModels(models);
+        setDefaultModel(default_model);
+        if (models.length === 0) {
+          setModel("");
+          setModelsError("No chat-capable Ollama models are installed.");
+          return;
+        }
+        setModelsError(null);
+        setModel((current) =>
+          models.includes(current)
+            ? current
+            : models.includes(default_model)
+              ? default_model
+              : models[0],
+        );
+      })
+      .catch((error: Error) => {
+        if (!controller.signal.aborted) {
+          setModel("");
+          setModelsError(`Could not load installed Ollama models: ${error.message}`);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoadingModels(false);
+      });
+    return () => controller.abort();
+  }, []);
 
   const updateLoadingState = (isLoading: boolean) => {
     setLoading(isLoading);
@@ -414,8 +453,9 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
   const handleResetToBaseline = () => {
     setTopK(8);
     setTemperature(0.0);
+    setModel(defaultModel);
     notify(
-      "Restored Authoritative Frozen Week 6 Baseline: Top-K = 8, Temperature = 0.0",
+      `Restored Authoritative Frozen Week 6 Baseline: Top-K = 8, Temperature = 0.0, Model = ${defaultModel}`,
       "info",
     );
   };
@@ -423,8 +463,9 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
   const handleResetToAppDefault = () => {
     setTopK(5);
     setTemperature(0.3);
+    setModel(defaultModel);
     notify(
-      "Restored Application Default: Top-K = 5, Temperature = 0.3",
+      `Restored Application Default: Top-K = 5, Temperature = 0.3, Model = ${defaultModel}`,
       "info",
     );
   };
@@ -488,6 +529,11 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
 
   // Run evaluation in the background independent of page lifecycle
   const handleRunEvaluation = async () => {
+    const selectedModel = model || defaultModel;
+    if (!availableModels.includes(selectedModel)) {
+      notify("Select an installed Ollama model before running the LLM judge.", "error");
+      return;
+    }
     if (datasetMode === "custom") {
       if (customDatasetCases.length === 0) {
         notify(
@@ -580,6 +626,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
         true,
         topK,
         temperature,
+        selectedModel,
       );
       sessionStorage.setItem(
         "judge_evaluation_active_run_id",
@@ -590,7 +637,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
       updateLoadingState(true);
       startPolling(runState.evaluation_run_id);
       notify(
-        `🚀 Started background evaluation run "${runState.evaluation_run_id}" (${runState.total_cases} cases, Top-K: ${topK}, Temp: ${temperature})!`,
+        `🚀 Started background evaluation run "${runState.evaluation_run_id}" (${runState.total_cases} cases, Top-K: ${topK}, Temp: ${temperature}, Model: ${model || defaultModel})!`,
         "info",
       );
     } catch (e) {
@@ -1290,6 +1337,58 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
             </select>
           </div>
 
+          <div style={{ minWidth: 160 }}>
+            <label
+              style={{
+                fontSize: "0.8rem",
+                fontWeight: 600,
+                color: "#e2e8f0",
+                display: "block",
+                marginBottom: 4,
+              }}
+            >
+              Model:
+            </label>
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              disabled={loading || isLoadingModels || availableModels.length === 0}
+              style={{
+                background: "rgba(30, 41, 59, 0.9)",
+                border: "1px solid var(--border)",
+                color: "#fff",
+                borderRadius: "6px",
+                padding: "5px 10px",
+                fontSize: "0.82rem",
+                fontWeight: 600,
+                cursor:
+                  loading || isLoadingModels || availableModels.length === 0
+                    ? "not-allowed"
+                    : "pointer",
+              }}
+            >
+              {availableModels.length === 0 ? (
+                <option value="">
+                  {isLoadingModels ? "Loading models…" : "No models available"}
+                </option>
+              ) : (
+                availableModels.map((availableModel) => (
+                  <option key={availableModel} value={availableModel}>
+                    {availableModel}
+                  </option>
+                ))
+              )}
+            </select>
+            {modelsError && (
+              <div
+                role="alert"
+                style={{ color: "#f87171", fontSize: "0.72rem", marginTop: 4 }}
+              >
+                {modelsError}
+              </div>
+            )}
+          </div>
+
           {/* Active Config Tag */}
           <div
             style={{
@@ -1308,7 +1407,9 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
             <span>
               Active: Top-K = <strong>{topK}</strong> | Temp ={" "}
               <strong>{temperature.toFixed(1)}</strong> | Model:{" "}
-              <strong>llama3.1:8b</strong>
+              <strong>
+                {model || (isLoadingModels ? "Loading…" : defaultModel || "Unavailable")}
+              </strong>
             </span>
           </div>
         </div>
@@ -1399,7 +1500,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
             estRemainingSeconds={evalProgress.estRemainingSeconds}
             isRunning={loading}
             isComplete={evalProgress.completedSuccess}
-            configurationText={`Top-K: ${topK} | Temperature: ${temperature.toFixed(1)} | Model: llama3.1:8b`}
+            configurationText={`Top-K: ${topK} | Temperature: ${temperature.toFixed(1)} | Model: ${model || defaultModel}`}
             signals={[
               {
                 label: "Judge V1",

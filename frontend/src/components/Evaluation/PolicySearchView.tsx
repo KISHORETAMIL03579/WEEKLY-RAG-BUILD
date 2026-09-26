@@ -5,7 +5,7 @@
 //
 // The UI shows routing decision immediately, then execution progress,
 // then tokens / latency / cost without fabricating any values.
-import React, { useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { api } from "../../services/api";
 import {
   PolicyOutputContract,
@@ -580,7 +580,10 @@ export const PolicySearchView: React.FC<PolicySearchViewProps> = ({
   const [question, setQuestion] = useState(EXAMPLE_QUESTIONS[0].question);
   const [topK, setTopK] = useState(5);
   const [temperature, setTemperature] = useState(0.3);
-  const [model, setModel] = useState("llama3.1:8b");
+  const [model, setModel] = useState("");
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(true);
+  const [modelsError, setModelsError] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [result, setResult] = useState<PolicyOutputContract | null>(null);
   const [previewRouting, setPreviewRouting] = useState<RoutingDecision | null>(
@@ -588,6 +591,41 @@ export const PolicySearchView: React.FC<PolicySearchViewProps> = ({
   );
   const [isPreviewingRoute, setIsPreviewingRoute] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api
+      .getAvailableOllamaModels(controller.signal)
+      .then(({ default_model, agent_models }) => {
+        if (controller.signal.aborted) return;
+        setAvailableModels(agent_models);
+        if (agent_models.length === 0) {
+          setModel("");
+          setModelsError(
+            "No tool-capable Ollama models are installed for Agent execution.",
+          );
+          return;
+        }
+        setModelsError(null);
+        setModel((current) =>
+          agent_models.includes(current)
+            ? current
+            : agent_models.includes(default_model)
+              ? default_model
+              : agent_models[0],
+        );
+      })
+      .catch((error: Error) => {
+        if (!controller.signal.aborted) {
+          setModel("");
+          setModelsError(`Could not load installed Ollama models: ${error.message}`);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoadingModels(false);
+      });
+    return () => controller.abort();
+  }, []);
 
   const handlePreviewRoute = async () => {
     if (!question.trim()) return;
@@ -627,10 +665,15 @@ export const PolicySearchView: React.FC<PolicySearchViewProps> = ({
         abortRef.current.signal,
       );
       setResult(res);
-      onNotify(
-        `Search complete. Mode: ${res.execution_mode || res.implementation}. Run: ${res.run_id}`,
-        "success",
-      );
+      const mode = res.execution_mode || res.implementation;
+      if (res.termination_reason === "SUCCESS") {
+        onNotify(`Search complete. Mode: ${mode}. Run: ${res.run_id}`, "success");
+      } else {
+        onNotify(
+          `Policy search failed (${res.termination_reason}). Mode: ${mode}. Run: ${res.run_id}`,
+          "error",
+        );
+      }
     } catch (e: any) {
       if (e.name !== "AbortError") {
         onNotify("Search failed: " + e.message, "error");
@@ -867,6 +910,7 @@ export const PolicySearchView: React.FC<PolicySearchViewProps> = ({
             <select
               value={model}
               onChange={(e) => setModel(e.target.value)}
+              disabled={isLoadingModels || availableModels.length === 0}
               style={{
                 width: "100%",
                 padding: "5px 8px",
@@ -877,10 +921,25 @@ export const PolicySearchView: React.FC<PolicySearchViewProps> = ({
                 fontSize: "0.82rem",
               }}
             >
-              <option value="llama3.1:8b">llama3.1:8b</option>
-              <option value="llama3.2:3b">llama3.2:3b</option>
-              <option value="mistral:7b">mistral:7b</option>
+              {availableModels.length === 0 ? (
+                <option value="">
+                  {isLoadingModels
+                    ? "Loading Agent models…"
+                    : "No tool-capable models"}
+                </option>
+              ) : (
+                availableModels.map((availableModel) => (
+                  <option key={availableModel} value={availableModel}>
+                    {availableModel}
+                  </option>
+                ))
+              )}
             </select>
+            {modelsError && (
+              <div role="alert" style={{ color: "#f87171", fontSize: "0.72rem" }}>
+                {modelsError}
+              </div>
+            )}
           </div>
 
           <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
@@ -921,6 +980,10 @@ export const PolicySearchView: React.FC<PolicySearchViewProps> = ({
               {isSearching ? "⏳ Searching…" : "🔍 Search"}
             </button>
           </div>
+        </div>
+        <div style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>
+          Top-K controls handbook retrieval. Temperature and model are used only
+          when routing selects Agent mode; Workflow execution is deterministic.
         </div>
 
         {/* Route Preview */}

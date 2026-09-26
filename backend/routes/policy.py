@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import csv
 import json
+import socket
 import time
+import urllib.error
+import urllib.request
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -19,16 +22,19 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from backend.config import BASE_DIR, logger
+from backend.config import BASE_DIR, OLLAMA_CHAT_MODEL, OLLAMA_URL, logger
 from backend.schemas.policy import (
     MAX_RETRIES,
+    MAX_COST,
+    MAX_TOKENS,
+    MAX_WALL_CLOCK_SECONDS,
     TOKEN_COST_PROXY_RATE,
     BenchmarkCase,
     EmployeeRecord,
     PolicyOutputContract,
     PolicyQueryRequest,
 )
-from backend.services.policy_agent import run_agent_case, check_ollama_available
+from backend.services.policy_agent import run_agent_case
 from backend.services.policy_benchmark_runner import (
     PolicyBenchmarkRunManager,
     PolicyBenchmarkRunState,
@@ -66,12 +72,7 @@ _RETRYABLE_REASONS = {
 
 def _is_retryable(termination_reason: str) -> bool:
     """Return True only for transient, retryable failures."""
-    if termination_reason in _NON_RETRYABLE_TERMINATION_REASONS:
-        return False
-    if termination_reason == "SUCCESS":
-        return False
-    # Anything not in the non-retryable set and not SUCCESS is treated as retryable
-    return True
+    return termination_reason in _RETRYABLE_REASONS
 
 
 def _run_with_retries(
@@ -83,6 +84,7 @@ def _run_with_retries(
     temperature: float,
     model: str,
     max_retries: int = MAX_RETRIES,
+    max_wall_clock: float = MAX_WALL_CLOCK_SECONDS,
 ) -> tuple[PolicyOutputContract, list[dict]]:
     """
     Execute workflow or agent with automatic retry for transient failures.
@@ -96,13 +98,82 @@ def _run_with_retries(
     """
     retry_history: list[dict] = []
     accumulated_tokens = 0
+    accumulated_prompt_tokens = 0
+    accumulated_completion_tokens = 0
     accumulated_cost = 0.0
     accumulated_latency = 0.0
+    accumulated_llm_calls: list[dict] = []
+    accumulated_token_source = "unavailable"
     max_total_attempts = 1 + max_retries  # initial + retries
+    execution_started = time.perf_counter()
 
     last_result: Optional[PolicyOutputContract] = None
 
+    if type(max_retries) is not int or not 0 <= max_retries <= MAX_RETRIES:
+        raise ValueError(f"max_retries must be between 0 and {MAX_RETRIES}")
+
     for attempt in range(1, max_total_attempts + 1):
+        remaining_wall_clock = max_wall_clock - (
+            time.perf_counter() - execution_started
+        )
+        remaining_tokens = MAX_TOKENS - accumulated_tokens
+        remaining_cost = MAX_COST - accumulated_cost
+        budget_reason = (
+            "BUDGET_WALL_CLOCK"
+            if remaining_wall_clock <= 0
+            else (
+                "BUDGET_TOKENS"
+                if remaining_tokens <= 0
+                else "BUDGET_COST" if remaining_cost <= 0 else None
+            )
+        )
+        if budget_reason:
+            budget_explanations = {
+                "BUDGET_WALL_CLOCK": "Policy execution stopped because its wall-clock budget was exhausted.",
+                "BUDGET_TOKENS": "Policy execution stopped because its token budget was exhausted.",
+                "BUDGET_COST": "Policy execution stopped because its cost budget was exhausted.",
+            }
+            retry_history.append(
+                {
+                    "attempt": attempt,
+                    "status": "BUDGET_EXHAUSTED",
+                    "latency_ms": 0.0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "total_tokens": 0,
+                    "estimated_cost": 0.0,
+                    "is_retry": attempt > 1,
+                    "retryable": False,
+                    "retry_reason": budget_reason,
+                }
+            )
+            failed_result = PolicyOutputContract(
+                case_id=case_id,
+                employee_id=employee_id,
+                question=question,
+                entitlement_value="",
+                rule_cited="",
+                explanation=budget_explanations[budget_reason],
+                passed=False,
+                implementation=mode,
+                execution_mode=mode,
+                termination_reason=budget_reason,
+                latency_ms=round((time.perf_counter() - execution_started) * 1000, 3),
+                prompt_tokens=accumulated_prompt_tokens,
+                completion_tokens=accumulated_completion_tokens,
+                total_tokens=accumulated_tokens,
+                cost_usd=accumulated_cost,
+                attempt=max(1, attempt - 1),
+                total_attempts=max(1, attempt - 1),
+                retry_history=retry_history,
+                llm_calls=accumulated_llm_calls,
+                token_source=accumulated_token_source,
+                top_k=top_k,
+                temperature=temperature,
+                model=model,
+            )
+            return failed_result, retry_history
+
         attempt_start = time.perf_counter()
         is_retry = attempt > 1
         retry_reason = None
@@ -123,39 +194,84 @@ def _run_with_retries(
                     top_k=top_k,
                     temperature=temperature,
                     model=model,
+                    max_tokens=remaining_tokens,
+                    max_cost=remaining_cost,
+                    max_wall_clock=remaining_wall_clock,
                 )
 
             attempt_ms = (time.perf_counter() - attempt_start) * 1000
+            accumulated_prompt_tokens += result.prompt_tokens
+            accumulated_completion_tokens += result.completion_tokens
             accumulated_tokens += result.total_tokens
             accumulated_cost += result.cost_usd
             accumulated_latency += attempt_ms
+            if result.token_source == "ollama_live":
+                accumulated_token_source = "ollama_live"
+            elif (
+                result.token_source == "proxy_estimate"
+                and accumulated_token_source == "unavailable"
+            ):
+                accumulated_token_source = "proxy_estimate"
+            call_index_base = len(accumulated_llm_calls)
+            accumulated_llm_calls.extend(
+                {
+                    **call,
+                    "call_index": call_index_base + index + 1,
+                    "attempt": attempt,
+                    "is_retry": is_retry,
+                }
+                for index, call in enumerate(result.llm_calls)
+            )
 
-            # Record this attempt
+            if time.perf_counter() - execution_started >= max_wall_clock:
+                result.termination_reason = "BUDGET_WALL_CLOCK"
+                result.passed = False
+                result.entitlement_value = ""
+                result.rule_cited = ""
+                result.explanation = "Policy execution stopped because its wall-clock budget was exhausted."
+
+            result_ok = result.termination_reason == "SUCCESS"
+            retryable = False if result_ok else _is_retryable(result.termination_reason)
+            will_retry = retryable and attempt < max_total_attempts
             retry_history.append(
                 {
                     "attempt": attempt,
-                    "status": "SUCCESS",
+                    "status": (
+                        "SUCCESS"
+                        if result_ok
+                        else ("RETRY" if will_retry else "FAILED")
+                    ),
                     "latency_ms": round(attempt_ms, 3),
                     "input_tokens": result.prompt_tokens,
                     "output_tokens": result.completion_tokens,
                     "total_tokens": result.total_tokens,
                     "estimated_cost": round(result.cost_usd, 8),
                     "is_retry": is_retry,
-                    "retryable": True,
-                    "retry_reason": None,
+                    "retryable": retryable,
+                    "retry_reason": None if result_ok else result.termination_reason,
                 }
             )
 
-            # Accumulate totals across all attempts (including retries)
-            result.total_tokens = accumulated_tokens
-            result.prompt_tokens = result.prompt_tokens  # keep last-call values as-is
-            result.cost_usd = accumulated_cost
-            result.latency_ms = round(accumulated_latency, 3)
-            result.attempt = attempt
-            result.total_attempts = attempt
-            result.retry_history = retry_history
+            if result_ok or not will_retry:
+                result.total_tokens = accumulated_tokens
+                result.prompt_tokens = accumulated_prompt_tokens
+                result.completion_tokens = accumulated_completion_tokens
+                result.cost_usd = accumulated_cost
+                result.latency_ms = round(accumulated_latency, 3)
+                result.llm_calls = accumulated_llm_calls
+                result.token_source = accumulated_token_source
+                result.attempt = attempt
+                result.total_attempts = attempt
+                result.retry_history = retry_history
+                last_result = result
+                return result, retry_history
+
             last_result = result
-            return result, retry_history
+            logger.warning(
+                f"Attempt {attempt} failed ({result.termination_reason}), retrying... "
+                f"({max_total_attempts - attempt} remaining)"
+            )
+            continue
 
         except Exception as exc:
             attempt_ms = (time.perf_counter() - attempt_start) * 1000
@@ -173,6 +289,11 @@ def _run_with_retries(
             else:
                 retry_reason = "MODEL_ERROR"
                 retryable = True
+            if time.perf_counter() - execution_started >= max_wall_clock:
+                retry_reason = "BUDGET_WALL_CLOCK"
+                retryable = False
+            else:
+                retryable = _is_retryable(retry_reason)
 
             retry_history.append(
                 {
@@ -196,27 +317,37 @@ def _run_with_retries(
             accumulated_latency += attempt_ms
 
             if not retryable or attempt >= max_total_attempts:
-                logger.error(
-                    f"Policy execution failed after {attempt} attempt(s): {exc}"
+                logger.exception(
+                    "Policy execution failed after %d attempt(s) (%s)",
+                    attempt,
+                    retry_reason,
                 )
-                # Return a failed result
+                if retry_reason == "OLLAMA_TIMEOUT":
+                    safe_message = (
+                        "The model provider timed out before generating an answer."
+                    )
+                elif retry_reason == "TRANSIENT_NETWORK":
+                    safe_message = "A required provider or tool could not be reached."
+                else:
+                    safe_message = "The policy request failed because the model provider returned an error."
                 failed_result = PolicyOutputContract(
                     case_id=case_id,
                     employee_id=employee_id,
                     question=question,
                     entitlement_value="",
                     rule_cited="",
-                    explanation=f"Execution failed after {attempt} attempt(s): {exc}",
+                    explanation=safe_message,
                     passed=False,
                     implementation=mode,
-                    termination_reason=(
-                        "MAX_RETRIES"
-                        if attempt >= max_total_attempts
-                        else retry_reason or "MODEL_ERROR"
-                    ),
+                    execution_mode=mode,
+                    termination_reason=(retry_reason or "MODEL_ERROR"),
                     latency_ms=round(accumulated_latency, 3),
+                    prompt_tokens=accumulated_prompt_tokens,
+                    completion_tokens=accumulated_completion_tokens,
                     total_tokens=accumulated_tokens,
                     cost_usd=accumulated_cost,
+                    llm_calls=accumulated_llm_calls,
+                    token_source=accumulated_token_source,
                     attempt=attempt,
                     total_attempts=attempt,
                     retry_history=retry_history,
@@ -251,7 +382,7 @@ def _run_with_retries(
 class PolicyBenchmarkStartRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=20)
     temperature: float = Field(default=0.3, ge=0.0, le=1.0)
-    model: Optional[str] = "llama3.1:8b"
+    model: Optional[str] = OLLAMA_CHAT_MODEL
     background: bool = Field(default=False)
     cases: Optional[List[Dict[str, Any]]] = None
 
@@ -264,8 +395,8 @@ class PolicySearchRequest(BaseModel):
     case_id: Optional[str] = None
     top_k: Optional[int] = Field(5, ge=1, le=20)
     temperature: Optional[float] = Field(0.3, ge=0.0, le=1.0)
-    model: Optional[str] = "llama3.1:8b"
-    max_retries: Optional[int] = Field(MAX_RETRIES, ge=0, le=5)
+    model: Optional[str] = OLLAMA_CHAT_MODEL
+    max_retries: Optional[int] = Field(MAX_RETRIES, ge=0, le=MAX_RETRIES)
     force_mode: Optional[str] = None  # "workflow" | "agent" | None (auto-route)
 
 
@@ -279,6 +410,63 @@ def _load_benchmark_cases() -> List[Dict[str, Any]]:
         except Exception as e:
             logger.error(f"Failed to load benchmark cases from {cases_file}: {e}")
     return []
+
+
+@router.get("/models")
+def get_available_ollama_models():
+    """Return the installed Ollama models that can be used for chat execution."""
+    request = urllib.request.Request(
+        f"{OLLAMA_URL.rstrip('/')}/api/tags",
+        headers={"User-Agent": "AskMyDocs-ModelList"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=3.0) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        logger.warning("Ollama model list returned HTTP %d", exc.code)
+        raise HTTPException(
+            status_code=503, detail="Unable to load installed Ollama models."
+        ) from exc
+    except (urllib.error.URLError, TimeoutError, socket.timeout) as exc:
+        logger.warning(
+            "Ollama model list request failed (error_type=%s)",
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=503, detail="Unable to load installed Ollama models."
+        ) from exc
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        logger.error("Ollama returned an invalid model list response")
+        raise HTTPException(
+            status_code=502, detail="Ollama returned an invalid model list."
+        ) from exc
+
+    if not isinstance(payload, dict) or not isinstance(payload.get("models"), list):
+        logger.error("Ollama model list response omitted its models array")
+        raise HTTPException(
+            status_code=502, detail="Ollama returned an invalid model list."
+        )
+
+    models = []
+    agent_models = []
+    for item in payload["models"]:
+        if not isinstance(item, dict) or not isinstance(item.get("name"), str):
+            continue
+        capabilities = item.get("capabilities")
+        if isinstance(capabilities, list) and "embedding" in capabilities:
+            if not any(
+                capability in {"completion", "tools"} for capability in capabilities
+            ):
+                continue
+        models.append(item["name"])
+        if isinstance(capabilities, list) and "tools" in capabilities:
+            agent_models.append(item["name"])
+
+    return {
+        "default_model": OLLAMA_CHAT_MODEL,
+        "models": list(dict.fromkeys(models)),
+        "agent_models": list(dict.fromkeys(agent_models)),
+    }
 
 
 # ── Policy Search Endpoint (Auto-Routed) ──────────────────────────────────────
@@ -303,7 +491,7 @@ def policy_search(payload: PolicySearchRequest):
 
     top_k = payload.top_k or 5
     temperature = payload.temperature if payload.temperature is not None else 0.3
-    model = payload.model or "llama3.1:8b"
+    model = payload.model or OLLAMA_CHAT_MODEL
     max_retries = (
         payload.max_retries if payload.max_retries is not None else MAX_RETRIES
     )
@@ -344,18 +532,10 @@ def policy_search(payload: PolicySearchRequest):
     result.latency_ms = round(total_ms, 3)
     result.mode_history = [mode]
     result.top_k = top_k
-    result.temperature = temperature
-    result.model = model
+    result.temperature = temperature if mode == MODE_AGENT else None
+    result.model = model if mode == MODE_AGENT else None
     result.max_retries = max_retries
     result.provider_cost = "N/A"
-
-    # Determine token source
-    if result.total_tokens > 0:
-        result.token_source = (
-            "ollama_live" if check_ollama_available() else "proxy_estimate"
-        )
-    else:
-        result.token_source = "unavailable"
 
     response = result.model_dump()
     response["routing"] = routing_decision.to_dict()
@@ -393,7 +573,7 @@ def execute_policy_agent(payload: PolicyQueryRequest):
         temp_val = getattr(payload, "temperature", 0.3)
         if temp_val is None:
             temp_val = 0.3
-        model_val = getattr(payload, "model", "llama3.1:8b") or "llama3.1:8b"
+        model_val = getattr(payload, "model", OLLAMA_CHAT_MODEL) or OLLAMA_CHAT_MODEL
 
         result = run_agent_case(
             case_id=payload.case_id or "custom_agent_case",

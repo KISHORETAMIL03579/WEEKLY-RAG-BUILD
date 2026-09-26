@@ -448,12 +448,21 @@ body {
   border-top: 1px solid var(--border);
 }
 .sources-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-secondary);
   margin-bottom: 6px;
+  cursor: pointer;
+  text-align: left;
 }
 .source-item {
   background: var(--bg-raised);
@@ -1034,8 +1043,10 @@ body {
 .input-bar-container {
   padding: 16px 30px 24px;
   background: transparent;
+  flex-shrink: 0;
 }
 .input-bar-pill {
+  width: 100%;
   max-width: 760px;
   margin: 0 auto;
   display: flex;
@@ -1047,22 +1058,59 @@ body {
   padding: 6px 8px 6px 20px;
   box-shadow: var(--shadow-lg);
 }
-.query-input-field {
+.chat-composer-input {
   flex: 1;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 1.35em;
+  max-height: 120px;
+  padding: 0;
+  resize: none;
+  overflow-y: hidden;
+  line-height: 1.35;
   background: transparent;
   border: none;
   outline: none;
+  box-shadow: none;
+  appearance: none;
+  -webkit-appearance: none;
   font-size: 0.88rem;
   color: var(--text-primary);
   font-family: var(--font);
 }
-.query-input-field::placeholder {
+.chat-composer-input:hover,
+.chat-composer-input:focus,
+.chat-composer-input:focus-visible,
+.chat-composer-input:active,
+.chat-composer-input:disabled {
+  border: none;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.chat-composer-input:-webkit-autofill,
+.chat-composer-input:-webkit-autofill:hover,
+.chat-composer-input:-webkit-autofill:focus,
+.chat-composer-input:-webkit-autofill:active {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -webkit-text-fill-color: var(--text-primary) !important;
+}
+.chat-composer-input::placeholder {
   color: var(--text-muted);
 }
 .send-pill-btn {
-  width: 36px;
+  min-width: 60px;
   height: 36px;
-  border-radius: 50%;
+  padding: 0 14px;
+  border-radius: 100px;
   background: var(--accent);
   border: none;
   color: var(--on-accent);
@@ -1086,6 +1134,43 @@ body {
   opacity: 0.4;
   cursor: not-allowed;
   transform: none;
+}
+.stop-pill-btn {
+  background: var(--red);
+}
+.stop-pill-btn:hover {
+  background: var(--red);
+}
+.chat-editing-indicator {
+  max-width: 760px;
+  margin: 0 auto 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+.chat-editing-indicator button {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+}
+.message-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.message-actions .copy-answer-btn {
+  margin-left: 0;
+}
+.message-row.user .message-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+  margin-left: 0;
 }
 
 /* ── RAG Parameters & Controls ────────────────────────────── */
@@ -1335,7 +1420,7 @@ body {
 
 /* ── Accessibility & Focus Visible ─────────────────────────── */
 button:focus-visible,
-input:focus-visible,
+input:not(.chat-composer-input):focus-visible,
 select:focus-visible,
 a:focus-visible,
 .dropzone:focus-visible,
@@ -1372,12 +1457,49 @@ a:focus-visible,
 
 @media (max-width: 700px) {
   .layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: 60px 1fr;
   }
+  .topbar,
   .chat-container {
     grid-column: 1;
     grid-row: 2;
+    min-width: 0;
+  }
+  .topbar {
+    grid-row: 1;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .messages-area,
+  .input-bar-container,
+  .onboarding-container,
+  .onboarding-step {
+    min-width: 0;
+  }
+  .onboarding-container {
+    width: 100%;
+  }
+  .onboarding-step {
+    width: 100%;
+  }
+  .topbar-logo,
+  .topbar-stat,
+  .topbar > .eval-btn {
+    min-width: 0;
+  }
+  .topbar-logo .logo-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .topbar > .eval-btn {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .topbar-stat {
+    overflow: hidden;
   }
   .sidebar-backdrop {
     display: block;
@@ -1435,8 +1557,8 @@ a:focus-visible,
     padding: 14px 16px;
   }
   .topbar {
-    padding: 0 12px;
-    gap: 8px;
+    padding: 0 8px;
+    gap: 6px;
   }
   .topbar-mode,
   .logo-version {
@@ -1445,6 +1567,17 @@ a:focus-visible,
 }
 
 @media (max-width: 480px) {
+  .topbar-logo {
+    gap: 6px;
+  }
+  .topbar > .eval-btn {
+    padding: 4px 6px;
+    font-size: 0.65rem;
+  }
+  .topbar-stat {
+    gap: 4px;
+    padding: 3px 6px;
+  }
   .eval-btn {
     padding: 4px 10px;
     font-size: 0.72rem;
@@ -1452,6 +1585,15 @@ a:focus-visible,
   .topbar-stat {
     padding: 3px 8px;
     font-size: 0.68rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .topbar-stat > span:not(.status-dot) {
+    display: none;
+  }
+  .topbar > .eval-btn {
+    max-width: 92px;
   }
 }
 
@@ -1844,6 +1986,31 @@ a:focus-visible,
 }
 
 @media (max-width: 480px) {
+  .app-header {
+    height: auto;
+    min-height: 60px;
+    flex-wrap: wrap;
+    padding: 8px 10px;
+  }
+  .viewer-header-left {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .viewer-header-right {
+    width: 100%;
+    min-width: 0;
+    justify-content: space-between;
+  }
+  .viewer-search-form {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+  }
+  .viewer-search-input,
+  .viewer-search-input:focus {
+    width: 100%;
+    min-width: 0;
+  }
   .viewer-pagination-pill,
   .viewer-zoom-pill {
     padding: 2px 4px;
@@ -1851,9 +2018,6 @@ a:focus-visible,
   }
   .viewer-brand-name {
     max-width: 80px;
-  }
-  .viewer-search-form {
-    display: none;
   }
 }
 
@@ -1880,6 +2044,57 @@ a:focus-visible,
   flex-direction: column;
   background: var(--bg);
   color: var(--text-primary);
+}
+
+.evaluation-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 28px;
+}
+
+.evaluation-page-heading {
+  min-width: 0;
+}
+
+.evaluation-page-tabs,
+.evaluation-page-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.evaluation-page-actions {
+  gap: 10px;
+}
+
+@media (max-width: 700px) {
+  .evaluation-page-header {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 12px;
+  }
+  .evaluation-page-heading,
+  .evaluation-page-tabs,
+  .evaluation-page-actions {
+    width: 100%;
+    min-width: 0;
+  }
+  .evaluation-page-tabs {
+    flex-wrap: wrap;
+  }
+  .evaluation-page-tabs > button {
+    flex: 1 1 150px;
+    min-width: 0;
+    justify-content: center;
+    text-align: center;
+  }
+  .evaluation-page-actions {
+    justify-content: space-between;
+  }
 }
 
 .eval-card {

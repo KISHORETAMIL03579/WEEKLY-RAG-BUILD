@@ -10,6 +10,7 @@ import {
 } from "../../types/policy";
 import { EvaluationDatasetManager } from "./EvaluationDatasetManager";
 import { QADataSetCase, DatasetMode } from "../../types/dataset";
+import { MetricCard } from "../common/MetricCard";
 
 interface PolicyAssistantViewProps {
   onNotify: (msg: string, type?: "info" | "success" | "error") => void;
@@ -47,7 +48,10 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
   // Benchmark Configuration State
   const [topK, setTopK] = useState<number>(5);
   const [temperature, setTemperature] = useState<number>(0.3);
-  const [selectedModel, setSelectedModel] = useState<string>("llama3.1:8b");
+  const [selectedModel, setSelectedModel] = useState<string>("");
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [defaultModel, setDefaultModel] = useState<string>("");
+  const [isLoadingModels, setIsLoadingModels] = useState<boolean>(true);
 
   // Benchmark Run State
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
@@ -73,6 +77,7 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
   );
   const [selectedCaseId, setSelectedCaseId] = useState<string>("case_01");
   const [isRunningSingle, setIsRunningSingle] = useState<boolean>(false);
+  const canRunAgent = availableModels.includes(selectedModel);
   const [agentSingleResult, setAgentSingleResult] =
     useState<PolicyOutputContract | null>(null);
   const [workflowSingleResult, setWorkflowSingleResult] =
@@ -81,9 +86,44 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
     loadInitialData();
     checkActiveBenchmark();
+    api
+      .getAvailableOllamaModels(controller.signal)
+      .then(({ default_model, agent_models }) => {
+        if (controller.signal.aborted) return;
+        setAvailableModels(agent_models);
+        setDefaultModel(default_model);
+        setSelectedModel((current) =>
+          agent_models.includes(current)
+            ? current
+            : agent_models.includes(default_model)
+              ? default_model
+              : agent_models[0] || "",
+        );
+        if (agent_models.length === 0) {
+          onNotify(
+            "No tool-capable Ollama model is installed for the Week 7 agent.",
+            "error",
+          );
+        }
+      })
+      .catch((error: Error) => {
+        if (!controller.signal.aborted) {
+          setAvailableModels([]);
+          setSelectedModel("");
+          onNotify(
+            `Could not load installed Ollama models: ${error.message}`,
+            "error",
+          );
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoadingModels(false);
+      });
     return () => {
+      controller.abort();
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
   }, []);
@@ -165,6 +205,10 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
   };
 
   const handleStartBenchmark = async () => {
+    if (!availableModels.includes(selectedModel)) {
+      onNotify("Select an installed tool-capable Ollama model first.", "error");
+      return;
+    }
     if (datasetMode === "custom" && customDatasetCases.length === 0) {
       onNotify(
         "Custom dataset is empty. Please add or import test cases first.",
@@ -173,6 +217,8 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
       return;
     }
     setIsRunningBenchmark(true);
+    setBenchmarkRunState(null);
+    setActiveRunId(null);
     try {
       const res: PolicyBenchmarkRunStateResponse =
         await api.startPolicyBenchmark({
@@ -216,7 +262,7 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
   const handleSetAppDefault = () => {
     setTopK(5);
     setTemperature(0.3);
-    setSelectedModel("llama3.1:8b");
+    setSelectedModel(defaultModel);
     onNotify(
       "Loaded Application Default: Top-K = 5, Temperature = 0.3",
       "info",
@@ -246,8 +292,15 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
       onNotify("Please select employee ID and query", "error");
       return;
     }
+    if ((mode === "both" || mode === "agent") && !canRunAgent) {
+      onNotify("Select an installed tool-capable Ollama model first.", "error");
+      return;
+    }
 
     setIsRunningSingle(true);
+    setAgentSingleResult(null);
+    setWorkflowSingleResult(null);
+    const results: PolicyOutputContract[] = [];
     try {
       if (mode === "both" || mode === "agent") {
         const aRes = await api.runPolicyAgent({
@@ -259,6 +312,7 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
           model: selectedModel,
         });
         setAgentSingleResult(aRes);
+        results.push(aRes);
       }
       if (mode === "both" || mode === "workflow") {
         const wRes = await api.runPolicyWorkflow({
@@ -268,8 +322,19 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
           top_k: topK,
         });
         setWorkflowSingleResult(wRes);
+        results.push(wRes);
       }
-      onNotify("Policy query evaluated successfully!", "success");
+      const failedResult = results.find(
+        (result) => result.termination_reason !== "SUCCESS",
+      );
+      if (failedResult) {
+        onNotify(
+          `Policy execution failed (${failedResult.termination_reason}).`,
+          "error",
+        );
+      } else {
+        onNotify("Policy query evaluated successfully!", "success");
+      }
     } catch (err: any) {
       onNotify("Execution error: " + err.message, "error");
     } finally {
@@ -294,17 +359,24 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
       .filter((l): l is number => typeof l === "number")
       .sort((a, b) => a - b);
 
-    const calcP = (arr: number[], p: number) => {
+    const median = (arr: number[]) => {
       if (!arr.length) return 0;
-      const idx = Math.min(arr.length - 1, Math.floor(arr.length * p));
-      return arr[idx];
+      const middle = Math.floor(arr.length / 2);
+      return arr.length % 2 === 0
+        ? (arr[middle - 1] + arr[middle]) / 2
+        : arr[middle];
+    };
+    const percentile = (arr: number[], p: number) => {
+      if (!arr.length) return 0;
+      const rank = Math.ceil(arr.length * p);
+      return arr[Math.min(arr.length - 1, Math.max(0, rank - 1))];
     };
 
     return {
-      agentP50: calcP(agentLats, 0.5),
-      agentP95: calcP(agentLats, 0.95),
-      wfP50: calcP(wfLats, 0.5),
-      wfP95: calcP(wfLats, 0.95),
+      agentP50: median(agentLats),
+      agentP95: percentile(agentLats, 0.95),
+      wfP50: median(wfLats),
+      wfP95: percentile(wfLats, 0.95),
     };
   }, [benchmarkRunState]);
 
@@ -478,7 +550,12 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
             <button
               type="button"
               onClick={handleStartBenchmark}
-              disabled={isRunningBenchmark || isRunningSingle}
+              disabled={
+                isRunningBenchmark ||
+                isRunningSingle ||
+                isLoadingModels ||
+                !canRunAgent
+              }
               style={{
                 padding: "10px 24px",
                 background:
@@ -712,7 +789,7 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
             <select
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
-              disabled={isRunningBenchmark}
+              disabled={isRunningBenchmark || isLoadingModels || availableModels.length === 0}
               style={{
                 width: "100%",
                 padding: "6px 8px",
@@ -721,12 +798,29 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
                 border: "1px solid var(--border)",
                 color: "#fff",
                 fontSize: "0.82rem",
-                cursor: isRunningBenchmark ? "not-allowed" : "pointer",
+                cursor:
+                  isRunningBenchmark || isLoadingModels || availableModels.length === 0
+                    ? "not-allowed"
+                    : "pointer",
               }}
             >
-              <option value="llama3.1:8b">llama3.1:8b (Default)</option>
-              <option value="mistral:7b">mistral:7b</option>
-              <option value="qwen2.5:7b">qwen2.5:7b</option>
+              {selectedModel && !availableModels.includes(selectedModel) && (
+                <option value={selectedModel} disabled>
+                  {selectedModel} (not installed)
+                </option>
+              )}
+              {availableModels.length === 0 ? (
+                <option value="">
+                  {isLoadingModels ? "Loading Agent models…" : "No tool-capable models"}
+                </option>
+              ) : (
+                availableModels.map((availableModel) => (
+                  <option key={availableModel} value={availableModel}>
+                    {availableModel}
+                    {availableModel === defaultModel ? " (Default)" : ""}
+                  </option>
+                ))
+              )}
             </select>
           </div>
 
@@ -822,6 +916,8 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
             onClick={handleStartBenchmark}
             disabled={
               isRunningBenchmark ||
+              isLoadingModels ||
+              !canRunAgent ||
               (datasetMode === "custom" && customDatasetCases.length === 0)
             }
             style={{
@@ -908,6 +1004,7 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
             <button
               type="button"
               onClick={handleStartBenchmark}
+              disabled={isLoadingModels || !canRunAgent}
               className="btn-secondary"
               style={{
                 fontSize: "0.82rem",
@@ -1303,7 +1400,7 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
             </div>
           </div>
 
-          {/* Compact 10-Case Live Status Grid */}
+          {/* Compact live status grid */}
           <div>
             <div
               style={{
@@ -1395,6 +1492,7 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
               <button
                 type="button"
                 onClick={handleStartBenchmark}
+                disabled={isLoadingModels || !canRunAgent}
                 style={{
                   padding: "8px 18px",
                   background: "var(--accent)",
@@ -1445,199 +1543,95 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
               gap: "14px",
             }}
           >
-            {/* Pass Rate */}
-            <div
-              style={{
-                background: "var(--bg-surface-elevated)",
-                padding: "14px 16px",
-                borderRadius: "8px",
-                border: "1px solid var(--border)",
-              }}
-            >
-              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                Pass Rate (Agent / Workflow)
-              </div>
-              <div
-                style={{
-                  fontSize: "1.2rem",
-                  fontWeight: 800,
-                  color: "#10b981",
-                  marginTop: "4px",
-                }}
-              >
-                {benchmarkRunState.summary.agent.pass_rate_pct}% /{" "}
-                {benchmarkRunState.summary.workflow.pass_rate_pct}%
-              </div>
-              <div
-                style={{
-                  fontSize: "0.72rem",
-                  color: "var(--text-muted)",
-                  marginTop: "2px",
-                }}
-              >
-                {benchmarkRunState.summary.agent.passed_count}/10 vs{" "}
-                {benchmarkRunState.summary.workflow.passed_count}/10
-              </div>
-            </div>
+            <MetricCard
+              label="Pass Rate (Agent / Workflow)"
+              value={
+                <>
+                  {benchmarkRunState.summary.agent.pass_rate_pct}% /{" "}
+                  {benchmarkRunState.summary.workflow.pass_rate_pct}%
+                </>
+              }
+              description={
+                <>
+                  {benchmarkRunState.summary.agent.passed_count}/
+                  {benchmarkRunState.total_cases} vs{" "}
+                  {benchmarkRunState.summary.workflow.passed_count}/
+                  {benchmarkRunState.total_cases}
+                </>
+              }
+              valueColor="#10b981"
+            />
 
-            {/* p50 Latency */}
-            <div
-              style={{
-                background: "var(--bg-surface-elevated)",
-                padding: "14px 16px",
-                borderRadius: "8px",
-                border: "1px solid var(--border)",
-              }}
-            >
-              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                p50 Latency (Agent / Workflow)
-              </div>
-              <div
-                style={{
-                  fontSize: "1.2rem",
-                  fontWeight: 800,
-                  color: "#60a5fa",
-                  marginTop: "4px",
-                }}
-              >
-                {latencyMetrics.agentP50
-                  ? `${latencyMetrics.agentP50.toFixed(1)}ms`
-                  : `${benchmarkRunState.summary.agent.p50_latency_ms}ms`}{" "}
-                /{" "}
-                {latencyMetrics.wfP50
-                  ? `${latencyMetrics.wfP50.toFixed(2)}ms`
-                  : `${benchmarkRunState.summary.workflow.p50_latency_ms}ms`}
-              </div>
-              <div
-                style={{
-                  fontSize: "0.72rem",
-                  color: "var(--text-muted)",
-                  marginTop: "2px",
-                }}
-              >
-                Median response latency
-              </div>
-            </div>
+            <MetricCard
+              label="p50 Latency (Agent / Workflow)"
+              value={
+                <>
+                  {latencyMetrics.agentP50
+                    ? `${latencyMetrics.agentP50.toFixed(1)}ms`
+                    : `${benchmarkRunState.summary.agent.p50_latency_ms}ms`}{" "}
+                  /{" "}
+                  {latencyMetrics.wfP50
+                    ? `${latencyMetrics.wfP50.toFixed(2)}ms`
+                    : `${benchmarkRunState.summary.workflow.p50_latency_ms}ms`}
+                </>
+              }
+              description="Median response latency"
+              valueColor="#60a5fa"
+            />
 
-            {/* p95 Latency */}
-            <div
-              style={{
-                background: "var(--bg-surface-elevated)",
-                padding: "14px 16px",
-                borderRadius: "8px",
-                border: "1px solid var(--border)",
-              }}
-            >
-              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                p95 Latency (Agent / Workflow)
-              </div>
-              <div
-                style={{
-                  fontSize: "1.2rem",
-                  fontWeight: 800,
-                  color: "#38bdf8",
-                  marginTop: "4px",
-                }}
-              >
-                {latencyMetrics.agentP95
-                  ? `${latencyMetrics.agentP95.toFixed(1)}ms`
-                  : "—"}{" "}
-                /{" "}
-                {latencyMetrics.wfP95
-                  ? `${latencyMetrics.wfP95.toFixed(2)}ms`
-                  : "—"}
-              </div>
-              <div
-                style={{
-                  fontSize: "0.72rem",
-                  color: "var(--text-muted)",
-                  marginTop: "2px",
-                }}
-              >
-                95th percentile latency
-              </div>
-            </div>
+            <MetricCard
+              label="p95 Latency (Agent / Workflow)"
+              value={
+                <>
+                  {latencyMetrics.agentP95
+                    ? `${latencyMetrics.agentP95.toFixed(1)}ms`
+                    : "—"}{" "}
+                  /{" "}
+                  {latencyMetrics.wfP95
+                    ? `${latencyMetrics.wfP95.toFixed(2)}ms`
+                    : "—"}
+                </>
+              }
+              description="95th percentile latency"
+              valueColor="#38bdf8"
+            />
 
-            {/* Total Tokens */}
-            <div
-              style={{
-                background: "var(--bg-surface-elevated)",
-                padding: "14px 16px",
-                borderRadius: "8px",
-                border: "1px solid var(--border)",
-              }}
-            >
-              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                Total Tokens (Agent / Workflow)
-              </div>
-              <div
-                style={{
-                  fontSize: "1.2rem",
-                  fontWeight: 800,
-                  color: "#fbbf24",
-                  marginTop: "4px",
-                }}
-              >
-                {benchmarkRunState.summary.agent.total_tokens.toLocaleString()}{" "}
-                /{" "}
-                {benchmarkRunState.summary.workflow.total_tokens.toLocaleString()}
-              </div>
-              <div
-                style={{
-                  fontSize: "0.72rem",
-                  color: "var(--text-muted)",
-                  marginTop: "2px",
-                }}
-              >
-                Prompt + completion tokens
-              </div>
-            </div>
+            <MetricCard
+              label="Total Tokens (Agent / Workflow)"
+              value={
+                <>
+                  {benchmarkRunState.summary.agent.total_tokens.toLocaleString()}{" "}
+                  /{" "}
+                  {benchmarkRunState.summary.workflow.total_tokens.toLocaleString()}
+                </>
+              }
+              description="Prompt + completion tokens"
+              valueColor="#fbbf24"
+            />
 
-            {/* Cost / Question */}
-            <div
-              style={{
-                background: "var(--bg-surface-elevated)",
-                padding: "14px 16px",
-                borderRadius: "8px",
-                border: "1px solid var(--border)",
-              }}
-            >
-              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                Cost / Question (Agent / Workflow)
-              </div>
-              <div
-                style={{
-                  fontSize: "1.2rem",
-                  fontWeight: 800,
-                  color: "#a78bfa",
-                  marginTop: "4px",
-                }}
-              >
-                $
-                {benchmarkRunState.summary.agent.cost_per_question_usd.toFixed(
-                  6,
-                )}{" "}
-                / $
-                {benchmarkRunState.summary.workflow.cost_per_question_usd.toFixed(
-                  6,
-                )}
-              </div>
-              <div
-                style={{
-                  fontSize: "0.72rem",
-                  color: "var(--text-muted)",
-                  marginTop: "2px",
-                }}
-              >
-                Proxy at $2.00 / 1M tokens
-              </div>
-            </div>
+            <MetricCard
+              label="Estimated Cost / Question (Agent / Workflow)"
+              value={
+                <>
+                  $
+                  {benchmarkRunState.summary.agent.cost_per_question_usd.toFixed(
+                    6,
+                  )}{" "}
+                  / $
+                  {benchmarkRunState.summary.workflow.cost_per_question_usd.toFixed(
+                    6,
+                  )}
+                </>
+              }
+              description="Token-cost proxy only; provider cost is N/A"
+              valueColor="#a78bfa"
+            />
           </div>
         </div>
       )}
 
       {/* ==================================================
-          7. 10-CASE RESULTS TABLE
+          7. BENCHMARK RESULTS TABLE
           ================================================== */}
       {benchmarkRunState &&
         benchmarkRunState.cases_status &&
@@ -1661,7 +1655,8 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
                 gap: "8px",
               }}
             >
-              <span>📋</span> 10-Case Benchmark Results
+              <span>📋</span> {benchmarkRunState.total_cases}-Case Benchmark
+              Results
             </h3>
 
             <table
@@ -1689,7 +1684,9 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
                   <th style={{ padding: "8px 10px" }}>Workflow Tokens</th>
                   <th style={{ padding: "8px 10px" }}>Agent Latency</th>
                   <th style={{ padding: "8px 10px" }}>Workflow Latency</th>
-                  <th style={{ padding: "8px 10px" }}>Cost</th>
+                  <th style={{ padding: "8px 10px" }}>
+                    Estimated Cost (Proxy)
+                  </th>
                   <th style={{ padding: "8px 10px", textAlign: "center" }}>
                     Inspect
                   </th>
@@ -2367,8 +2364,8 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
               execution. Workflow latency measures deterministic execution.
             </p>
             <p>
-              <strong>Cost:</strong> Cost proxy based on actual recorded token
-              usage at $2.00 / 1M token proxy rate.
+              <strong>Cost:</strong> Estimated token-cost proxy based on
+              recorded usage; Ollama provider billing is not represented.
             </p>
             <p>
               <strong>Reliability:</strong> Deterministic policy execution
@@ -2709,7 +2706,12 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
                     <button
                       type="button"
                       onClick={() => handleRunSingle("agent")}
-                      disabled={isRunningBenchmark || isRunningSingle}
+                      disabled={
+                        isRunningBenchmark ||
+                        isRunningSingle ||
+                        isLoadingModels ||
+                        !canRunAgent
+                      }
                       className="btn-secondary"
                       style={{ fontSize: "0.78rem", padding: "5px 12px" }}
                     >
@@ -2727,7 +2729,12 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
                     <button
                       type="button"
                       onClick={() => handleRunSingle("both")}
-                      disabled={isRunningBenchmark || isRunningSingle}
+                      disabled={
+                        isRunningBenchmark ||
+                        isRunningSingle ||
+                        isLoadingModels ||
+                        !canRunAgent
+                      }
                       style={{
                         padding: "5px 14px",
                         background: "var(--accent)",

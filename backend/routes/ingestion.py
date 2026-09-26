@@ -47,6 +47,17 @@ from backend.storage.session_manager import (
     save_session_manifest,
     save_upload_to,
     sweep_cancelled_uploads,
+    persist_session_metadata,
+    serialize_session_mutation,
+)
+from backend.storage.shared_state import (
+    claim_session_hash,
+    clear_upload_cancellation,
+    commit_session_hash,
+    release_session_hash,
+    remove_session_document_hash,
+    request_upload_cancellation,
+    upload_cancellation_requested,
 )
 
 # Backward-compatibility aliases
@@ -64,11 +75,13 @@ def upload_cancel(payload: Optional[UploadCancelPayload] = Body(default=None)):
     cancelled_map = get_app_symbol("CANCELLED_UPLOADS", CANCELLED_UPLOADS)
     upload_id = ((payload.upload_id if payload else None) or "").strip()
     if upload_id:
+        request_upload_cancellation(upload_id)
         cancelled_map[upload_id] = time.time()
     return OkResponse()
 
 
 @router.post("/upload")
+@serialize_session_mutation
 def upload(
     sid: SessionId,
     files: list[UploadFile] = File(default=[]),
@@ -104,6 +117,7 @@ def upload(
         chunk_mode,
         sid[:8],
     )
+    store = fn_get_store(sid)
     hashes = hash_store_map.setdefault(sid, set())
     embedding_ok = fn_embeddings_configured()
     results = []
@@ -150,7 +164,7 @@ def upload(
                 content_hash = hashlib.sha256(fh.read()).hexdigest()
             dedupe_key = (content_hash, chunk_mode)
 
-            if dedupe_key in hashes:
+            if not claim_session_hash(sid, content_hash, chunk_mode):
                 filepath.unlink(missing_ok=True)
                 logger.info(
                     "ℹ️ Duplicate upload skipped for '%s' under mode '%s'",
@@ -182,6 +196,7 @@ def upload(
             if not pages:
                 filepath.unlink(missing_ok=True)
                 hashes.discard(dedupe_key)
+                release_session_hash(sid, *dedupe_key)
                 reason = (
                     "No extractable text (password-protected or scanned PDF?)"
                     if ext == "pdf"
@@ -199,6 +214,7 @@ def upload(
             if not new_chunks:
                 filepath.unlink(missing_ok=True)
                 hashes.discard(dedupe_key)
+                release_session_hash(sid, *dedupe_key)
                 logger.warning("⚠️ Chunking produced 0 chunks for '%s'", original_name)
                 results.append(
                     {"filename": original_name, "error": "No chunks produced"}
@@ -243,6 +259,7 @@ def upload(
             filepath.unlink(missing_ok=True)
             if dedupe_key is not None:
                 hashes.discard(dedupe_key)
+                release_session_hash(sid, *dedupe_key)
             logger.error(
                 "❌ Exception during processing '%s': %s",
                 original_name,
@@ -263,15 +280,18 @@ def upload(
             status_code=400,
         )
 
-    store = fn_get_store(sid)
     committed_doc_ids: list[str] = []
     was_cancelled = False
 
     for item in pending:
-        if upload_id and upload_id in cancelled_map:
+        if upload_id and (
+            upload_id in cancelled_map
+            or upload_cancellation_requested(upload_id)
+        ):
             was_cancelled = True
             item["filepath"].unlink(missing_ok=True)
             hashes.discard(item["hash"])
+            release_session_hash(sid, *item["hash"])
             logger.warning("🚫 Upload cancelled by client for upload_id %s", upload_id)
             continue
 
@@ -316,9 +336,9 @@ def upload(
                 "path": stored_path,
                 "name": item["filename"],
             }
-            fn_save_manifest(sid)
-
             hash_by_doc_map.setdefault(sid, {})[item["doc_id"]] = item["hash"]
+            commit_session_hash(sid, *item["hash"], item["doc_id"])
+            fn_save_manifest(sid)
 
             item["result"]["doc_id"] = item["doc_id"]
             item["result"]["openable"] = True
@@ -379,12 +399,10 @@ def upload(
                 stored_path.unlink(missing_ok=True)
             item["filepath"].unlink(missing_ok=True)
             hashes.discard(item["hash"])
+            release_session_hash(sid, *item["hash"])
             session_files_map.get(sid, {}).pop(item["doc_id"], None)
             hash_by_doc_map.get(sid, {}).pop(item["doc_id"], None)
-            try:
-                fn_save_manifest(sid)
-            except Exception:
-                pass
+            fn_save_manifest(sid)
             logger.error(
                 "❌ Failed to index '%s': %s", item["filename"], exc, exc_info=True
             )
@@ -400,7 +418,9 @@ def upload(
                     doc_res["reconciliation_persistence_failed"] = True
             results.append(doc_res)
 
-    if upload_id and upload_id in cancelled_map:
+    if upload_id and (
+        upload_id in cancelled_map or upload_cancellation_requested(upload_id)
+    ):
         was_cancelled = True
     if was_cancelled:
         logger.warning(
@@ -446,6 +466,7 @@ def upload(
                 doc_hash = hash_by_doc_map.get(sid, {}).pop(doc_id, None)
                 if doc_hash is not None:
                     hashes.discard(doc_hash)
+                    release_session_hash(sid, *doc_hash)
             else:
                 if sid in session_files_map and doc_id in session_files_map[sid]:
                     session_files_map[sid][doc_id]["orphan"] = True
@@ -455,6 +476,8 @@ def upload(
 
         fn_save_manifest(sid)
         cancelled_map.pop(upload_id, None)
+        clear_upload_cancellation(upload_id)
+        persist_session_metadata(sid)
 
         if failed_rollbacks:
             return {
@@ -483,6 +506,7 @@ def upload(
 
 
 @router.post("/load-url")
+@serialize_session_mutation
 def load_url(sid: SessionId, payload: Optional[UrlPayload] = Body(default=None)):
     payload = payload or UrlPayload()
     url = (payload.url or "").strip()
@@ -560,6 +584,7 @@ def load_url(sid: SessionId, payload: Optional[UrlPayload] = Body(default=None))
     chunk_counts_map.setdefault(sid, {})
     for mode in ("structured", "128", "256", "512"):
         chunk_counts_map[sid][mode] = len(chunk_text(doc_info, pages, mode))
+    persist_session_metadata(sid)
 
     return {
         "ok": True,
@@ -579,6 +604,7 @@ def load_url(sid: SessionId, payload: Optional[UrlPayload] = Body(default=None))
 
 
 @router.post("/remove", response_model=RemoveResponse, response_model_exclude_none=True)
+@serialize_session_mutation
 def remove_doc(
     sid: RequiredSessionId, payload: Optional[RemovePayload] = Body(default=None)
 ):
@@ -611,6 +637,8 @@ def remove_doc(
     doc_hash = hash_by_doc_map.get(sid, {}).pop(doc_id, None)
     if doc_hash is not None:
         hash_store_map.get(sid, set()).discard(doc_hash)
+    remove_session_document_hash(sid, doc_id)
+    persist_session_metadata(sid)
 
     resp = RemoveResponse(ok=True, removed_chunks=removed_chunks)
     backend_error = getattr(store, "last_backend_error", None)

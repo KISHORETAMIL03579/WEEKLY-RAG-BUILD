@@ -37,6 +37,7 @@ from backend.services.embeddings import embeddings_configured
 from backend.services.llm import chat_configured
 from backend.storage.orphan_store import load_orphaned_docs
 from backend.storage.session_manager import SessionId
+from backend.storage.shared_state import initialize_shared_state
 
 
 def create_app() -> FastAPI:
@@ -115,6 +116,7 @@ def create_app() -> FastAPI:
     # Startup event to load orphans
     @app.on_event("startup")
     def startup_event():
+        initialize_shared_state()
         load_orphaned_docs()
 
     return app

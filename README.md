@@ -576,8 +576,8 @@ The `app` container's health check hits `/healthz` directly via Python standard 
 > `docker-compose.yml` enforces `${SECRET_KEY:?SECRET_KEY must be set in .env to preserve session continuity}`. Startup will fail fast with a descriptive error if `SECRET_KEY` is omitted, preventing inadvertent deployment with ephemeral per-process session cookies.
 
 > **Deployment Architecture Note (Single-Host vs Clustered):**
-> The bundled Docker Compose configuration is hardened for a **single-host deployment** (`restart: unless-stopped`, non-root container user `appuser`, isolated loopback bindings, durable host volume mounts for `./uploads`, `./vectorstore`, and `./traces`, and `filelock` for cross-worker serialized writes).
-> For multi-node or horizontally scaled deployments across multiple container instances, shared network storage (e.g., NFS, AWS EFS) or object storage (S3/GCS) is required for `./uploads` and `./traces` because trace persistence, document retrieval, and `orphans.jsonl` conflict-resolution rely on host filesystem durability and atomic file locking (`filelock`).
+> The bundled Docker Compose configuration is hardened for a **single-host deployment** (`restart: unless-stopped`, non-root container user `appuser`, isolated loopback bindings, durable host volume mounts for `./uploads`, `./vectorstore`, and `./traces`, a named SQLite state volume, and `filelock` for cross-worker serialized writes). The app-state database is created and migrated automatically; it is runtime data and must not be committed.
+> For multi-node or horizontally scaled deployments across multiple container instances, SQLite's app-state volume and the `./uploads`, `./vectorstore`, and `./traces` paths must be replaced with shared database/storage services. SQLite and the bundled file locks synchronize processes on one host, not independent machines.
 > Note on Markdown (`*.md`): `.dockerignore` excludes repository markdown docs to keep image layers lean. Any user markdown documents intended for indexing should be uploaded through the UI or placed directly into the volume-mounted `./uploads/` directory.
 
 ---

@@ -23,10 +23,18 @@ export const ViewerPage: React.FC<ViewerPageProps> = ({ initialDocId }) => {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     let id = params.get("doc_id") || initialDocId || "";
+    setError(null);
+    setLoading(true);
     if (!id && window.location.pathname.startsWith("/file/")) {
       const parts = window.location.pathname.split("/");
       if (parts[2] && parts[2] !== "raw" && parts[2] !== "pages") {
-        id = decodeURIComponent(parts[2]);
+        try {
+          id = decodeURIComponent(parts[2]);
+        } catch {
+          setError("Invalid document URL: the document ID is malformed.");
+          setLoading(false);
+          return;
+        }
       }
     }
     const initialPage = parseInt(params.get("page") || "1", 10);

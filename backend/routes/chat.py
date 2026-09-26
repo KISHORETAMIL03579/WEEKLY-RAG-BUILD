@@ -7,9 +7,10 @@ import hashlib
 import urllib.request
 import urllib.error
 from typing import Any, Optional
-from fastapi import APIRouter, Body, Response
+from fastapi import APIRouter, Body, HTTPException, Response
 from fastapi.responses import JSONResponse
 
+from backend.errors import LLMGenerationError
 from backend.config import (
     CHAT_BACKEND,
     EMBED_BACKEND,
@@ -36,6 +37,12 @@ from backend.schemas.chat import (
 )
 from backend.services.embeddings import embed_text, embeddings_configured
 from backend.services.llm import chat_configured, RAGTracer
+from backend.services.chat_runs import (
+    ChatRunCancelled,
+    cancel_chat_run,
+    get_current_chat_run,
+    managed_chat_run,
+)
 from backend.services.reranker import rerank_with_llm, rewrite_query
 from backend.services.search import (
     fit_to_token_budget,
@@ -48,7 +55,10 @@ from backend.services.search import (
     validate_context,
 )
 from backend.storage.exceptions import RetrievalBackendError
-from backend.storage.orphan_store import ORPHANED_DOCS, resolve_orphaned_doc
+from backend.storage.orphan_store import (
+    read_durable_orphans,
+    resolve_orphaned_doc,
+)
 from backend.storage.session_manager import (
     CHUNK_COUNTS,
     HASH_BY_DOC,
@@ -59,7 +69,10 @@ from backend.storage.session_manager import (
     VECTOR_STORE,
     cleanup_session_files,
     get_store,
+    remove_session_state,
+    serialize_session_mutation,
 )
+from backend.storage.shared_state import active_session_count
 from backend.storage.trace_store import (
     QA_PROMPT_VERSION,
     TRACES,
@@ -74,12 +87,18 @@ router = APIRouter(tags=["chat"])
 
 
 @router.post("/ask")
+@managed_chat_run
 def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=None)):
     if not sid:
         return JSONResponse({"error": "No documents uploaded yet"}, status_code=400)
 
+    run = get_current_chat_run()
     payload = payload or AskPayload()
+    if run:
+        payload.run_id = run.run_id
     query = (payload.query or "").strip()
+    if run:
+        run.check()
     method_filter = (payload.chunk_mode or "").strip() or None
 
     # Dynamic TOP_K and TEMPERATURE from request payload (fallback to env/defaults).
@@ -95,6 +114,7 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
     )
 
     trace_id = str(uuid.uuid4())
+    run_id = run.run_id if run else (payload.run_id or f"run_{uuid.uuid4().hex}")
     _t0 = time.time()
 
     fn_get_store = get_app_symbol("_get_store", get_store)
@@ -141,6 +161,8 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
         """Writes one durable, replayable /ask trace record with strict PII redaction."""
         record = {
             "trace_id": trace_id,
+            "run_id": run_id,
+            "turn_id": payload.turn_id,
             "session_id_hash": hashlib.sha256(sid.encode()).hexdigest()[:16],
             "question": redact(query),
             "search_query": redact(search_query) if search_query != query else None,
@@ -220,6 +242,7 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
             "sources": [],
             "top_k": top_k,
             "temperature": temperature,
+            "run_id": run_id,
         }
 
     active_store = store
@@ -236,6 +259,7 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
                 "sources": [],
                 "top_k": top_k,
                 "temperature": temperature,
+                "run_id": run_id,
             }
 
     # Path 1: embeddings + LLM (if configured and vectors exist)
@@ -246,6 +270,8 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
         and len(active_store.vectors) == len(active_store.chunks)
     ):
         try:
+            if run:
+                run.check()
             if retrieval_mode_val == "hybrid-legacy":
                 raw_results = fn_hybrid(active_store, search_query, top_k=top_k)
             elif retrieval_mode_val == "embed":
@@ -253,6 +279,8 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
                 raw_results = active_store.query(q_vec, top_k=top_k, min_score=0.0)
             else:  # "hybrid" (default) — Reciprocal Rank Fusion
                 raw_results = fn_rrf(active_store, search_query, top_k=top_k)
+            if run:
+                run.check()
             near_miss = raw_results[0] if raw_results else None
 
             # Bounded Safety Threshold: If the top match clears EMBED_MIN_SCORE (confirming topical relevance),
@@ -284,7 +312,11 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
 
             rerank_score = None
             if rerank_enabled_val and len(results) > 1:
+                if run:
+                    run.check()
                 results, rerank_score = fn_rerank(query, results)
+                if run:
+                    run.check()
                 RAGTracer.trace(
                     "RETRIEVAL",
                     4,
@@ -348,7 +380,11 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
                     ),
                 }
 
+            if run:
+                run.check()
             answer = fn_generate(query, results, temperature=temperature)
+            if run:
+                run.check()
             RAGTracer.trace(
                 "RETRIEVAL",
                 6,
@@ -380,7 +416,12 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
                 "trace_id": trace_id,
                 "top_k": top_k,
                 "temperature": temperature,
+                "run_id": run_id,
             }
+        except ChatRunCancelled:
+            raise
+        except LLMGenerationError:
+            raise
         except RetrievalBackendError as exc:
             logger.error(
                 "❌ Vector database retrieval failed in /ask: %s", exc, exc_info=True
@@ -405,6 +446,8 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
                 exc_info=True,
             )
         except Exception:
+            if run and run.cancelled.is_set():
+                raise ChatRunCancelled()
             logger.warning(
                 "Embeddings/LLM path failed for a query — falling back to TF-IDF-only.",
                 exc_info=True,
@@ -467,6 +510,16 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
     return resp
 
 
+@router.post("/ask/{run_id}/cancel")
+def cancel_ask(run_id: str, sid: OptionalSessionId):
+    if not run_id or len(run_id) > 128:
+        raise HTTPException(status_code=422, detail="Invalid chat run ID")
+    cancelled = cancel_chat_run(run_id, sid)
+    if not cancelled:
+        raise HTTPException(status_code=404, detail="Active chat run not found")
+    return {"ok": True, "run_id": run_id, "status": "CANCELLING"}
+
+
 @router.get("/status", response_model=StatusResponse)
 def status(sid: OptionalSessionId):
     fn_get_store = get_app_symbol("_get_store", get_store)
@@ -502,11 +555,12 @@ def status(sid: OptionalSessionId):
 
 
 @router.post("/clear", response_model=ClearResponse, response_model_exclude_none=True)
+@serialize_session_mutation
 def clear(sid: OptionalSessionId):
     backend_error = None
     fn_get_store = get_app_symbol("_get_store", get_store)
     fn_resolve_orphan = get_app_symbol("_resolve_orphaned_doc", resolve_orphaned_doc)
-    orphans_map = get_app_symbol("ORPHANED_DOCS", ORPHANED_DOCS)
+    fn_read_orphans = get_app_symbol("_read_durable_orphans", read_durable_orphans)
     vector_store_map = get_app_symbol("VECTOR_STORE", VECTOR_STORE)
     hash_store_map = get_app_symbol("HASH_STORE", HASH_STORE)
     hash_by_doc_map = get_app_symbol("HASH_BY_DOC", HASH_BY_DOC)
@@ -517,16 +571,16 @@ def clear(sid: OptionalSessionId):
         store.clear()
         backend_error = getattr(store, "last_backend_error", None)
         if not backend_error:
-            orphans = list(orphans_map.get(sid, []))
+            orphans = list(fn_read_orphans().get(sid, []))
             for o in orphans:
                 if o.get("doc_id"):
                     fn_resolve_orphan(sid, o["doc_id"])
         vector_store_map.pop(sid, None)
-        SESSION_ACCESS.pop(sid, None)
         hash_store_map.pop(sid, None)
         hash_by_doc_map.pop(sid, None)
         chunk_counts_map.pop(sid, None)
         cleanup_session_files(sid)
+        remove_session_state(sid)
     resp = ClearResponse(ok=True)
     if backend_error:
         resp.warning = (
@@ -556,7 +610,7 @@ def healthz():
             retrieval_mode_val if fn_embeddings_configured() else "tfidf-only"
         ),
         vector_backend=vec_backend_val,
-        active_sessions=len(SESSION_ACCESS),
+        active_sessions=active_session_count(),
     )
 
 

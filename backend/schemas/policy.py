@@ -5,6 +5,8 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
+from backend.config import OLLAMA_CHAT_MODEL
+
 # Strict Execution Budgets & Constants
 MAX_ITERATIONS: int = 5
 MAX_TOKENS: int = 4000
@@ -56,7 +58,7 @@ class PolicyQueryRequest(BaseModel):
     case_id: Optional[str] = Field(None, description="Optional benchmark case ID")
     top_k: Optional[int] = Field(5, description="Top K retrieval count")
     temperature: Optional[float] = Field(0.3, description="LLM sampling temperature")
-    model: Optional[str] = Field("llama3.1:8b", description="Model name")
+    model: Optional[str] = Field(OLLAMA_CHAT_MODEL, description="Model name")
 
 
 # Telemetry record for a single LLM call (including retries)

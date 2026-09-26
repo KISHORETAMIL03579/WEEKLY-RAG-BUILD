@@ -10,6 +10,7 @@
 # Persistent data:
 #   - qdrant_data: Vector embeddings stored in named volume
 #   - ollama_data: Downloaded LLM/embedding models stored in named volume (strictly in Docker)
+#   - app_state: SQLite session/run metadata shared across Gunicorn workers
 #   - ./uploads, ./traces, ./vectorstore: Local directory mounts
 
 name: weekly-rag-build
@@ -181,6 +182,7 @@ services:
       RERANK_MIN_RELEVANCE: ${RERANK_MIN_RELEVANCE:-5}
       QUERY_REWRITE_ENABLED: ${QUERY_REWRITE_ENABLED:-false}
       TRACE_LOG_PATH: ${TRACE_LOG_PATH:-traces/traces.jsonl}
+      APP_STATE_DB: /app/state/app_state.sqlite3
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env to preserve session continuity}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
       ADMIN_API_KEY: ${ADMIN_API_KEY:-}
@@ -212,7 +214,9 @@ services:
       - ./uploads:/app/uploads
       - ./vectorstore:/app/vectorstore
       - ./traces:/app/traces
+      - app_state:/app/state
 
 volumes:
   qdrant_data:
   ollama_data:
+  app_state:

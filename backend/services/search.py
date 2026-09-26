@@ -7,11 +7,14 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from backend.config import (
     BM25_B,
     BM25_K1,
+    CHAT_BACKEND,
     HYBRID_ALPHA,
     MAX_CONTEXT_TOKENS,
     RRF_K,
     logger,
 )
+from backend.errors import LLMGenerationError
+from backend.services.chat_runs import ChatRunCancelled, get_current_chat_run
 from backend.services.chunker import split_sentences
 from backend.services.embeddings import embed_text
 from backend.services.llm import chat_call
@@ -456,8 +459,16 @@ def generate_answer(query: str, results: List[dict], temperature: float = 0.3) -
     user = build_qa_user_prompt(query, results)
     try:
         return chat_call(system, user, temperature=temperature)
-    except Exception:
-        return ""
+    except Exception as exc:
+        run = get_current_chat_run()
+        if run and run.cancelled.is_set():
+            raise ChatRunCancelled() from None
+        logger.error(
+            "LLM answer generation failed (backend=%s, error_type=%s)",
+            CHAT_BACKEND,
+            type(exc).__name__,
+        )
+        raise LLMGenerationError() from None
 
 
 def synthesize_answer(query: str, results: List[dict]) -> dict:

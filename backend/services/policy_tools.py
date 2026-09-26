@@ -453,9 +453,11 @@ POLICY_TOOL_DEFINITIONS = [
                 "employee_id": {
                     "type": "string",
                     "description": "The unique employee ID, e.g. EMP001",
+                    "minLength": 1,
                 }
             },
             "required": ["employee_id"],
+            "additionalProperties": False,
         },
     },
     {
@@ -467,13 +469,17 @@ POLICY_TOOL_DEFINITIONS = [
                 "query": {
                     "type": "string",
                     "description": "The policy search query, e.g. 'annual leave entitlement'",
+                    "minLength": 1,
                 },
                 "top_k": {
                     "type": "integer",
                     "description": "Number of top matching sections to return (default 2)",
+                    "minimum": 1,
+                    "maximum": 20,
                 },
             },
             "required": ["query"],
+            "additionalProperties": False,
         },
     },
     {
@@ -500,9 +506,81 @@ POLICY_TOOL_DEFINITIONS = [
                 },
             },
             "required": ["jurisdiction", "policy_category"],
+            "additionalProperties": False,
         },
     },
 ]
+
+
+def validate_tool_call(tool_name: Any, arguments: Any) -> None:
+    """Validate a model-selected tool and arguments against its registered JSON schema."""
+    definition = next(
+        (tool for tool in POLICY_TOOL_DEFINITIONS if tool["name"] == tool_name),
+        None,
+    )
+    if definition is None:
+        raise ValueError(f"Unknown policy tool: {tool_name!r}")
+    if not isinstance(arguments, dict):
+        raise TypeError("Tool arguments must be a JSON object")
+
+    schema = definition["parameters"]
+    properties = schema["properties"]
+    missing = set(schema.get("required", ())) - set(arguments)
+    if missing:
+        raise ValueError(f"Missing required argument(s): {', '.join(sorted(missing))}")
+    if schema.get("additionalProperties") is False:
+        unexpected = set(arguments) - set(properties)
+        if unexpected:
+            raise ValueError(f"Unexpected argument(s): {', '.join(sorted(unexpected))}")
+
+    for key, value in arguments.items():
+        if key not in properties:
+            continue
+        rule = properties[key]
+        expected_type = rule["type"]
+        is_valid_type = (
+            isinstance(value, str)
+            if expected_type == "string"
+            else (
+                type(value) is int
+                if expected_type == "integer"
+                else isinstance(value, dict) if expected_type == "object" else False
+            )
+        )
+        if not is_valid_type:
+            raise TypeError(f"Argument '{key}' must be {expected_type}")
+        if "minLength" in rule and len(value) < rule["minLength"]:
+            raise ValueError(f"Argument '{key}' must not be empty")
+        if "enum" in rule and value not in rule["enum"]:
+            raise ValueError(
+                f"Argument '{key}' must be one of: {', '.join(rule['enum'])}"
+            )
+        if "minimum" in rule and value < rule["minimum"]:
+            raise ValueError(f"Argument '{key}' must be at least {rule['minimum']}")
+        if "maximum" in rule and value > rule["maximum"]:
+            raise ValueError(f"Argument '{key}' must be at most {rule['maximum']}")
+
+
+def normalize_model_tool_arguments(tool_name: Any, arguments: Any) -> Any:
+    """Normalize integer strings emitted by local models to their schema type."""
+    definition = next(
+        (tool for tool in POLICY_TOOL_DEFINITIONS if tool["name"] == tool_name),
+        None,
+    )
+    if definition is None or not isinstance(arguments, dict):
+        return arguments
+
+    normalized = dict(arguments)
+    for key, rule in definition["parameters"]["properties"].items():
+        value = normalized.get(key)
+        if (
+            rule["type"] == "integer"
+            and isinstance(value, str)
+            and value.isascii()
+            and value.isdecimal()
+        ):
+            normalized[key] = int(value)
+    return normalized
 
 
 def execute_tool_call(tool_name: str, arguments: Dict[str, Any]) -> Any:

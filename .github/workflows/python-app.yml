@@ -61,7 +61,7 @@ jobs:
 
       - name: Run backend tests
         run: |
-          python -m unittest discover -v
+          pytest -v
 
       # ----------------------------------------------------------
       # Node / React / TypeScript

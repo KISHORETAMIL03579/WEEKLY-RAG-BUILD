@@ -2,6 +2,7 @@ import React from "react";
 import { EvalRunResponse } from "../../types/evaluation";
 import { PRESETS, KeyTakeaways } from "./KeyTakeaways";
 import { ScoreBadge } from "./ScoreBadge";
+import { Card } from "../common/Card";
 
 interface ResultsViewProps {
   results: EvalRunResponse | null;
@@ -80,7 +81,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
       </div>
 
       {/* 1. OVERALL RESULTS TABLE */}
-      <div className="card" style={{ padding: "20px", overflow: "hidden" }}>
+      <Card style={{ padding: "20px", overflow: "hidden" }}>
         <h3
           style={{
             fontSize: "0.84rem",
@@ -176,10 +177,10 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
 
       {/* 2. PER-QUESTION MATRIX */}
-      <div className="card" style={{ padding: "20px", overflow: "hidden" }}>
+      <Card style={{ padding: "20px", overflow: "hidden" }}>
         <h3
           style={{
             fontSize: "0.84rem",
@@ -290,7 +291,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
 
       {/* 3. KEY TAKEAWAYS */}
       <KeyTakeaways modes={results.modes} k={results.k} />

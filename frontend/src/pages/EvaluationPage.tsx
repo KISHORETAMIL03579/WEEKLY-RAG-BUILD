@@ -326,19 +326,16 @@ export const EvaluationPage: React.FC = () => {
 
       {/* TOPBAR */}
       <header
+        className="evaluation-page-header"
         style={{
           position: "sticky",
           top: 0,
           zIndex: 50,
           background: "var(--bg-surface)",
           borderBottom: "1px solid var(--border)",
-          padding: "12px 28px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
         }}
       >
-        <div>
+        <div className="evaluation-page-heading">
           <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "#fff" }}>
             Evaluation Hub
           </div>
@@ -348,7 +345,7 @@ export const EvaluationPage: React.FC = () => {
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <div className="evaluation-page-tabs">
           <button
             type="button"
             onClick={() => setActiveTab("policy")}
@@ -462,7 +459,7 @@ export const EvaluationPage: React.FC = () => {
           </button>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <div className="evaluation-page-actions">
           {activeTab === "retrieval" && view === "form" && results && (
             <button
               type="button"

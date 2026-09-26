@@ -69,3 +69,463 @@ test_sync_run,case_07,EMP007,workflow,True,1 month written notice plus 60 days' 
 test_sync_run,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,0.302,1,700,125,825,0.000412,SUCCESS,5,,
 test_sync_run,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,0.191,1,700,125,825,0.000412,SUCCESS,5,,
 test_sync_run,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,0.212,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_01,EMP001,agent,False,,,46419.059,1,538,30,568,0.000284,BUDGET_WALL_CLOCK,5,0.3,llama3.1:8b
+test_sync_run,case_02,EMP002,agent,False,,,26548.055,1,543,51,594,0.000297,MODEL_ERROR,5,0.3,llama3.1:8b
+test_sync_run,case_03,EMP003,agent,False,,,44288.706,2,842,38,880,0.00044,MODEL_ERROR,5,0.3,llama3.1:8b
+test_sync_run,case_04,EMP004,agent,False,,,26702.486,1,539,30,569,0.0002845,MODEL_ERROR,5,0.3,llama3.1:8b
+test_sync_run,case_05,EMP005,agent,False,,,36434.432,2,856,41,897,0.0004485,MODEL_ERROR,5,0.3,llama3.1:8b
+test_sync_run,case_06,EMP006,agent,False,,,26626.87,1,541,36,577,0.0002885,MODEL_ERROR,5,0.3,llama3.1:8b
+test_sync_run,case_07,EMP007,agent,False,,,43200.858,2,860,54,914,0.000457,MODEL_ERROR,5,0.3,llama3.1:8b
+test_sync_run,case_08,EMP008,agent,False,,,32867.871,1,539,52,591,0.0002955,MODEL_ERROR,5,0.3,llama3.1:8b
+test_sync_run,case_09,EMP009,agent,False,,,24451.179,1,540,50,590,0.000295,MODEL_ERROR,5,0.3,llama3.1:8b
+test_sync_run,case_10,EMP010,agent,False,,,20642.526,1,541,32,573,0.0002865,MODEL_ERROR,5,0.3,llama3.1:8b
+test_sync_run,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,0.074,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,0.071,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,0.089,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,0.06,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,0.11,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,0.109,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,0.102,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,0.236,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,0.06,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,0.233,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_01,EMP001,agent,False,,,32635.735,1,538,30,568,0.000284,MODEL_ERROR,5,0.3,llama3.1:8b
+test_sync_run,case_02,EMP002,agent,False,,,26810.088,1,543,28,571,0.0002855,MODEL_ERROR,5,0.3,llama3.1:8b
+test_sync_run,case_03,EMP003,agent,False,,,47055.855,2,539,20,559,0.0002795,BUDGET_WALL_CLOCK,5,0.3,llama3.1:8b
+test_sync_run,case_04,EMP004,agent,False,,,17577.32,1,539,30,569,0.0002845,MODEL_ERROR,5,0.3,llama3.1:8b
+test_sync_run,case_05,EMP005,agent,False,,,47076.14,2,546,20,566,0.000283,BUDGET_WALL_CLOCK,5,0.3,llama3.1:8b
+test_sync_run,case_06,EMP006,agent,False,,,19654.039,1,541,36,577,0.0002885,MODEL_ERROR,5,0.3,llama3.1:8b
+test_sync_run,case_07,EMP007,agent,False,,,47074.319,2,547,20,567,0.0002835,BUDGET_WALL_CLOCK,5,0.3,llama3.1:8b
+test_sync_run,case_08,EMP008,agent,False,,,26228.584,1,539,53,592,0.000296,MODEL_ERROR,5,0.3,llama3.1:8b
+test_sync_run,case_09,EMP009,agent,False,,,47035.768,2,540,20,560,0.00028,BUDGET_WALL_CLOCK,5,0.3,llama3.1:8b
+test_sync_run,case_10,EMP010,agent,False,,,24257.513,1,541,32,573,0.0002865,MODEL_ERROR,5,0.3,llama3.1:8b
+test_sync_run,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,0.095,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,0.061,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,0.797,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,0.113,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,0.057,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,0.066,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,0.16,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,0.077,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,0.276,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,0.135,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_01,EMP001,agent,False,,,36497.106,1,538,30,568,0.000284,MODEL_ERROR,5,0.3,llama3.1:8b
+test_sync_run,case_02,EMP002,agent,False,,,47046.066,2,543,20,563,0.0002815,BUDGET_WALL_CLOCK,5,0.3,llama3.1:8b
+test_sync_run,case_03,EMP003,agent,False,,,24412.445,1,539,49,588,0.000294,MODEL_ERROR,5,0.3,llama3.1:8b
+test_sync_run,case_04,EMP004,agent,False,,,46013.725,2,840,41,881,0.0004405,BUDGET_WALL_CLOCK,5,0.3,llama3.1:8b
+test_sync_run,case_05,EMP005,agent,False,,,38977.408,2,856,41,897,0.0004485,MODEL_ERROR,5,0.3,llama3.1:8b
+test_sync_run,case_06,EMP006,agent,False,,,22929.936,1,541,36,577,0.0002885,MODEL_ERROR,5,0.3,llama3.1:8b
+test_sync_run,case_07,EMP007,agent,False,,,43699.005,2,860,41,901,0.0004505,MODEL_ERROR,5,0.3,llama3.1:8b
+test_sync_run,case_08,EMP008,agent,False,,,28475.297,1,539,32,571,0.0002855,MODEL_ERROR,5,0.3,llama3.1:8b
+test_sync_run,case_09,EMP009,agent,False,,,47070.762,2,540,20,560,0.00028,BUDGET_WALL_CLOCK,5,0.3,llama3.1:8b
+test_sync_run,case_10,EMP010,agent,False,,,24000.763,1,541,29,570,0.000285,MODEL_ERROR,5,0.3,llama3.1:8b
+test_sync_run,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,0.117,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,0.095,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,0.082,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,0.077,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,0.169,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,0.078,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,0.089,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,0.085,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,0.285,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,0.504,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d8a752ca,case_01,EMP001,agent,False,,,22414.762,1,538,30,568,0.000284,MODEL_ERROR,5,0.3,llama3.1:8b
+bench_sync_d8a752ca,case_02,EMP002,agent,False,,,36200.056,1,543,48,591,0.0002955,MODEL_ERROR,5,0.3,llama3.1:8b
+bench_sync_d8a752ca,case_03,EMP003,agent,False,,,17950.86,1,539,27,566,0.000283,MODEL_ERROR,5,0.3,llama3.1:8b
+bench_sync_d8a752ca,case_04,EMP004,agent,False,,,26747.713,1,539,50,589,0.0002945,MODEL_ERROR,5,0.3,llama3.1:8b
+bench_sync_d8a752ca,case_05,EMP005,agent,False,,,47026.179,2,546,20,566,0.000283,BUDGET_WALL_CLOCK,5,0.3,llama3.1:8b
+bench_sync_d8a752ca,case_06,EMP006,agent,False,,,20168.431,1,541,36,577,0.0002885,MODEL_ERROR,5,0.3,llama3.1:8b
+bench_sync_d8a752ca,case_07,EMP007,agent,False,,,46460.537,2,860,41,901,0.0004505,BUDGET_WALL_CLOCK,5,0.3,llama3.1:8b
+bench_sync_d8a752ca,case_08,EMP008,agent,False,,,47038.907,2,539,36,575,0.0002875,BUDGET_WALL_CLOCK,5,0.3,llama3.1:8b
+bench_sync_d8a752ca,case_09,EMP009,agent,False,,,28446.76,1,540,49,589,0.0002945,MODEL_ERROR,5,0.3,llama3.1:8b
+bench_sync_d8a752ca,case_10,EMP010,agent,False,,,47048.888,1,0,0,0,0.0,BUDGET_WALL_CLOCK,5,0.3,llama3.1:8b
+bench_sync_d8a752ca,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,0.096,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d8a752ca,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,0.084,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d8a752ca,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,0.25,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d8a752ca,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,0.082,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d8a752ca,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,0.074,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d8a752ca,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,0.124,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d8a752ca,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,0.091,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d8a752ca,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,0.112,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d8a752ca,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,0.178,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d8a752ca,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,0.07,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_2b18799b,case_01,EMP001,agent,False,,,20296.393,1,538,30,568,0.000284,MODEL_ERROR,5,0.3,llama3.1:8b
+bench_sync_2b18799b,case_02,EMP002,agent,False,,,27843.639,1,543,50,593,0.0002965,MODEL_ERROR,5,0.3,llama3.1:8b
+bench_sync_2b18799b,case_03,EMP003,agent,False,,,47038.212,2,539,20,559,0.0002795,BUDGET_WALL_CLOCK,5,0.3,llama3.1:8b
+bench_sync_2b18799b,case_04,EMP004,agent,False,,,26852.199,1,539,30,569,0.0002845,MODEL_ERROR,5,0.3,llama3.1:8b
+bench_sync_2b18799b,case_05,EMP005,agent,False,,,45244.672,2,856,41,897,0.0004485,BUDGET_WALL_CLOCK,5,0.3,llama3.1:8b
+bench_sync_2b18799b,case_06,EMP006,agent,False,,,23198.216,1,541,36,577,0.0002885,MODEL_ERROR,5,0.3,llama3.1:8b
+bench_sync_2b18799b,case_07,EMP007,agent,False,,,45693.798,2,860,54,914,0.000457,BUDGET_WALL_CLOCK,5,0.3,llama3.1:8b
+bench_sync_2b18799b,case_08,EMP008,agent,False,,,47043.661,2,539,38,577,0.0002885,BUDGET_WALL_CLOCK,5,0.3,llama3.1:8b
+bench_sync_2b18799b,case_09,EMP009,agent,False,,,32754.811,1,540,50,590,0.000295,MODEL_ERROR,5,0.3,llama3.1:8b
+bench_sync_2b18799b,case_10,EMP010,agent,False,,,42786.497,1,541,32,573,0.0002865,MODEL_ERROR,5,0.3,llama3.1:8b
+bench_sync_2b18799b,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,0.068,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_2b18799b,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,0.362,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_2b18799b,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,0.096,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_2b18799b,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,0.239,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_2b18799b,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,0.105,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_2b18799b,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,0.091,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_2b18799b,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,0.069,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_2b18799b,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,0.12,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_2b18799b,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,0.068,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_2b18799b,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,0.096,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_6913ba80,case_01,EMP001,agent,False,,,21311.235,1,538,30,568,0.000284,MODEL_ERROR,5,0.3,llama3.1:8b
+bench_sync_6913ba80,case_02,EMP002,agent,False,,,32386.744,1,543,51,594,0.000297,MODEL_ERROR,5,0.3,llama3.1:8b
+bench_sync_6913ba80,case_03,EMP003,agent,False,,,42510.873,2,842,41,883,0.0004415,MODEL_ERROR,5,0.3,llama3.1:8b
+bench_sync_6913ba80,case_04,EMP004,agent,False,,,47035.978,2,539,40,579,0.0002895,BUDGET_WALL_CLOCK,5,0.3,llama3.1:8b
+bench_sync_6913ba80,case_05,EMP005,agent,False,,,45810.955,2,856,40,896,0.000448,BUDGET_WALL_CLOCK,5,0.3,llama3.1:8b
+bench_sync_6913ba80,case_06,EMP006,agent,False,,,20697.252,1,541,36,577,0.0002885,MODEL_ERROR,5,0.3,llama3.1:8b
+bench_sync_6913ba80,case_07,EMP007,agent,False,,,47044.647,2,547,20,567,0.0002835,BUDGET_WALL_CLOCK,5,0.3,llama3.1:8b
+bench_sync_6913ba80,case_08,EMP008,agent,False,,,28542.906,1,539,33,572,0.000286,MODEL_ERROR,5,0.3,llama3.1:8b
+bench_sync_6913ba80,case_09,EMP009,agent,False,,,35896.085,1,540,51,591,0.0002955,MODEL_ERROR,5,0.3,llama3.1:8b
+bench_sync_6913ba80,case_10,EMP010,agent,False,,,37810.493,1,541,29,570,0.000285,MODEL_ERROR,5,0.3,llama3.1:8b
+bench_sync_6913ba80,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,0.073,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_6913ba80,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,0.079,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_6913ba80,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,0.114,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_6913ba80,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,0.332,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_6913ba80,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,0.101,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_6913ba80,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,0.219,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_6913ba80,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,0.108,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_6913ba80,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,0.122,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_6913ba80,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,0.075,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_6913ba80,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,0.121,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_7dbc74c3,case_01,EMP001,agent,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,41.752,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_7dbc74c3,case_02,EMP002,agent,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,40.806,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_7dbc74c3,case_03,EMP003,agent,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,42.672,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_7dbc74c3,case_04,EMP004,agent,True,4 weeks written notice,Section 10.1,51.187,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_7dbc74c3,case_05,EMP005,agent,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,44.214,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_7dbc74c3,case_06,EMP006,agent,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,46.528,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_7dbc74c3,case_07,EMP007,agent,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,43.759,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_7dbc74c3,case_08,EMP008,agent,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,48.59,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_7dbc74c3,case_09,EMP009,agent,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,50.049,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_7dbc74c3,case_10,EMP010,agent,True,Maximum of 10 working days on gross salary basis,Section 10.7,54.844,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_7dbc74c3,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,4.505,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_7dbc74c3,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,5.045,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_7dbc74c3,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,4.554,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_7dbc74c3,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,7.238,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_7dbc74c3,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,4.925,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_7dbc74c3,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,6.795,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_7dbc74c3,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,5.234,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_7dbc74c3,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,6.133,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_7dbc74c3,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,5.583,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_7dbc74c3,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,6.573,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_01,EMP001,agent,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,40.052,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_02,EMP002,agent,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,39.936,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_03,EMP003,agent,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,42.242,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_04,EMP004,agent,True,4 weeks written notice,Section 10.1,43.955,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_05,EMP005,agent,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,43.246,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_06,EMP006,agent,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,46.134,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_07,EMP007,agent,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,44.324,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_08,EMP008,agent,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,47.839,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_09,EMP009,agent,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,48.126,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_10,EMP010,agent,True,Maximum of 10 working days on gross salary basis,Section 10.7,49.315,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,3.575,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,3.668,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,7.342,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,3.976,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,4.612,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,5.154,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,4.945,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,4.995,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,5.287,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,5.756,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_01,EMP001,agent,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,41.955,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_02,EMP002,agent,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,43.992,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_03,EMP003,agent,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,41.808,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_04,EMP004,agent,True,4 weeks written notice,Section 10.1,40.878,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_05,EMP005,agent,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,44.828,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_06,EMP006,agent,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,43.179,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_07,EMP007,agent,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,44.977,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_08,EMP008,agent,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,44.087,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_09,EMP009,agent,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,50.102,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_10,EMP010,agent,True,Maximum of 10 working days on gross salary basis,Section 10.7,51.174,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,5.035,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,4.512,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,3.755,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,5.738,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,5.086,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,4.756,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,6.71,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,5.521,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,6.405,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,5.46,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_01,EMP001,agent,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,43.957,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_02,EMP002,agent,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,44.602,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_03,EMP003,agent,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,48.044,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_04,EMP004,agent,True,4 weeks written notice,Section 10.1,43.409,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_05,EMP005,agent,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,48.583,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_06,EMP006,agent,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,50.616,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_07,EMP007,agent,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,46.548,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_08,EMP008,agent,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,43.837,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_09,EMP009,agent,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,46.705,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_10,EMP010,agent,True,Maximum of 10 working days on gross salary basis,Section 10.7,51.095,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,3.66,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,4.089,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,3.786,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,4.534,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,5.99,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,5.12,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,7.062,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,5.45,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,5.363,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,6.308,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_01,EMP001,agent,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,40.842,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_02,EMP002,agent,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,42.038,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_03,EMP003,agent,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,41.221,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_04,EMP004,agent,True,4 weeks written notice,Section 10.1,41.772,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_05,EMP005,agent,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,46.171,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_06,EMP006,agent,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,47.183,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_07,EMP007,agent,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,49.649,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_08,EMP008,agent,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,53.309,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_09,EMP009,agent,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,50.303,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_10,EMP010,agent,True,Maximum of 10 working days on gross salary basis,Section 10.7,52.377,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,3.916,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,3.286,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,5.554,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,4.837,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,4.465,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,4.63,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,4.731,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,5.035,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,5.118,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,5.466,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_cafaf3ba,case_01,EMP001,agent,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,40.382,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_cafaf3ba,case_02,EMP002,agent,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,50.159,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_cafaf3ba,case_03,EMP003,agent,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,42.299,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_cafaf3ba,case_04,EMP004,agent,True,4 weeks written notice,Section 10.1,46.717,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_cafaf3ba,case_05,EMP005,agent,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,43.4,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_cafaf3ba,case_06,EMP006,agent,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,52.155,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_cafaf3ba,case_07,EMP007,agent,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,43.585,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_cafaf3ba,case_08,EMP008,agent,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,44.595,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_cafaf3ba,case_09,EMP009,agent,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,51.29,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_cafaf3ba,case_10,EMP010,agent,True,Maximum of 10 working days on gross salary basis,Section 10.7,49.874,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_cafaf3ba,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,3.164,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_cafaf3ba,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,4.301,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_cafaf3ba,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,4.2,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_cafaf3ba,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,5.323,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_cafaf3ba,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,5.507,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_cafaf3ba,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,4.47,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_cafaf3ba,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,6.977,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_cafaf3ba,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,5.037,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_cafaf3ba,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,5.244,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_cafaf3ba,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,6.024,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d7a9613c,case_01,EMP001,agent,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,40.803,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_d7a9613c,case_02,EMP002,agent,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,41.108,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_d7a9613c,case_03,EMP003,agent,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,41.611,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_d7a9613c,case_04,EMP004,agent,True,4 weeks written notice,Section 10.1,46.237,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_d7a9613c,case_05,EMP005,agent,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,41.626,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_d7a9613c,case_06,EMP006,agent,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,48.042,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_d7a9613c,case_07,EMP007,agent,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,52.457,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_d7a9613c,case_08,EMP008,agent,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,57.035,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_d7a9613c,case_09,EMP009,agent,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,47.391,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_d7a9613c,case_10,EMP010,agent,True,Maximum of 10 working days on gross salary basis,Section 10.7,48.247,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_d7a9613c,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,3.474,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d7a9613c,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,3.432,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d7a9613c,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,5.047,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d7a9613c,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,5.059,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d7a9613c,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,4.747,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d7a9613c,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,4.706,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d7a9613c,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,5.656,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d7a9613c,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,5.097,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d7a9613c,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,6.598,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d7a9613c,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,6.764,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_6b095ce3,case_01,EMP001,agent,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,40.735,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_6b095ce3,case_02,EMP002,agent,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,41.074,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_6b095ce3,case_03,EMP003,agent,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,42.607,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_6b095ce3,case_04,EMP004,agent,True,4 weeks written notice,Section 10.1,44.706,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_6b095ce3,case_05,EMP005,agent,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,43.36,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_6b095ce3,case_06,EMP006,agent,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,46.617,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_6b095ce3,case_07,EMP007,agent,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,45.489,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_6b095ce3,case_08,EMP008,agent,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,45.34,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_6b095ce3,case_09,EMP009,agent,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,48.762,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_6b095ce3,case_10,EMP010,agent,True,Maximum of 10 working days on gross salary basis,Section 10.7,49.589,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_6b095ce3,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,4.772,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_6b095ce3,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,3.584,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_6b095ce3,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,4.884,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_6b095ce3,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,4.868,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_6b095ce3,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,5.062,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_6b095ce3,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,6.036,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_6b095ce3,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,7.421,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_6b095ce3,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,5.246,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_6b095ce3,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,5.769,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_6b095ce3,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,6.362,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_c75552c7,case_01,EMP001,agent,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,39.454,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_c75552c7,case_02,EMP002,agent,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,43.666,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_c75552c7,case_03,EMP003,agent,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,40.218,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_c75552c7,case_04,EMP004,agent,True,4 weeks written notice,Section 10.1,41.517,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_c75552c7,case_05,EMP005,agent,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,45.694,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_c75552c7,case_06,EMP006,agent,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,42.669,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_c75552c7,case_07,EMP007,agent,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,47.262,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_c75552c7,case_08,EMP008,agent,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,43.839,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_c75552c7,case_09,EMP009,agent,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,45.938,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_c75552c7,case_10,EMP010,agent,True,Maximum of 10 working days on gross salary basis,Section 10.7,52.143,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_c75552c7,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,3.777,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_c75552c7,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,3.406,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_c75552c7,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,3.73,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_c75552c7,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,5.105,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_c75552c7,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,4.034,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_c75552c7,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,4.229,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_c75552c7,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,4.571,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_c75552c7,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,6.915,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_c75552c7,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,5.528,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_c75552c7,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,5.499,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_01,EMP001,agent,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,41.191,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_02,EMP002,agent,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,43.687,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_03,EMP003,agent,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,41.958,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_04,EMP004,agent,True,4 weeks written notice,Section 10.1,44.439,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_05,EMP005,agent,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,44.226,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_06,EMP006,agent,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,44.556,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_07,EMP007,agent,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,49.537,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_08,EMP008,agent,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,47.08,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_09,EMP009,agent,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,50.437,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_10,EMP010,agent,True,Maximum of 10 working days on gross salary basis,Section 10.7,50.156,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,4.783,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,4.817,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,4.996,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,5.43,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,6.295,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,5.721,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,5.325,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,5.962,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,6.654,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,6.616,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_01,EMP001,agent,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,44.177,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_02,EMP002,agent,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,46.26,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_03,EMP003,agent,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,41.145,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_04,EMP004,agent,True,4 weeks written notice,Section 10.1,42.063,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_05,EMP005,agent,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,42.841,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_06,EMP006,agent,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,43.055,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_07,EMP007,agent,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,49.498,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_08,EMP008,agent,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,42.88,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_09,EMP009,agent,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,48.527,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_10,EMP010,agent,True,Maximum of 10 working days on gross salary basis,Section 10.7,48.64,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,3.738,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,6.016,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,5.024,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,5.229,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,4.825,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,5.338,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,6.494,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,5.164,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,8.218,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,6.918,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_e89a5bad,case_01,EMP001,agent,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,46.314,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_e89a5bad,case_02,EMP002,agent,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,41.122,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_e89a5bad,case_03,EMP003,agent,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,41.079,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_e89a5bad,case_04,EMP004,agent,True,4 weeks written notice,Section 10.1,42.37,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_e89a5bad,case_05,EMP005,agent,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,47.013,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_e89a5bad,case_06,EMP006,agent,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,42.441,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_e89a5bad,case_07,EMP007,agent,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,48.913,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_e89a5bad,case_08,EMP008,agent,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,43.189,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_e89a5bad,case_09,EMP009,agent,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,46.897,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_e89a5bad,case_10,EMP010,agent,True,Maximum of 10 working days on gross salary basis,Section 10.7,52.339,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_e89a5bad,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,3.522,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_e89a5bad,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,3.573,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_e89a5bad,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,3.746,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_e89a5bad,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,3.988,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_e89a5bad,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,4.152,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_e89a5bad,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,4.359,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_e89a5bad,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,4.895,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_e89a5bad,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,4.638,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_e89a5bad,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,5.301,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_e89a5bad,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,5.379,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_c3aa7279,case_01,EMP001,agent,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,57.77,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_c3aa7279,case_02,EMP002,agent,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,52.463,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_c3aa7279,case_03,EMP003,agent,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,51.883,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_c3aa7279,case_04,EMP004,agent,True,4 weeks written notice,Section 10.1,53.479,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_c3aa7279,case_05,EMP005,agent,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,56.781,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_c3aa7279,case_06,EMP006,agent,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,54.943,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_c3aa7279,case_07,EMP007,agent,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,58.139,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_c3aa7279,case_08,EMP008,agent,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,56.131,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_c3aa7279,case_09,EMP009,agent,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,56.321,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_c3aa7279,case_10,EMP010,agent,True,Maximum of 10 working days on gross salary basis,Section 10.7,60.581,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_c3aa7279,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,8.86,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_c3aa7279,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,8.134,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_c3aa7279,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,10.818,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_c3aa7279,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,9.482,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_c3aa7279,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,8.964,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_c3aa7279,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,8.975,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_c3aa7279,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,9.245,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_c3aa7279,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,9.761,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_c3aa7279,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,10.519,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_c3aa7279,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,11.012,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_aec42220,case_01,EMP001,agent,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,56.044,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_aec42220,case_02,EMP002,agent,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,56.177,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_aec42220,case_03,EMP003,agent,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,59.452,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_aec42220,case_04,EMP004,agent,True,4 weeks written notice,Section 10.1,58.322,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_aec42220,case_05,EMP005,agent,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,60.056,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_aec42220,case_06,EMP006,agent,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,61.469,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_aec42220,case_07,EMP007,agent,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,60.774,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_aec42220,case_08,EMP008,agent,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,58.354,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_aec42220,case_09,EMP009,agent,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,56.723,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_aec42220,case_10,EMP010,agent,True,Maximum of 10 working days on gross salary basis,Section 10.7,67.754,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_aec42220,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,10.172,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_aec42220,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,8.858,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_aec42220,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,13.203,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_aec42220,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,13.573,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_aec42220,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,15.91,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_aec42220,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,13.475,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_aec42220,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,12.59,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_aec42220,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,12.009,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_aec42220,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,12.101,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_aec42220,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,13.937,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_01,EMP001,agent,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,63.182,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_02,EMP002,agent,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,59.413,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_03,EMP003,agent,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,59.741,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_04,EMP004,agent,True,4 weeks written notice,Section 10.1,60.529,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_05,EMP005,agent,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,57.692,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_06,EMP006,agent,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,55.521,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_07,EMP007,agent,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,62.786,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_08,EMP008,agent,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,66.121,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_09,EMP009,agent,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,59.496,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_10,EMP010,agent,True,Maximum of 10 working days on gross salary basis,Section 10.7,71.309,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,13.346,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,14.318,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,10.849,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,12.204,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,10.046,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,10.76,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,12.774,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,15.967,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,11.817,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,13.498,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d8b347ee,case_01,EMP001,agent,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,52.482,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_d8b347ee,case_02,EMP002,agent,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,54.898,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_d8b347ee,case_03,EMP003,agent,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,52.081,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_d8b347ee,case_04,EMP004,agent,True,4 weeks written notice,Section 10.1,51.291,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_d8b347ee,case_05,EMP005,agent,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,55.672,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_d8b347ee,case_06,EMP006,agent,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,54.292,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_d8b347ee,case_07,EMP007,agent,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,55.414,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_d8b347ee,case_08,EMP008,agent,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,56.481,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_d8b347ee,case_09,EMP009,agent,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,56.019,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_d8b347ee,case_10,EMP010,agent,True,Maximum of 10 working days on gross salary basis,Section 10.7,56.338,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+bench_sync_d8b347ee,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,9.472,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d8b347ee,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,8.507,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d8b347ee,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,8.995,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d8b347ee,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,11.126,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d8b347ee,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,9.757,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d8b347ee,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,8.955,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d8b347ee,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,8.844,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d8b347ee,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,8.999,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d8b347ee,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,9.649,1,700,125,825,0.000412,SUCCESS,5,,
+bench_sync_d8b347ee,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,13.403,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_01,EMP001,agent,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,59.602,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_02,EMP002,agent,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,55.897,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_03,EMP003,agent,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,54.279,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_04,EMP004,agent,True,4 weeks written notice,Section 10.1,58.728,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_05,EMP005,agent,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,59.365,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_06,EMP006,agent,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,54.24,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_07,EMP007,agent,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,55.8,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_08,EMP008,agent,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,57.251,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_09,EMP009,agent,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,57.647,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_10,EMP010,agent,True,Maximum of 10 working days on gross salary basis,Section 10.7,58.744,3,36,24,60,3e-05,SUCCESS,5,0.3,llama3.1:8b
+test_sync_run,case_01,EMP001,workflow,True,"24 working days per annum, accruing at 2 days per month",Section 5.2.1,10.344,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_02,EMP002,workflow,True,Maximum of 5 days (must be taken by June 30th of following year),Section 5.2.7,10.962,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_03,EMP003,workflow,True,1 week (7 days) written notice,Section 10.1 & Section 3.6.4,9.657,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_04,EMP004,workflow,True,4 weeks written notice,Section 10.1,10.922,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_05,EMP005,workflow,True,Ineligible (requires at least 2 consecutive months of service),Section 5.3.2,11.214,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_06,EMP006,workflow,True,Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay),Section 5.3.2,10.604,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_07,EMP007,workflow,True,1 month written notice plus 60 days' pay severance (15 days' pay per completed year across 4 years = 60 days' pay),Section 10.5.1,12.216,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_08,EMP008,workflow,True,0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay),Section 10.5.2,12.732,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_09,EMP009,workflow,True,Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed,Section 4.4.1,9.696,1,700,125,825,0.000412,SUCCESS,5,,
+test_sync_run,case_10,EMP010,workflow,True,Maximum of 10 working days on gross salary basis,Section 10.7,15.065,1,700,125,825,0.000412,SUCCESS,5,,

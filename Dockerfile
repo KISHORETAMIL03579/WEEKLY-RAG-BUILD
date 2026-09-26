@@ -29,7 +29,7 @@ COPY tests/ tests/
 COPY --from=frontend-builder /build/frontend/dist ./frontend/dist
 
 # Pre-create data directories and assign ownership to appuser
-RUN mkdir -p uploads vectorstore traces \
+RUN mkdir -p uploads vectorstore traces state \
     && chown -R appuser:appuser /app
 
 USER appuser

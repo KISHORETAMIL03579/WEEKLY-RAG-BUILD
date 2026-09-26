@@ -5,6 +5,7 @@ import { CANONICAL_RETRIEVAL_QUESTIONS } from "../../data/canonicalRetrievalQues
 import { EvaluationProgressCard } from "./EvaluationProgressCard";
 import { EvaluationDatasetManager } from "./EvaluationDatasetManager";
 import { QADataSetCase, DatasetMode } from "../../types/dataset";
+import { Card } from "../common/Card";
 
 interface FormViewProps {
   questions: EvalQuestionInput[];
@@ -94,8 +95,7 @@ export const FormView: React.FC<FormViewProps> = ({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
       {/* HERO BANNER & PRIMARY EXECUTION CTA */}
-      <div
-        className="card"
+      <Card
         style={{
           background:
             "linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%)",
@@ -225,7 +225,7 @@ export const FormView: React.FC<FormViewProps> = ({
             )}
           </button>
         </div>
-      </div>
+      </Card>
 
       {/* LIVE PROGRESS CARD WHEN RUNNING */}
       {isRunning && (
@@ -261,7 +261,7 @@ export const FormView: React.FC<FormViewProps> = ({
       />
 
       {/* RETRIEVAL SETTINGS */}
-      <div className="card">
+      <Card>
         <h2
           style={{
             fontSize: "0.82rem",
@@ -543,7 +543,7 @@ export const FormView: React.FC<FormViewProps> = ({
             </button>
           )}
         </div>
-      </div>
+      </Card>
     </div>
   );
 };

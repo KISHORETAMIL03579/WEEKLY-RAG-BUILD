@@ -182,6 +182,16 @@ class DependencyError(AppError):
         )
 
 
+class LLMGenerationError(DependencyError):
+    """Safe, typed failure raised when an answer-generation provider fails."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Answer generation provider failed; please try again.",
+            code="LLM_GENERATION_FAILED",
+        )
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """Registers standard FastAPI exception handlers returning uniform safe error payloads."""
     try:
