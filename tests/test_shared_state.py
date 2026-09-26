@@ -5,6 +5,7 @@ import pytest
 from backend.storage import shared_state
 from backend.storage.shared_state import (
     create_background_run,
+    get_active_session_access,
     get_active_background_run_id,
     get_background_run,
     load_session_metadata,
@@ -60,3 +61,21 @@ def test_session_metadata_persists_and_clear_advances_revision(isolated_state_db
     assert cleared["hash_by_doc"] == {}
     assert cleared["chunk_counts"] == {}
     assert cleared["revision"] > revision
+
+
+def test_active_session_access_excludes_expired_sessions(isolated_state_db):
+    import time
+
+    from backend.storage.shared_state import state_connection
+
+    now = time.time()
+    with state_connection(immediate=True) as connection:
+        connection.executemany(
+            "INSERT INTO session_activity (session_id, last_access) VALUES (?, ?)",
+            [
+                ("active-session", now - 30),
+                ("expired-session", now - 600),
+            ],
+        )
+
+    assert set(get_active_session_access(ttl_seconds=300)) == {"active-session"}

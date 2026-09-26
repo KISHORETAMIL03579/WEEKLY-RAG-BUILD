@@ -79,8 +79,7 @@ export interface RemoveResponse {
 
 export interface ClearResponse {
   ok: boolean;
-  message?: string;
-  error?: string;
+  warning?: string;
 }
 
 export interface PagesResponse {

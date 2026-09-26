@@ -7,6 +7,7 @@ import json
 import uuid
 import shutil
 import hashlib
+import threading
 from functools import wraps
 from pathlib import Path
 from typing import Annotated, Any, Dict, List, Optional, Set, Tuple
@@ -51,6 +52,9 @@ MAX_SESSIONS = 20
 
 _MANIFEST_MTIMES: Dict[str, float] = {}
 _SESSION_VERSIONS: Dict[str, int] = {}
+_QDRANT_SWEEP_INTERVAL = 60
+_last_qdrant_sweep = 0.0
+_qdrant_sweep_lock = threading.Lock()
 
 
 def manifest_path(sid: str) -> Path:
@@ -205,6 +209,46 @@ def evict_session_store(sid: str) -> None:
             )
 
 
+def sweep_inactive_qdrant_collections(force: bool = False) -> tuple[int, int]:
+    """Retry stale Qdrant cleanup and remove collections for expired sessions."""
+    global _last_qdrant_sweep
+    vec_backend = get_app_symbol("VECTOR_BACKEND", VECTOR_BACKEND)
+    if vec_backend != "qdrant":
+        return 0, 0
+
+    now = time.monotonic()
+    with _qdrant_sweep_lock:
+        if not force and now - _last_qdrant_sweep < _QDRANT_SWEEP_INTERVAL:
+            return 0, 0
+        _last_qdrant_sweep = now
+        folder = get_app_symbol("UPLOAD_FOLDER", UPLOAD_FOLDER)
+        folder.mkdir(parents=True, exist_ok=True)
+        sweep_lock = FileLock(str(folder / ".qdrant-sweep.lock"))
+        try:
+            with sweep_lock.acquire(timeout=1):
+                active_sessions = get_active_session_access(SESSION_TTL)
+                deleted, failed = QdrantVectorStore.clear_inactive_collections(
+                    set(active_sessions)
+                )
+        except Timeout:
+            logger.debug("Qdrant session cleanup is already running in another worker")
+            return 0, 0
+        except Exception:
+            logger.error(
+                "Unable to sweep inactive Qdrant collections; cleanup will be retried",
+                exc_info=True,
+            )
+            return 0, 1
+
+        if deleted or failed:
+            logger.info(
+                "Qdrant session cleanup finished: %d collection(s) deleted, %d failed",
+                deleted,
+                failed,
+            )
+        return deleted, failed
+
+
 def get_store(sid: str) -> Any:
     vector_store_map = get_app_symbol("VECTOR_STORE", VECTOR_STORE)
     hash_store_map = get_app_symbol("HASH_STORE", HASH_STORE)
@@ -227,6 +271,7 @@ def get_store(sid: str) -> Any:
         cleanup_session_files(removed_sid)
     session_access_map.clear()
     session_access_map.update(get_active_session_access())
+    sweep_inactive_qdrant_collections()
 
     metadata = load_session_metadata(sid)
     if metadata is not None:

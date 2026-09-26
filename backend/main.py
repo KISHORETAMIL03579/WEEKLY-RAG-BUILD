@@ -1,6 +1,7 @@
 # backend/main.py — FastAPI Application Factory & Lifecycles
 from __future__ import annotations
 
+import asyncio
 import os
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -21,6 +22,7 @@ from backend.config import (
     SECRET_KEY,
     SESSION_COOKIE_MAX_AGE,
     SESSION_COOKIE_SECURE,
+    VECTOR_BACKEND,
     logger,
 )
 from backend.errors import register_exception_handlers
@@ -38,7 +40,10 @@ from backend.routes.traces import router as traces_router
 from backend.services.embeddings import embeddings_configured
 from backend.services.llm import chat_configured
 from backend.storage.orphan_store import load_orphaned_docs
-from backend.storage.session_manager import SessionId
+from backend.storage.session_manager import (
+    SessionId,
+    sweep_inactive_qdrant_collections,
+)
 from backend.storage.shared_state import initialize_shared_state
 
 
@@ -116,10 +121,29 @@ def create_app() -> FastAPI:
         app.include_router(r)
 
     # Startup event to load orphans
+    async def cleanup_qdrant_sessions() -> None:
+        while True:
+            await asyncio.sleep(60)
+            await asyncio.to_thread(sweep_inactive_qdrant_collections, True)
+
     @app.on_event("startup")
-    def startup_event():
+    async def startup_event():
         initialize_shared_state()
         load_orphaned_docs()
+        if VECTOR_BACKEND == "qdrant":
+            app.state.qdrant_cleanup_task = asyncio.create_task(
+                cleanup_qdrant_sessions()
+            )
+
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        cleanup_task = getattr(app.state, "qdrant_cleanup_task", None)
+        if cleanup_task is not None:
+            cleanup_task.cancel()
+            try:
+                await cleanup_task
+            except asyncio.CancelledError:
+                pass
 
     return app
 

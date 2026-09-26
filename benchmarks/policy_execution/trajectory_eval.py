@@ -25,6 +25,20 @@ REQUIRED_TOOL_SEQUENCE = ("get_employee_record", "search_handbook")
 def evaluate_trajectory(case: dict[str, Any], result: Any) -> dict[str, Any]:
     calls = result.tool_calls
     observed = [call["tool_name"] for call in calls]
+    answer_text = " ".join(
+        (
+            result.entitlement_value,
+            result.rule_cited,
+            result.explanation,
+        )
+    ).lower()
+    answer_criteria = [
+        {
+            "criterion": criterion,
+            "satisfied": criterion.lower() in answer_text,
+        }
+        for criterion in case.get("deterministic_pass_criteria", [])
+    ]
     next_required = 0
     for tool_name in observed:
         if (
@@ -33,12 +47,8 @@ def evaluate_trajectory(case: dict[str, Any], result: Any) -> dict[str, Any]:
         ):
             next_required += 1
     sequence_valid = next_required == len(REQUIRED_TOOL_SEQUENCE)
-    extra_calls = [
-        name for name in observed if name not in REQUIRED_TOOL_SEQUENCE
-    ]
-    duplicates = sorted(
-        name for name, count in Counter(observed).items() if count > 1
-    )
+    extra_calls = [name for name in observed if name not in REQUIRED_TOOL_SEQUENCE]
+    duplicates = sorted(name for name, count in Counter(observed).items() if count > 1)
 
     if result.termination_reason != "SUCCESS":
         failure_mode = "execution_failure"
@@ -62,6 +72,10 @@ def evaluate_trajectory(case: dict[str, Any], result: Any) -> dict[str, Any]:
         "duplicate_tool_names": duplicates,
         "termination_reason": result.termination_reason,
         "passed": bool(result.passed),
+        "answer_criteria": answer_criteria,
+        "unmet_answer_criteria": [
+            item["criterion"] for item in answer_criteria if not item["satisfied"]
+        ],
         "failure_mode": failure_mode,
         "iterations": result.iterations,
         "tool_call_count": len(calls),
@@ -85,6 +99,11 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
     failure_counts = Counter(
         item["failure_mode"] for item in results if item["failure_mode"]
     )
+    unmet_criteria = Counter(
+        criterion
+        for item in results
+        for criterion in item.get("unmet_answer_criteria", [])
+    )
     termination_counts = Counter(item["termination_reason"] for item in results)
     passed = sum(item["passed"] for item in results)
     valid_sequences = sum(item["required_tool_sequence_valid"] for item in results)
@@ -107,13 +126,16 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
         ),
         "p50_latency_ms": round(statistics.median(latencies), 3) if latencies else 0.0,
         "failure_mode_counts": dict(sorted(failure_counts.items())),
+        "unmet_answer_criterion_counts": dict(sorted(unmet_criteria.items())),
         "termination_reason_counts": dict(sorted(termination_counts.items())),
     }
 
 
 def run_evaluation(phase: str, output_path: Path) -> dict[str, Any]:
     if CHAT_BACKEND != "groq":
-        raise RuntimeError("Week 8 live trajectory evaluation requires CHAT_BACKEND=groq.")
+        raise RuntimeError(
+            "Week 8 live trajectory evaluation requires CHAT_BACKEND=groq."
+        )
     if not chat_configured():
         raise RuntimeError(
             "GROQ_API_KEY is not configured. Add a rotated key to your ignored .env."

@@ -319,10 +319,14 @@ export const ChatPage: React.FC = () => {
   const handleClear = async () => {
     if (isThinking || isUploading) return;
     try {
-      await api.clearSession();
+      const response = await api.clearSession();
       setMessages([]);
       await fetchStatus();
-      showToast("All documents and chat history cleared.", "info", 3000);
+      if (response.warning) {
+        showToast(response.warning, "error", 6000);
+      } else {
+        showToast("All documents and chat history cleared.", "info", 3000);
+      }
     } catch (err: unknown) {
       const e = err as Error;
       showToast("Failed to clear documents: " + e.message, "error", 6000);

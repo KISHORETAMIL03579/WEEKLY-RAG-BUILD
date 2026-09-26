@@ -241,7 +241,9 @@ def _clear_session_metadata(
         )
 
 
-def get_active_session_access() -> Dict[str, float]:
+def get_active_session_access(
+    ttl_seconds: Optional[int] = None,
+) -> Dict[str, float]:
     now = time.time()
     with state_connection() as connection:
         rows = connection.execute(
@@ -251,6 +253,7 @@ def get_active_session_access() -> Dict[str, float]:
         row["session_id"]: row["last_access"]
         for row in rows
         if row["last_access"] <= now
+        and (ttl_seconds is None or row["last_access"] >= now - ttl_seconds)
     }
 
 

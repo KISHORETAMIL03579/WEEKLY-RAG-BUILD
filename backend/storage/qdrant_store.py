@@ -225,6 +225,33 @@ class QdrantVectorStore:
         self.chunks, self.vectors = [], []
         self._tfidf_index_cache = None
 
+    @staticmethod
+    def clear_inactive_collections(active_session_ids: set[str]) -> tuple[int, int]:
+        """Delete session collections with no unexpired activity record."""
+        client = _client()
+        collections = client.get_collections().collections
+        deleted = 0
+        failed = 0
+        for collection in collections:
+            prefix = "chunks_"
+            if not collection.name.startswith(prefix):
+                continue
+            sid = collection.name[len(prefix) :]
+            if not sid or sid in active_session_ids:
+                continue
+            try:
+                client.delete_collection(collection.name)
+                deleted += 1
+                logger.info("Deleted expired Qdrant collection %s", collection.name)
+            except Exception:
+                failed += 1
+                logger.error(
+                    "Failed to delete expired Qdrant collection %s; it will be retried",
+                    collection.name,
+                    exc_info=True,
+                )
+        return deleted, failed
+
     def get_tfidf_index(self) -> dict:
         if self._tfidf_index_cache is None:
             if self._index_builder:

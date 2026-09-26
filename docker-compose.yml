@@ -158,12 +158,16 @@ services:
       VISION_BACKEND: ${VISION_BACKEND:-ollama}
       OLLAMA_VISION_MODEL: ${OLLAMA_VISION_MODEL:-llava}
       GEMINI_VISION_MODEL: ${GEMINI_VISION_MODEL:-gemini-3.7-flash}
-      # Chat/generation backend — "ollama" (default) or "xai"
+      # Chat/generation backend — "ollama", "xai", or "groq"
       CHAT_BACKEND: ${CHAT_BACKEND:-ollama}
       OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-llama3.1:8b}
       XAI_API_KEY: ${XAI_API_KEY:-}
       XAI_URL: ${XAI_URL:-https://api.x.ai/v1}
       XAI_MODEL: ${XAI_MODEL:-grok-4.3}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_URL: ${GROQ_URL:-https://api.groq.com/openai/v1}
+      GROQ_MODEL: ${GROQ_MODEL:-${LLM_MODEL:-openai/gpt-oss-20b}}
+      GROQ_AGENT_MODELS: ${GROQ_AGENT_MODELS:-${GROQ_MODEL:-${LLM_MODEL:-openai/gpt-oss-20b}}}
       EMBED_MIN_SCORE: ${EMBED_MIN_SCORE:-0.55}
       RETRIEVAL_MODE: ${RETRIEVAL_MODE:-hybrid}
       HYBRID_ALPHA: ${HYBRID_ALPHA:-0.6}

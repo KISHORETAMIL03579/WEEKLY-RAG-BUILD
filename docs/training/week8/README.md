@@ -5,6 +5,10 @@ Week 8 evaluates the Week 7 Agent's live tool trajectories on the existing
 extra and duplicate calls, termination reason, measured latency, actual token
 usage, and the existing token-cost proxy. It reads the canonical `cases.json`
 without changing its questions, expected values, or pass criteria.
+Each evidence record also lists which unchanged deterministic answer criteria
+matched the returned answer and which did not. The summary counts unmet
+criteria across the cases. This is diagnostic only: it does not change the
+pass predicate or benchmark ground truth.
 
 The reference trajectory requires `get_employee_record` before
 `search_handbook`. The evaluator also records, but does not hide, extra tool
@@ -50,6 +54,10 @@ The mitigation removed terminal 429 failures in this run but increased p50
 latency because requests waited and retried. Eight answers still failed the
 unchanged deterministic criteria; benchmark data and criteria were not edited.
 This is not a claim of 100% answer correctness.
+
+The saved baseline and mitigation evidence predate criterion-level diagnostics.
+Use a distinct output path to rerun either phase and create records with
+`answer_criteria` and `unmet_answer_criteria`; do not overwrite prior evidence.
 
 Evidence JSON files are ignored by Git because they are generated runtime
 artifacts. The report distinguishes actual Groq token usage from the existing
