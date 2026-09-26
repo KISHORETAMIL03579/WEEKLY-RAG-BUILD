@@ -89,7 +89,7 @@ def test_chat_run_cancellation_reaches_a_different_worker_process(
     assert not chat_runs.cancel_chat_run(run_id, session_id)
 
 
-def test_active_chat_run_heartbeat_prevents_stale_cancellation_record(
+def test_background_heartbeat_preserves_long_lived_chat_cancellation(
     tmp_path, monkeypatch
 ):
     database_path = tmp_path / "chat-heartbeat.sqlite3"
@@ -107,16 +107,25 @@ def test_active_chat_run_heartbeat_prevents_stale_cancellation_record(
             (time.time() - chat_runs._RUN_TTL_SECONDS - 1, run_id),
         )
 
+    monkeypatch.setattr(chat_runs, "_SHARED_HEARTBEAT_INTERVAL", 0.01)
     run = chat_runs.ChatRun(run_id, session_hash)
-    run._last_shared_check = 0
-    run._last_shared_heartbeat = 0
-    run.check()
+    run.start_heartbeat()
+    try:
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            with shared_state.state_connection() as connection:
+                row = connection.execute(
+                    "SELECT status, updated_at FROM chat_runs WHERE run_id = ?",
+                    (run_id,),
+                ).fetchone()
+            if row["updated_at"] > time.time() - 5:
+                break
+            time.sleep(0.01)
+        else:
+            raise AssertionError("Background heartbeat did not refresh the run")
 
-    with shared_state.state_connection() as connection:
-        row = connection.execute(
-            "SELECT status, updated_at FROM chat_runs WHERE run_id = ?",
-            (run_id,),
-        ).fetchone()
-
-    assert row["status"] == "active"
-    assert row["updated_at"] > time.time() - 5
+        assert row["status"] == "active"
+        assert chat_runs._cancel_shared_run(run_id, session_hash)
+        assert run.cancelled.wait(2)
+    finally:
+        run.finish()

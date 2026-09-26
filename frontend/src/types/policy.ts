@@ -23,7 +23,8 @@ export interface PolicyQueryRequest {
   model?: string;
 }
 
-export interface OllamaModelListResponse {
+export interface ChatModelListResponse {
+  provider: string;
   default_model: string;
   models: string[];
   agent_models: string[];

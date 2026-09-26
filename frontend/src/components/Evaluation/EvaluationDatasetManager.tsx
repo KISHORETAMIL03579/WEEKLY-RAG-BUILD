@@ -7,6 +7,7 @@ import {
   DatasetMode,
   DatasetInvalidCase,
 } from "../../types/dataset";
+import { FileImportButton } from "../common/FileImportButton";
 
 interface EvaluationDatasetManagerProps {
   evaluatorType: "judge" | "retrieval" | "policy";
@@ -355,17 +356,10 @@ export const EvaluationDatasetManager: React.FC<
           </div>
 
           {/* Import File Button */}
-          <input
-            ref={fileInputRef}
-            type="file"
+          <FileImportButton
+            inputRef={fileInputRef}
             accept=".json,.txt,.md"
-            style={{ display: "none" }}
-            onChange={handleFileSelect}
-            disabled={isRunning || isParsingFile}
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
+            onFileSelect={handleFileSelect}
             disabled={isRunning || isParsingFile}
             style={{
               padding: "6px 12px",
@@ -385,7 +379,7 @@ export const EvaluationDatasetManager: React.FC<
             {isParsingFile
               ? "Validating..."
               : "Import Q&A File (.json, .txt, .md)"}
-          </button>
+          </FileImportButton>
 
           {/* Add Case Button */}
           <button

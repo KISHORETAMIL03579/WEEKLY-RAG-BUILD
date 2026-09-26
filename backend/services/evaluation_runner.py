@@ -336,18 +336,9 @@ class EvaluationRunManager:
         return active_run_id
 
     def get_run(self, run_id: str) -> Optional[EvaluationRunState]:
-        with self._manager_lock:
-            local_run = self._runs.get(run_id)
         snapshot = get_background_run("evaluation", run_id)
         if snapshot is None:
             return None
-        if local_run:
-            with local_run.lock:
-                if snapshot.get("cancellation_requested"):
-                    local_run.cancellation_requested = True
-                    local_run.status = "CANCELLING"
-                if local_run.status in ("RUNNING", "CANCELLING"):
-                    return local_run
         restored = EvaluationRunState.from_snapshot(snapshot)
         with self._manager_lock:
             self._runs[run_id] = restored
@@ -529,6 +520,7 @@ class EvaluationRunManager:
         try:
             corpus, index = get_handbook_corpus()
             total = len(run.cases)
+            llm_judge_failures: List[str] = []
             for idx in range(total):
                 latest_snapshot = get_background_run("evaluation", run.run_id)
                 if latest_snapshot and latest_snapshot.get("cancellation_requested"):
@@ -645,6 +637,19 @@ class EvaluationRunManager:
                                 model=run.model,
                             )
                         )
+                        for judge_name, source in (
+                            ("Judge V1", v1_src),
+                            ("Judge V2", v2_src),
+                        ):
+                            if source != "LLM":
+                                llm_judge_failures.append(f"{cid} {judge_name}")
+                                logger.warning(
+                                    "Evaluation run %s case %s %s did not complete with the LLM (source=%s)",
+                                    run.run_id,
+                                    cid,
+                                    judge_name,
+                                    source,
+                                )
                     except Exception as e:
                         logger.warning("LLM Judge evaluation failed for %s: %s", cid, e)
                         v1_verdict = evaluate_case_deterministically(
@@ -655,6 +660,9 @@ class EvaluationRunManager:
                         )
                         v1_src = "ERROR"
                         v2_src = "ERROR"
+                        llm_judge_failures.extend(
+                            (f"{cid} Judge V1", f"{cid} Judge V2")
+                        )
                 else:
                     v1_verdict = evaluate_case_deterministically(
                         c, is_strict_section=True
@@ -726,6 +734,15 @@ class EvaluationRunManager:
                     run.temperature,
                     c.get("retrieved_count", 0),
                 )
+
+            with run.lock:
+                if llm_judge_failures and not run.cancellation_requested:
+                    failed_judges = ", ".join(llm_judge_failures)
+                    run.error_message = (
+                        f"LLM judging did not complete for {len(llm_judge_failures)} "
+                        f"result(s): {failed_judges}. Review judge provenance and retry."
+                    )
+                    run.updated_at = time.time()
 
         except Exception:
             logger.exception("Fatal error in evaluation run %s", run.run_id)

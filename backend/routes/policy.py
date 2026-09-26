@@ -22,7 +22,20 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from backend.config import BASE_DIR, OLLAMA_CHAT_MODEL, OLLAMA_URL, logger
+import httpx
+
+from backend.config import (
+    BASE_DIR,
+    CHAT_BACKEND,
+    GROQ_AGENT_MODELS,
+    GROQ_API_KEY,
+    GROQ_MODEL,
+    GROQ_URL,
+    LLM_MODEL,
+    OLLAMA_CHAT_MODEL,
+    OLLAMA_URL,
+    logger,
+)
 from backend.schemas.policy import (
     MAX_RETRIES,
     MAX_COST,
@@ -205,8 +218,8 @@ def _run_with_retries(
             accumulated_tokens += result.total_tokens
             accumulated_cost += result.cost_usd
             accumulated_latency += attempt_ms
-            if result.token_source == "ollama_live":
-                accumulated_token_source = "ollama_live"
+            if result.token_source.endswith("_live"):
+                accumulated_token_source = result.token_source
             elif (
                 result.token_source == "proxy_estimate"
                 and accumulated_token_source == "unavailable"
@@ -382,7 +395,7 @@ def _run_with_retries(
 class PolicyBenchmarkStartRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=20)
     temperature: float = Field(default=0.3, ge=0.0, le=1.0)
-    model: Optional[str] = OLLAMA_CHAT_MODEL
+    model: Optional[str] = LLM_MODEL
     background: bool = Field(default=False)
     cases: Optional[List[Dict[str, Any]]] = None
 
@@ -395,7 +408,7 @@ class PolicySearchRequest(BaseModel):
     case_id: Optional[str] = None
     top_k: Optional[int] = Field(5, ge=1, le=20)
     temperature: Optional[float] = Field(0.3, ge=0.0, le=1.0)
-    model: Optional[str] = OLLAMA_CHAT_MODEL
+    model: Optional[str] = LLM_MODEL
     max_retries: Optional[int] = Field(MAX_RETRIES, ge=0, le=MAX_RETRIES)
     force_mode: Optional[str] = None  # "workflow" | "agent" | None (auto-route)
 
@@ -413,8 +426,56 @@ def _load_benchmark_cases() -> List[Dict[str, Any]]:
 
 
 @router.get("/models")
-def get_available_ollama_models():
-    """Return the installed Ollama models that can be used for chat execution."""
+def get_available_models():
+    """Return available models for the configured chat provider."""
+    if CHAT_BACKEND == "groq":
+        if not GROQ_API_KEY:
+            raise HTTPException(
+                status_code=503, detail="GROQ_API_KEY is not configured."
+            )
+        try:
+            response = httpx.get(
+                f"{GROQ_URL.rstrip('/')}/models",
+                headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+                timeout=5.0,
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except httpx.HTTPStatusError as exc:
+            logger.warning("Groq model list returned HTTP %d", exc.response.status_code)
+            raise HTTPException(
+                status_code=503, detail="Unable to load available Groq models."
+            ) from exc
+        except httpx.RequestError as exc:
+            logger.warning(
+                "Groq model list request failed (error_type=%s)", type(exc).__name__
+            )
+            raise HTTPException(
+                status_code=503, detail="Unable to load available Groq models."
+            ) from exc
+        except ValueError as exc:
+            logger.error("Groq returned an invalid model list response")
+            raise HTTPException(
+                status_code=502, detail="Groq returned an invalid model list."
+            ) from exc
+        if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
+            raise HTTPException(
+                status_code=502, detail="Groq returned an invalid model list."
+            )
+        models = sorted(
+            {
+                item["id"]
+                for item in payload["data"]
+                if isinstance(item, dict) and isinstance(item.get("id"), str)
+            }
+        )
+        return {
+            "provider": "groq",
+            "default_model": GROQ_MODEL,
+            "models": models,
+            "agent_models": [model for model in models if model in GROQ_AGENT_MODELS],
+        }
+
     request = urllib.request.Request(
         f"{OLLAMA_URL.rstrip('/')}/api/tags",
         headers={"User-Agent": "AskMyDocs-ModelList"},
@@ -463,6 +524,7 @@ def get_available_ollama_models():
             agent_models.append(item["name"])
 
     return {
+        "provider": "ollama",
         "default_model": OLLAMA_CHAT_MODEL,
         "models": list(dict.fromkeys(models)),
         "agent_models": list(dict.fromkeys(agent_models)),
@@ -491,7 +553,7 @@ def policy_search(payload: PolicySearchRequest):
 
     top_k = payload.top_k or 5
     temperature = payload.temperature if payload.temperature is not None else 0.3
-    model = payload.model or OLLAMA_CHAT_MODEL
+    model = payload.model or LLM_MODEL
     max_retries = (
         payload.max_retries if payload.max_retries is not None else MAX_RETRIES
     )
@@ -573,7 +635,7 @@ def execute_policy_agent(payload: PolicyQueryRequest):
         temp_val = getattr(payload, "temperature", 0.3)
         if temp_val is None:
             temp_val = 0.3
-        model_val = getattr(payload, "model", OLLAMA_CHAT_MODEL) or OLLAMA_CHAT_MODEL
+        model_val = getattr(payload, "model", LLM_MODEL) or LLM_MODEL
 
         result = run_agent_case(
             case_id=payload.case_id or "custom_agent_case",

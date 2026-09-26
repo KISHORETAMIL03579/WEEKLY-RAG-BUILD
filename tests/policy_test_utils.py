@@ -67,6 +67,7 @@ def run_scripted_agent_case(
         return responses.pop(0), 12, 8, 1.0
 
     with (
+        patch.object(policy_agent, "CHAT_BACKEND", "ollama"),
         patch.object(policy_agent, "check_ollama_available", return_value=True),
         patch.object(policy_agent, "_call_ollama_step", side_effect=model_step),
     ):

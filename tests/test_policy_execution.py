@@ -227,9 +227,12 @@ class TestPolicyExecution(unittest.TestCase):
                 ]
             }
         ).encode()
-        with patch(
-            "backend.routes.policy.urllib.request.urlopen",
-            return_value=ollama_response,
+        with (
+            patch("backend.routes.policy.CHAT_BACKEND", "ollama"),
+            patch(
+                "backend.routes.policy.urllib.request.urlopen",
+                return_value=ollama_response,
+            ),
         ):
             response = self.client.get("/api/policy/models")
 

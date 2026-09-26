@@ -5,13 +5,15 @@
 //
 // The UI shows routing decision immediately, then execution progress,
 // then tokens / latency / cost without fabricating any values.
-import React, { useEffect, useState, useRef } from "react";
+import React, { useState, useRef } from "react";
 import { api } from "../../services/api";
 import {
   PolicyOutputContract,
   RoutingDecision,
   RetryRecord,
 } from "../../types/policy";
+import { ModelSelect } from "../common/ModelSelect";
+import { useAvailableModels } from "../../hooks/useAvailableModels";
 
 interface PolicySearchViewProps {
   onNotify: (msg: string, type?: "info" | "success" | "error") => void;
@@ -59,12 +61,11 @@ const EXAMPLE_QUESTIONS: { empId: string; question: string }[] = [
 function TokenPanel({ result }: { result: PolicyOutputContract }) {
   const [expanded, setExpanded] = useState(false);
   const src = result.token_source || "unavailable";
-  const srcLabel =
-    src === "ollama_live"
-      ? "🟢 Live Ollama"
-      : src === "proxy_estimate"
-        ? "🟡 Proxy Estimate"
-        : "⚪ Unavailable";
+  const srcLabel = src.endsWith("_live")
+    ? `🟢 Live ${src.replace("_live", "")}`
+    : src === "proxy_estimate"
+      ? "🟡 Proxy Estimate"
+      : "⚪ Unavailable";
 
   if (result.total_tokens === 0 && src === "unavailable") {
     return (
@@ -533,7 +534,7 @@ function ResultCard({ result }: { result: PolicyOutputContract }) {
           {
             label: "Estimated Token Cost",
             val: `$${result.cost_usd?.toFixed(6) || "0.000000"}`,
-            sub: "Provider Cost: N/A (local Ollama)",
+            sub: "Provider Cost: N/A (not reported)",
           },
           {
             label: "Status",
@@ -580,10 +581,14 @@ export const PolicySearchView: React.FC<PolicySearchViewProps> = ({
   const [question, setQuestion] = useState(EXAMPLE_QUESTIONS[0].question);
   const [topK, setTopK] = useState(5);
   const [temperature, setTemperature] = useState(0.3);
-  const [model, setModel] = useState("");
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
-  const [isLoadingModels, setIsLoadingModels] = useState(true);
-  const [modelsError, setModelsError] = useState<string | null>(null);
+  const {
+    model,
+    setModel,
+    models: availableModels,
+    provider,
+    isLoadingModels,
+    modelsError,
+  } = useAvailableModels("agent");
   const [isSearching, setIsSearching] = useState(false);
   const [result, setResult] = useState<PolicyOutputContract | null>(null);
   const [previewRouting, setPreviewRouting] = useState<RoutingDecision | null>(
@@ -591,41 +596,6 @@ export const PolicySearchView: React.FC<PolicySearchViewProps> = ({
   );
   const [isPreviewingRoute, setIsPreviewingRoute] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .getAvailableOllamaModels(controller.signal)
-      .then(({ default_model, agent_models }) => {
-        if (controller.signal.aborted) return;
-        setAvailableModels(agent_models);
-        if (agent_models.length === 0) {
-          setModel("");
-          setModelsError(
-            "No tool-capable Ollama models are installed for Agent execution.",
-          );
-          return;
-        }
-        setModelsError(null);
-        setModel((current) =>
-          agent_models.includes(current)
-            ? current
-            : agent_models.includes(default_model)
-              ? default_model
-              : agent_models[0],
-        );
-      })
-      .catch((error: Error) => {
-        if (!controller.signal.aborted) {
-          setModel("");
-          setModelsError(`Could not load installed Ollama models: ${error.message}`);
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setIsLoadingModels(false);
-      });
-    return () => controller.abort();
-  }, []);
 
   const handlePreviewRoute = async () => {
     if (!question.trim()) return;
@@ -667,7 +637,10 @@ export const PolicySearchView: React.FC<PolicySearchViewProps> = ({
       setResult(res);
       const mode = res.execution_mode || res.implementation;
       if (res.termination_reason === "SUCCESS") {
-        onNotify(`Search complete. Mode: ${mode}. Run: ${res.run_id}`, "success");
+        onNotify(
+          `Search complete. Mode: ${mode}. Run: ${res.run_id}`,
+          "success",
+        );
       } else {
         onNotify(
           `Policy search failed (${res.termination_reason}). Mode: ${mode}. Run: ${res.run_id}`,
@@ -896,51 +869,33 @@ export const PolicySearchView: React.FC<PolicySearchViewProps> = ({
               />
             </div>
           ))}
-          <div style={{ minWidth: 160 }}>
-            <label
-              style={{
-                fontSize: "0.72rem",
-                color: "var(--text-muted)",
-                display: "block",
-                marginBottom: 3,
-              }}
-            >
-              Model
-            </label>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              disabled={isLoadingModels || availableModels.length === 0}
-              style={{
-                width: "100%",
-                padding: "5px 8px",
-                borderRadius: 5,
-                border: "1px solid var(--border)",
-                background: "var(--bg-surface)",
-                color: "var(--text-primary)",
-                fontSize: "0.82rem",
-              }}
-            >
-              {availableModels.length === 0 ? (
-                <option value="">
-                  {isLoadingModels
-                    ? "Loading Agent models…"
-                    : "No tool-capable models"}
-                </option>
-              ) : (
-                availableModels.map((availableModel) => (
-                  <option key={availableModel} value={availableModel}>
-                    {availableModel}
-                  </option>
-                ))
-              )}
-            </select>
-            {modelsError && (
-              <div role="alert" style={{ color: "#f87171", fontSize: "0.72rem" }}>
-                {modelsError}
-              </div>
-            )}
-          </div>
+          <ModelSelect
+            label={`Model (${provider || "configured provider"})`}
+            value={model}
+            onChange={setModel}
+            models={availableModels}
+            isLoading={isLoadingModels}
+            loadingLabel="Loading Agent models…"
+            emptyLabel="No tool-capable models"
+            error={modelsError}
+            containerStyle={{ minWidth: 160 }}
+            labelStyle={{
+              fontSize: "0.72rem",
+              color: "var(--text-muted)",
+              display: "block",
+              marginBottom: 3,
+            }}
+            selectStyle={{
+              width: "100%",
+              padding: "5px 8px",
+              borderRadius: 5,
+              border: "1px solid var(--border)",
+              background: "var(--bg-surface)",
+              color: "var(--text-primary)",
+              fontSize: "0.82rem",
+            }}
+            errorStyle={{ color: "#f87171", fontSize: "0.72rem" }}
+          />
 
           <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
             <button

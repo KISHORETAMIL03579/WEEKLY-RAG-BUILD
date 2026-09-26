@@ -28,7 +28,22 @@ class ChatRun:
         self._response: Any = None
         self.updated_at = time.monotonic()
         self._last_shared_check = 0.0
-        self._last_shared_heartbeat = 0.0
+        self._heartbeat_stop = threading.Event()
+        self._heartbeat_thread: Optional[threading.Thread] = None
+
+    def start_heartbeat(self) -> None:
+        self._heartbeat_thread = threading.Thread(
+            target=self._heartbeat_shared_run,
+            name=f"ChatRunHeartbeat-{self.run_id}",
+            daemon=True,
+        )
+        self._heartbeat_thread.start()
+
+    def _heartbeat_shared_run(self) -> None:
+        while not self._heartbeat_stop.wait(_SHARED_HEARTBEAT_INTERVAL):
+            if _shared_run_cancelled(self.run_id, self.session_hash, heartbeat=True):
+                self.cancel()
+                return
 
     def check(self) -> None:
         if self.cancelled.is_set():
@@ -36,13 +51,8 @@ class ChatRun:
         now = time.monotonic()
         if now - self._last_shared_check >= _SHARED_POLL_INTERVAL:
             self._last_shared_check = now
-            heartbeat = now - self._last_shared_heartbeat >= _SHARED_HEARTBEAT_INTERVAL
-            if _shared_run_cancelled(
-                self.run_id, self.session_hash, heartbeat=heartbeat
-            ):
+            if _shared_run_cancelled(self.run_id, self.session_hash):
                 self.cancelled.set()
-            if heartbeat:
-                self._last_shared_heartbeat = now
         with self._lock:
             self.updated_at = now
         if self.cancelled.is_set():
@@ -78,6 +88,7 @@ class ChatRun:
         with self._lock:
             self.completed.set()
             self.updated_at = time.monotonic()
+        self._heartbeat_stop.set()
         _finish_shared_run(self.run_id)
 
 
@@ -231,6 +242,7 @@ def managed_chat_run(function: Callable[..., Any]) -> Callable[..., Any]:
 
         token = _current_run.set(run)
         try:
+            run.start_heartbeat()
             result = function(*args, **kwargs)
             run.check()
             if isinstance(result, dict):

@@ -87,8 +87,7 @@ def persist_session_metadata(sid: str) -> None:
     hash_by_doc_map = get_app_symbol("HASH_BY_DOC", HASH_BY_DOC)
     chunk_counts_map = get_app_symbol("CHUNK_COUNTS", CHUNK_COUNTS)
     hash_by_doc = {
-        doc_id: list(value)
-        for doc_id, value in hash_by_doc_map.get(sid, {}).items()
+        doc_id: list(value) for doc_id, value in hash_by_doc_map.get(sid, {}).items()
     }
     save_session_metadata(sid, hash_by_doc, chunk_counts_map.get(sid, {}))
 
@@ -232,8 +231,7 @@ def get_store(sid: str) -> Any:
     metadata = load_session_metadata(sid)
     if metadata is not None:
         hash_by_doc_map[sid] = {
-            doc_id: tuple(value)
-            for doc_id, value in metadata["hash_by_doc"].items()
+            doc_id: tuple(value) for doc_id, value in metadata["hash_by_doc"].items()
         }
         hash_store_map[sid] = set(hash_by_doc_map[sid].values())
         chunk_counts_map[sid] = metadata["chunk_counts"]
@@ -290,7 +288,11 @@ def get_store(sid: str) -> Any:
             with path.open("rb") as uploaded:
                 content_hash = hashlib.sha256(uploaded.read()).hexdigest()
             doc_chunks = [c for c in store.chunks if c.get("doc_id") == doc_id]
-            chunk_mode = doc_chunks[0].get("method", "structured") if doc_chunks else "structured"
+            chunk_mode = (
+                doc_chunks[0].get("method", "structured")
+                if doc_chunks
+                else "structured"
+            )
             recovered_hashes[doc_id] = (content_hash, chunk_mode)
         hash_by_doc_map[sid] = recovered_hashes
         hash_store_map[sid] = set(recovered_hashes.values())

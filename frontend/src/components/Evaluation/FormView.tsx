@@ -4,6 +4,7 @@ import { PRESETS } from "./KeyTakeaways";
 import { CANONICAL_RETRIEVAL_QUESTIONS } from "../../data/canonicalRetrievalQuestions";
 import { EvaluationProgressCard } from "./EvaluationProgressCard";
 import { EvaluationDatasetManager } from "./EvaluationDatasetManager";
+import { CancelButton } from "../common/CancelButton";
 import { QADataSetCase, DatasetMode } from "../../types/dataset";
 import { Card } from "../common/Card";
 
@@ -209,37 +210,11 @@ export const FormView: React.FC<FormViewProps> = ({
               gap: "8px",
             }}
           >
-            {isRunning ? (
-              <>
-                <span
-                  className="spinner"
-                  style={{ width: "16px", height: "16px" }}
-                />
-                <span>Running Benchmark...</span>
-              </>
-            ) : (
-              <>
-                <span>▶</span>
-                <span>Run Retrieval Benchmark ({questions.length} Cases)</span>
-              </>
-            )}
+            <span>▶</span>
+            <span>Run Retrieval Benchmark ({questions.length} Cases)</span>
           </button>
         </div>
       </Card>
-
-      {/* LIVE PROGRESS CARD WHEN RUNNING */}
-      {isRunning && (
-        <EvaluationProgressCard
-          title="Retrieval Benchmark Running"
-          current={0}
-          total={questions.length}
-          isRunning={true}
-          isComplete={false}
-          statusText="Executing retrieval across active ablation strategies..."
-          configurationText={`Top-K: ${topK} | Active Strategies: ${Object.keys(presets).filter((k) => presets[k]).length}`}
-          onCancel={onCancel}
-        />
-      )}
 
       {/* UNIFIED DATASET MANAGEMENT (UPLOAD / MANUAL EDITING) */}
       <EvaluationDatasetManager
@@ -455,7 +430,7 @@ export const FormView: React.FC<FormViewProps> = ({
               placeholder="e.g. structured — leave blank for all"
               value={strategyFilter}
               onChange={(e) => setStrategyFilter(e.target.value)}
-              className="input-field"
+              className="eval-input-field"
               style={{ width: "100%" }}
             />
           </div>
@@ -530,20 +505,31 @@ export const FormView: React.FC<FormViewProps> = ({
             disabled={isRunning || questions.length === 0}
             className="btn-primary"
           >
-            {isRunning ? "Running benchmark..." : "Run Retrieval Benchmark"}
+            Run Retrieval Benchmark
           </button>
 
           {isRunning && (
-            <button
-              type="button"
+            <CancelButton
               onClick={onCancel}
               className="btn-secondary btn-danger"
             >
               Cancel
-            </button>
+            </CancelButton>
           )}
         </div>
       </Card>
+
+      {isRunning && (
+        <EvaluationProgressCard
+          title="Retrieval Benchmark Running"
+          current={0}
+          total={questions.length}
+          isRunning={true}
+          isComplete={false}
+          statusText="Executing retrieval across active ablation strategies..."
+          configurationText={`Top-K: ${topK} | Active Strategies: ${Object.keys(presets).filter((k) => presets[k]).length}`}
+        />
+      )}
     </div>
   );
 };

@@ -11,7 +11,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from backend.config import BASE_DIR, OLLAMA_CHAT_MODEL, logger
+from backend.config import BASE_DIR, CHAT_BACKEND, LLM_MODEL, logger
 from backend.schemas.policy import PolicyOutputContract, TOKEN_COST_PROXY_RATE
 from backend.services.policy_agent import run_agent_case
 from backend.services.policy_workflow import run_workflow_case
@@ -37,7 +37,7 @@ class PolicyBenchmarkRunState:
         cases: List[Dict[str, Any]],
         top_k: int = 5,
         temperature: float = 0.3,
-        model: Optional[str] = OLLAMA_CHAT_MODEL,
+        model: Optional[str] = LLM_MODEL,
     ):
         self.run_id = run_id
         self.top_k = top_k
@@ -50,7 +50,7 @@ class PolicyBenchmarkRunState:
         self.current_question: Optional[str] = (
             cases[0].get("question") if cases else None
         )
-        self.current_agent_stage: Optional[str] = "Calling Ollama"
+        self.current_agent_stage: Optional[str] = f"Calling {CHAT_BACKEND.title()}"
         self.current_workflow_stage: Optional[str] = "Step 1: Employee lookup"
         self.agent_completed_count: int = 0
         self.workflow_completed_count: int = 0
@@ -212,8 +212,6 @@ class PolicyBenchmarkRunManager:
         return self.get_run(run_id) if run_id else None
 
     def get_run(self, run_id: str) -> Optional[PolicyBenchmarkRunState]:
-        with self._manager_lock:
-            local_run = self._runs.get(run_id)
         snapshot = get_background_run("policy_benchmark", run_id)
         if snapshot is None:
             return None
@@ -224,13 +222,6 @@ class PolicyBenchmarkRunManager:
                 if self._active_run_id == run_id:
                     self._active_run_id = None
             return restored
-        if local_run:
-            with local_run.lock:
-                if snapshot.get("cancellation_requested"):
-                    local_run.cancellation_requested = True
-                    local_run.status = "CANCELLING"
-                if local_run.status in ("RUNNING", "CANCELLING"):
-                    return local_run
         restored = PolicyBenchmarkRunState.from_snapshot(snapshot)
         with self._manager_lock:
             self._runs[run_id] = restored
@@ -281,7 +272,7 @@ class PolicyBenchmarkRunManager:
         cases: List[Dict[str, Any]],
         top_k: int = 5,
         temperature: float = 0.3,
-        model: Optional[str] = OLLAMA_CHAT_MODEL,
+        model: Optional[str] = LLM_MODEL,
     ) -> PolicyBenchmarkRunState:
         with self._manager_lock:
             run_id = f"bench_{uuid.uuid4().hex[:12]}"
@@ -387,7 +378,7 @@ class PolicyBenchmarkRunManager:
                         deterministic_pass_criteria=crit,
                         top_k=run_state.top_k,
                         temperature=run_state.temperature,
-                        model=run_state.model or OLLAMA_CHAT_MODEL,
+                        model=run_state.model or LLM_MODEL,
                         on_stage=make_agent_stage_cb(idx),
                     )
                 except Exception:

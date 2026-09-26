@@ -1,4 +1,6 @@
 import React from "react";
+import { CancelButton } from "../common/CancelButton";
+import { ProgressBar } from "../common/ProgressBar";
 
 export interface SignalStatus {
   label: string;
@@ -205,8 +207,7 @@ export const EvaluationProgressCard: React.FC<EvaluationProgressCardProps> = ({
             </div>
           )}
           {isRunning && onCancel && (
-            <button
-              type="button"
+            <CancelButton
               onClick={onCancel}
               className="btn-secondary"
               style={{
@@ -220,14 +221,16 @@ export const EvaluationProgressCard: React.FC<EvaluationProgressCardProps> = ({
               title="Cancel ongoing evaluation"
             >
               🛑 Cancel
-            </button>
+            </CancelButton>
           )}
         </div>
       </div>
 
       {/* Progress Bar Track */}
-      <div
-        style={{
+      <ProgressBar
+        ariaLabel="Evaluation progress"
+        percentage={pct}
+        trackStyle={{
           width: "100%",
           height: "12px",
           background: "rgba(255, 255, 255, 0.07)",
@@ -236,22 +239,18 @@ export const EvaluationProgressCard: React.FC<EvaluationProgressCardProps> = ({
           position: "relative",
           boxShadow: "inset 0 1px 3px rgba(0, 0, 0, 0.4)",
         }}
-      >
-        <div
-          style={{
-            width: `${pct}%`,
-            height: "100%",
-            background: isComplete
-              ? "linear-gradient(90deg, #10b981, #34d399)"
-              : error
-                ? "linear-gradient(90deg, #ef4444, #f87171)"
-                : "linear-gradient(90deg, #2563eb, #3b82f6, #60a5fa, #34d399)",
-            borderRadius: "8px",
-            transition: "width 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
-            boxShadow: "0 0 14px rgba(59, 130, 246, 0.65)",
-          }}
-        />
-      </div>
+        fillStyle={{
+          height: "100%",
+          background: isComplete
+            ? "linear-gradient(90deg, #10b981, #34d399)"
+            : error
+              ? "linear-gradient(90deg, #ef4444, #f87171)"
+              : "linear-gradient(90deg, #2563eb, #3b82f6, #60a5fa, #34d399)",
+          borderRadius: "8px",
+          transition: "width 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+          boxShadow: "0 0 14px rgba(59, 130, 246, 0.65)",
+        }}
+      />
 
       {/* Signals Status Bar */}
       {signals.length > 0 && (

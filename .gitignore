@@ -42,6 +42,8 @@ htmlcov/
 # Application runtime storage
 uploads/
 vectorstore/
+benchmarks/policy_execution/trajectory_*.json
+benchmarks/policy_execution/trajectory_*.json.partial
 uploads/
 __pycache__/
 *.log

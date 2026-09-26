@@ -11,7 +11,11 @@ from backend.services.evaluation_runner import (
     get_handbook_corpus,
 )
 from backend.services.search import search_chunks, fit_to_token_budget
-from week6.judge import call_llm_judge_detailed, evaluate_case_with_judge_detailed
+from week6.judge import (
+    call_llm_judge_detailed,
+    check_ollama_health,
+    evaluate_case_with_judge_detailed,
+)
 
 
 class TestEvaluationTopKTemperature(unittest.TestCase):
@@ -37,6 +41,7 @@ class TestEvaluationTopKTemperature(unittest.TestCase):
         diff = set(cids_8) - set(cids_5)
         self.assertEqual(len(diff), 3)
 
+    @patch("backend.config.CHAT_BACKEND", "ollama")
     @patch("week6.judge.check_ollama_health", return_value=True)
     @patch("urllib.request.urlopen")
     def test_temperature_sent_to_ollama(self, mock_urlopen, mock_health):
@@ -62,6 +67,14 @@ class TestEvaluationTopKTemperature(unittest.TestCase):
         self.assertEqual(payload["model"], "llama3.1:8b")
         self.assertIn("options", payload)
         self.assertAlmostEqual(payload["options"]["temperature"], 0.3)
+        self.assertNotIn("}", payload["options"]["stop"])
+
+    @patch("week6.judge.socket.create_connection")
+    def test_ollama_health_uses_configured_service_host(self, mock_connect):
+        with patch("week6.judge.OLLAMA_URL", "http://ollama:11434"):
+            self.assertTrue(check_ollama_health())
+
+        mock_connect.assert_called_once_with(("ollama", 11434), timeout=0.2)
 
     def test_evidence_based_diagnosis(self):
         """Verifies that case classification is based strictly on evidence, decoupling from benchmark taxonomy."""

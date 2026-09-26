@@ -20,7 +20,7 @@ import {
 } from "../types/evaluation";
 import { TracesResponse, ReplayResponse } from "../types/trace";
 import { DatasetParseResult } from "../types/dataset";
-import { OllamaModelListResponse } from "../types/policy";
+import { ChatModelListResponse } from "../types/policy";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -464,11 +464,11 @@ export const api = {
   },
 
   // Auto-routed HR Policy Search (Week 7 production search)
-  async getAvailableOllamaModels(
+  async getAvailableChatModels(
     signal?: AbortSignal,
-  ): Promise<OllamaModelListResponse> {
+  ): Promise<ChatModelListResponse> {
     const res = await fetch(`${API_BASE}/api/policy/models`, { signal });
-    return handleResponse<OllamaModelListResponse>(res);
+    return handleResponse<ChatModelListResponse>(res);
   },
 
   async runPolicySearch(

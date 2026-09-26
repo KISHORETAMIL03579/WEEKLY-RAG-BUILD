@@ -39,6 +39,28 @@ class TestBenchmarkProgress(unittest.TestCase):
         self.assertEqual(len(data["cases_status"]), 10)
         self.assertEqual(data["cases_status"][0]["status"], "WAITING")
 
+    def test_get_run_returns_latest_persisted_progress_snapshot(self):
+        manager = PolicyBenchmarkRunManager()
+        run = PolicyBenchmarkRunState(
+            run_id="bench_fresh_progress",
+            cases=self.cases[:2],
+        )
+        manager._runs[run.run_id] = run
+        latest_snapshot = run.to_dict()
+        latest_snapshot["completed_cases"] = 1
+        latest_snapshot["cases_status"][0]["status"] = "PASS"
+
+        with patch(
+            "backend.services.policy_benchmark_runner.get_background_run",
+            return_value=latest_snapshot,
+        ):
+            current_run = manager.get_run(run.run_id)
+
+        self.assertIsNotNone(current_run)
+        self.assertIsNot(current_run, run)
+        self.assertEqual(current_run.completed_cases, 1)
+        self.assertEqual(current_run.cases_status[0]["status"], "PASS")
+
     def test_benchmark_summary_uses_true_median_for_even_case_counts(self):
         results = [
             PolicyOutputContract(

@@ -141,12 +141,8 @@ def ensure_frontend_built(force: bool = False) -> bool:
 
     package_json = FRONTEND_DIR / "package.json"
     if not package_json.exists():
-        print(
-            f"[ERROR] frontend/package.json not found at {FRONTEND_DIR}",
-            file=sys.stderr,
-        )
-        logger.error("frontend/package.json not found at %s", FRONTEND_DIR)
-        raise SystemExit(1)
+        logger.warning("frontend/package.json not found at %s", FRONTEND_DIR)
+        return False
 
     npm_cmd = "npm.cmd" if sys.platform.startswith("win") else "npm"
     logger.info(
@@ -154,7 +150,6 @@ def ensure_frontend_built(force: bool = False) -> bool:
         npm_cmd,
         FRONTEND_DIR,
     )
-    print(f"\n[BUILD] Building React 18 + Vite frontend ({npm_cmd} run build)...")
 
     try:
         res = subprocess.run(
@@ -165,45 +160,21 @@ def ensure_frontend_built(force: bool = False) -> bool:
             check=False,
         )
         if res.returncode != 0:
-            print(
-                f"[ERROR] Frontend build failed (exit code {res.returncode}):\n",
-                file=sys.stderr,
-            )
-            if res.stdout:
-                print(res.stdout, file=sys.stderr)
-            if res.stderr:
-                print(res.stderr, file=sys.stderr)
-            logger.error("Frontend build failed:\n%s\n%s", res.stdout, res.stderr)
-            raise SystemExit(1)
+            logger.warning("Frontend build returned code %d:\n%s\n%s", res.returncode, res.stdout, res.stderr)
+            return False
 
         if not index_html.exists():
-            print(
-                "[ERROR] Frontend build finished with code 0 but frontend/dist/index.html was not generated.",
-                file=sys.stderr,
-            )
-            logger.error("Frontend build did not create %s", index_html)
-            raise SystemExit(1)
+            logger.warning("Frontend build finished but %s was not created.", index_html)
+            return False
 
-        print("[OK] Frontend build completed successfully!\n")
         logger.info("[OK] Frontend build completed.")
         return True
     except FileNotFoundError:
-        print(
-            f"[ERROR] '{npm_cmd}' was not found in PATH.\n"
-            f"   Node.js and npm are required to build the frontend when frontend/dist is missing.\n"
-            f"   Please install Node.js 18+ or run 'npm run build' inside frontend/.",
-            file=sys.stderr,
-        )
-        logger.error("'%s' not found in PATH when building frontend.", npm_cmd)
-        raise SystemExit(1)
-    except SystemExit:
-        raise
+        logger.warning("'%s' not found in PATH when building frontend.", npm_cmd)
+        return False
     except Exception as exc:
-        print(
-            f"[ERROR] Unexpected error while building frontend: {exc}", file=sys.stderr
-        )
-        logger.error("Unexpected error during frontend build: %s", exc, exc_info=True)
-        raise SystemExit(1)
+        logger.warning("Unexpected error during frontend build: %s", exc)
+        return False
 
 
 def register_middleware(app: FastAPI) -> None:

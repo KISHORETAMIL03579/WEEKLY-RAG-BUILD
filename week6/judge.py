@@ -10,6 +10,7 @@ import urllib.parse
 import urllib.request
 import urllib.error
 from typing import Dict, Any, Tuple, List, Optional
+import logging
 
 from week6.assertions import (
     policy_section_reference_present,
@@ -21,23 +22,19 @@ from week6.assertions import (
 
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_CHAT_MODEL", "llama3.1:8b")
-
-# Circuit Breaker Cache for Local Model Health
-_OLLAMA_AVAILABLE: Optional[bool] = None
+logger = logging.getLogger(__name__)
 
 
 def check_ollama_health(timeout: float = 0.2) -> bool:
-    """Instant non-blocking TCP probe to verify if local Ollama daemon is active."""
-    global _OLLAMA_AVAILABLE
+    """Probe the configured Ollama host before attempting judge inference."""
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(timeout)
-        res = s.connect_ex(("127.0.0.1", 11434))
-        s.close()
-        _OLLAMA_AVAILABLE = res == 0
-        return _OLLAMA_AVAILABLE
-    except Exception:
-        _OLLAMA_AVAILABLE = False
+        parsed_url = urllib.parse.urlparse(OLLAMA_URL)
+        if parsed_url.scheme not in {"http", "https"} or not parsed_url.hostname:
+            return False
+        port = parsed_url.port or (443 if parsed_url.scheme == "https" else 80)
+        with socket.create_connection((parsed_url.hostname, port), timeout=timeout):
+            return True
+    except (OSError, ValueError):
         return False
 
 
@@ -53,10 +50,12 @@ def call_llm_judge_detailed(
     Source is explicitly one of 'LLM', 'FALLBACK', or 'ERROR'.
     """
     t_start = time.perf_counter()
-    target_model = model or OLLAMA_MODEL
+    from backend.config import CHAT_BACKEND, LLM_MODEL
 
-    # 1. First probe local Ollama daemon
-    if check_ollama_health():
+    target_model = model or (OLLAMA_MODEL if CHAT_BACKEND == "ollama" else LLM_MODEL)
+
+    # Use the selected provider rather than preferring a locally reachable Ollama.
+    if CHAT_BACKEND == "ollama" and check_ollama_health():
         ollama_endpoint = f"{OLLAMA_URL.rstrip('/')}/api/generate"
         payload = {
             "model": target_model,
@@ -66,7 +65,7 @@ def call_llm_judge_detailed(
                 "temperature": float(temperature),
                 "top_p": 0.1,
                 "num_predict": 16,
-                "stop": ["\n", "}", "```"],
+                "stop": ["\n", "```"],
             },
         }
         encoded_data = json.dumps(payload).encode("utf-8")
@@ -91,23 +90,39 @@ def call_llm_judge_detailed(
                 latency_ms = (time.perf_counter() - t_start) * 1000
                 return f"ERROR: Ollama inference failed: {exc}", "ERROR", latency_ms
 
-    # 2. Try configured non-Ollama backend chat service (e.g. xAI/Grok) if available
-    try:
-        from backend.config import CHAT_BACKEND
+    if CHAT_BACKEND != "ollama":
         from backend.services.llm import chat_configured, chat_call
 
-        if CHAT_BACKEND != "ollama" and chat_configured():
-            res = chat_call(
-                system='You are an impartial and rigorous HR Policy evaluation judge. Return ONLY the single JSON object: {"verdict": 1} or {"verdict": 0}.',
-                user=prompt,
-                temperature=float(temperature),
-                max_tokens=16,
-            )
-            if res and res.strip():
+        if chat_configured():
+            try:
+                res = chat_call(
+                    system='You are an impartial and rigorous HR Policy evaluation judge. Return ONLY the single JSON object: {"verdict": 1} or {"verdict": 0}.',
+                    user=prompt,
+                    temperature=float(temperature),
+                    max_tokens=(
+                        128
+                        if target_model.startswith("openai/gpt-oss-")
+                        else 16
+                    ),
+                    model=target_model,
+                )
+                if res and res.strip():
+                    latency_ms = (time.perf_counter() - t_start) * 1000
+                    return res.strip(), "LLM", latency_ms
+            except Exception as exc:
+                logger.error(
+                    "Configured %s judge provider failed (error_type=%s)",
+                    CHAT_BACKEND,
+                    type(exc).__name__,
+                )
                 latency_ms = (time.perf_counter() - t_start) * 1000
-                return res.strip(), "LLM", latency_ms
-    except Exception as exc:
-        pass
+                return "ERROR: Configured judge provider call failed.", "ERROR", latency_ms
+        latency_ms = (time.perf_counter() - t_start) * 1000
+        return (
+            "ERROR: Configured judge provider is unavailable.",
+            "ERROR",
+            latency_ms,
+        )
 
     latency_ms = (time.perf_counter() - t_start) * 1000
     return (

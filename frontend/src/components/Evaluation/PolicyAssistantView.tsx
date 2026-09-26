@@ -11,6 +11,11 @@ import {
 import { EvaluationDatasetManager } from "./EvaluationDatasetManager";
 import { QADataSetCase, DatasetMode } from "../../types/dataset";
 import { MetricCard } from "../common/MetricCard";
+import { ModelSelect } from "../common/ModelSelect";
+import { useAvailableModels } from "../../hooks/useAvailableModels";
+import { CancelButton } from "../common/CancelButton";
+import { ParameterSelect } from "../common/ParameterSelect";
+import { ProgressBar } from "../common/ProgressBar";
 
 interface PolicyAssistantViewProps {
   onNotify: (msg: string, type?: "info" | "success" | "error") => void;
@@ -48,10 +53,18 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
   // Benchmark Configuration State
   const [topK, setTopK] = useState<number>(5);
   const [temperature, setTemperature] = useState<number>(0.3);
-  const [selectedModel, setSelectedModel] = useState<string>("");
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
-  const [defaultModel, setDefaultModel] = useState<string>("");
-  const [isLoadingModels, setIsLoadingModels] = useState<boolean>(true);
+  const {
+    model: selectedModel,
+    setModel: setSelectedModel,
+    models: availableModels,
+    defaultModel,
+    provider,
+    isLoadingModels,
+    modelsError,
+  } = useAvailableModels(
+    "agent",
+    "No tool-enabled model is available from the configured provider for the Week 7 agent.",
+  );
 
   // Benchmark Run State
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
@@ -84,49 +97,25 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
     useState<PolicyOutputContract | null>(null);
 
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const notifiedModelErrorRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const controller = new AbortController();
     loadInitialData();
     checkActiveBenchmark();
-    api
-      .getAvailableOllamaModels(controller.signal)
-      .then(({ default_model, agent_models }) => {
-        if (controller.signal.aborted) return;
-        setAvailableModels(agent_models);
-        setDefaultModel(default_model);
-        setSelectedModel((current) =>
-          agent_models.includes(current)
-            ? current
-            : agent_models.includes(default_model)
-              ? default_model
-              : agent_models[0] || "",
-        );
-        if (agent_models.length === 0) {
-          onNotify(
-            "No tool-capable Ollama model is installed for the Week 7 agent.",
-            "error",
-          );
-        }
-      })
-      .catch((error: Error) => {
-        if (!controller.signal.aborted) {
-          setAvailableModels([]);
-          setSelectedModel("");
-          onNotify(
-            `Could not load installed Ollama models: ${error.message}`,
-            "error",
-          );
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setIsLoadingModels(false);
-      });
     return () => {
-      controller.abort();
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (
+      modelsError &&
+      notifiedModelErrorRef.current !== modelsError
+    ) {
+      notifiedModelErrorRef.current = modelsError;
+      onNotify(modelsError, "error");
+    }
+  }, [modelsError, onNotify]);
 
   const loadInitialData = async () => {
     try {
@@ -206,7 +195,7 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
 
   const handleStartBenchmark = async () => {
     if (!availableModels.includes(selectedModel)) {
-      onNotify("Select an installed tool-capable Ollama model first.", "error");
+      onNotify("Select a tool-enabled model from the configured provider.", "error");
       return;
     }
     if (datasetMode === "custom" && customDatasetCases.length === 0) {
@@ -293,7 +282,7 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
       return;
     }
     if ((mode === "both" || mode === "agent") && !canRunAgent) {
-      onNotify("Select an installed tool-capable Ollama model first.", "error");
+      onNotify("Select a tool-enabled model from the configured provider.", "error");
       return;
     }
 
@@ -382,7 +371,7 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
 
   // Determine stage progression states for Agent and Workflow
   const agentStages = [
-    "Calling Ollama",
+    `Calling ${provider || "model provider"}`,
     "Selecting tool",
     "Executing tool",
     "Processing tool result",
@@ -526,8 +515,7 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
               >
                 <span>⏳</span> Benchmark Running...
               </button>
-              <button
-                type="button"
+              <CancelButton
                 onClick={handleCancelBenchmark}
                 style={{
                   padding: "10px 18px",
@@ -544,7 +532,7 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
                 }}
               >
                 ⏹️ Cancel
-              </button>
+              </CancelButton>
             </div>
           ) : (
             <button
@@ -702,127 +690,104 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
             opacity: isRunningBenchmark ? 0.75 : 1,
           }}
         >
-          {/* Top K Control */}
-          <div>
-            <label
-              style={{
-                fontSize: "0.75rem",
-                color: "var(--text-muted)",
-                display: "block",
-                marginBottom: "4px",
-              }}
-            >
-              Top K
-            </label>
-            <select
-              value={topK}
-              onChange={(e) => setTopK(Number(e.target.value))}
-              disabled={isRunningBenchmark}
-              style={{
-                width: "100%",
-                padding: "6px 8px",
-                borderRadius: "6px",
-                background: "var(--bg-surface)",
-                border: "1px solid var(--border)",
-                color: "#fff",
-                fontSize: "0.82rem",
-                cursor: isRunningBenchmark ? "not-allowed" : "pointer",
-              }}
-            >
-              <option value={4}>4</option>
-              <option value={5}>5 (Default)</option>
-              <option value={6}>6</option>
-              <option value={8}>8 (Baseline)</option>
-              <option value={10}>10</option>
-              <option value={12}>12</option>
-            </select>
-          </div>
+          <ParameterSelect
+            label="Top K"
+            value={topK}
+            onChange={(value) => setTopK(Number(value))}
+            options={[
+              { value: 4, label: "4" },
+              { value: 5, label: "5 (Default)" },
+              { value: 6, label: "6" },
+              { value: 8, label: "8 (Baseline)" },
+              { value: 10, label: "10" },
+              { value: 12, label: "12" },
+            ]}
+            disabled={isRunningBenchmark}
+            labelStyle={{
+              fontSize: "0.75rem",
+              color: "var(--text-muted)",
+              display: "block",
+              marginBottom: "4px",
+            }}
+            selectStyle={{
+              width: "100%",
+              padding: "6px 8px",
+              borderRadius: "6px",
+              background: "var(--bg-surface)",
+              border: "1px solid var(--border)",
+              color: "#fff",
+              fontSize: "0.82rem",
+              cursor: isRunningBenchmark ? "not-allowed" : "pointer",
+            }}
+          />
 
-          {/* Agent Temperature Control */}
-          <div>
-            <label
-              style={{
-                fontSize: "0.75rem",
-                color: "var(--text-muted)",
-                display: "block",
-                marginBottom: "4px",
-              }}
-            >
-              Agent Temperature
-            </label>
-            <select
-              value={temperature}
-              onChange={(e) => setTemperature(Number(e.target.value))}
-              disabled={isRunningBenchmark}
-              style={{
-                width: "100%",
-                padding: "6px 8px",
-                borderRadius: "6px",
-                background: "var(--bg-surface)",
-                border: "1px solid var(--border)",
-                color: "#fff",
-                fontSize: "0.82rem",
-                cursor: isRunningBenchmark ? "not-allowed" : "pointer",
-              }}
-            >
-              <option value={0.0}>0.0 (Deterministic)</option>
-              <option value={0.1}>0.1</option>
-              <option value={0.2}>0.2</option>
-              <option value={0.3}>0.3 (Default)</option>
-              <option value={0.5}>0.5</option>
-              <option value={0.7}>0.7</option>
-            </select>
-          </div>
+          <ParameterSelect
+            label="Agent Temperature"
+            value={temperature}
+            onChange={(value) => setTemperature(Number(value))}
+            options={[
+              { value: 0.0, label: "0.0 (Deterministic)" },
+              { value: 0.1, label: "0.1" },
+              { value: 0.2, label: "0.2" },
+              { value: 0.3, label: "0.3 (Default)" },
+              { value: 0.5, label: "0.5" },
+              { value: 0.7, label: "0.7" },
+            ]}
+            disabled={isRunningBenchmark}
+            labelStyle={{
+              fontSize: "0.75rem",
+              color: "var(--text-muted)",
+              display: "block",
+              marginBottom: "4px",
+            }}
+            selectStyle={{
+              width: "100%",
+              padding: "6px 8px",
+              borderRadius: "6px",
+              background: "var(--bg-surface)",
+              border: "1px solid var(--border)",
+              color: "#fff",
+              fontSize: "0.82rem",
+              cursor: isRunningBenchmark ? "not-allowed" : "pointer",
+            }}
+          />
 
           {/* Agent Model Control */}
-          <div>
-            <label
-              style={{
-                fontSize: "0.75rem",
-                color: "var(--text-muted)",
-                display: "block",
-                marginBottom: "4px",
-              }}
-            >
-              Agent Model
-            </label>
-            <select
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              disabled={isRunningBenchmark || isLoadingModels || availableModels.length === 0}
-              style={{
-                width: "100%",
-                padding: "6px 8px",
-                borderRadius: "6px",
-                background: "var(--bg-surface)",
-                border: "1px solid var(--border)",
-                color: "#fff",
-                fontSize: "0.82rem",
-                cursor:
-                  isRunningBenchmark || isLoadingModels || availableModels.length === 0
-                    ? "not-allowed"
-                    : "pointer",
-              }}
-            >
-              {selectedModel && !availableModels.includes(selectedModel) && (
-                <option value={selectedModel} disabled>
-                  {selectedModel} (not installed)
-                </option>
-              )}
-              {availableModels.length === 0 ? (
-                <option value="">
-                  {isLoadingModels ? "Loading Agent models…" : "No tool-capable models"}
-                </option>
-              ) : (
-                availableModels.map((availableModel) => (
-                  <option key={availableModel} value={availableModel}>
-                    {availableModel}
-                    {availableModel === defaultModel ? " (Default)" : ""}
-                  </option>
-                ))
-              )}
-            </select>
-          </div>
+          <ModelSelect
+            label={`Agent Model (${provider || "configured provider"})`}
+            value={selectedModel}
+            onChange={setSelectedModel}
+            models={availableModels}
+            defaultModel={defaultModel}
+            isLoading={isLoadingModels}
+            disabled={isRunningBenchmark}
+            loadingLabel="Loading Agent models…"
+            emptyLabel="No tool-capable models"
+            showDefaultLabel
+            preserveUnavailableValue
+            containerStyle={{ minWidth: 160 }}
+            labelStyle={{
+              fontSize: "0.75rem",
+              color: "var(--text-muted)",
+              display: "block",
+              marginBottom: "4px",
+            }}
+            selectStyle={{
+              width: "100%",
+              padding: "6px 8px",
+              borderRadius: "6px",
+              background: "var(--bg-surface)",
+              border: "1px solid var(--border)",
+              color: "#fff",
+              fontSize: "0.82rem",
+              cursor:
+                isRunningBenchmark ||
+                isLoadingModels ||
+                availableModels.length === 0
+                  ? "not-allowed"
+                  : "pointer",
+            }}
+          />
 
           {/* Workflow Architecture Readout */}
           <div>
@@ -1104,8 +1069,7 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
                 {benchmarkRunState.progress_pct}%
               </span>
               {isRunningBenchmark && (
-                <button
-                  type="button"
+                <CancelButton
                   onClick={handleCancelBenchmark}
                   className="btn-secondary"
                   style={{
@@ -1116,14 +1080,16 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
                   }}
                 >
                   Cancel Benchmark
-                </button>
+                </CancelButton>
               )}
             </div>
           </div>
 
           {/* Large Animated Progress Bar */}
-          <div
-            style={{
+          <ProgressBar
+            ariaLabel="Policy benchmark progress"
+            percentage={benchmarkRunState.progress_pct}
+            trackStyle={{
               width: "100%",
               height: "16px",
               background: "var(--bg-surface-elevated)",
@@ -1131,22 +1097,18 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
               overflow: "hidden",
               border: "1px solid var(--border)",
             }}
-          >
-            <div
-              style={{
-                width: `${benchmarkRunState.progress_pct}%`,
-                height: "100%",
-                background:
-                  benchmarkRunState.status === "COMPLETED"
-                    ? "linear-gradient(90deg, #10b981, #059669)"
-                    : benchmarkRunState.status === "CANCELLED"
-                      ? "#f59e0b"
-                      : "linear-gradient(90deg, #3b82f6, #60a5fa)",
-                transition: "width 0.35s ease-in-out",
-                borderRadius: "8px",
-              }}
-            />
-          </div>
+            fillStyle={{
+              height: "100%",
+              background:
+                benchmarkRunState.status === "COMPLETED"
+                  ? "linear-gradient(90deg, #10b981, #059669)"
+                  : benchmarkRunState.status === "CANCELLED"
+                    ? "#f59e0b"
+                    : "linear-gradient(90deg, #3b82f6, #60a5fa)",
+              transition: "width 0.35s ease-in-out",
+              borderRadius: "8px",
+            }}
+          />
 
           {/* Metadata Row: Current Case, Elapsed Time, Subsystem Progress */}
           <div
@@ -2350,9 +2312,9 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
             }}
           >
             <p>
-              <strong>Agent:</strong> Real Ollama LLM-based ReAct execution. The
-              LLM selects tools dynamically and receives tool results before
-              producing the final answer.
+              <strong>Agent:</strong> Live LLM-based ReAct execution using the
+              configured provider. The model selects tools dynamically and
+              receives tool results before producing the final answer.
             </p>
             <p>
               <strong>Workflow:</strong> Deterministic 3-step execution: (1)
@@ -2360,12 +2322,12 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
               resolution.
             </p>
             <p>
-              <strong>Latency:</strong> Agent latency includes real LLM/Ollama
+              <strong>Latency:</strong> Agent latency includes real provider
               execution. Workflow latency measures deterministic execution.
             </p>
             <p>
               <strong>Cost:</strong> Estimated token-cost proxy based on
-              recorded usage; Ollama provider billing is not represented.
+              recorded usage; provider billing is not represented.
             </p>
             <p>
               <strong>Reliability:</strong> Deterministic policy execution

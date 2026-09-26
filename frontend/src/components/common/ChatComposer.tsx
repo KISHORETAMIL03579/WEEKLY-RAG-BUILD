@@ -1,4 +1,9 @@
-import React, { FormEvent, KeyboardEvent, useLayoutEffect, useRef } from "react";
+import React, {
+  FormEvent,
+  KeyboardEvent,
+  useLayoutEffect,
+  useRef,
+} from "react";
 
 interface ChatComposerProps {
   value: string;

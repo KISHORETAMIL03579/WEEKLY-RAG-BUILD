@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
-from backend.config import OLLAMA_CHAT_MODEL
+from backend.config import LLM_MODEL
 
 # Strict Execution Budgets & Constants
 MAX_ITERATIONS: int = 5
@@ -15,7 +15,7 @@ MAX_WALL_CLOCK_SECONDS: float = 45.0
 MAX_RETRIES: int = 2  # Maximum automatic retries (initial attempt + 2 = 3 total)
 
 # Token cost proxy — single source of truth, never scattered through code.
-# Local Ollama has no direct provider billing cost.
+# The token cost is a proxy, not reported provider billing.
 # This proxy rate ($0.50/1M tokens) is used only for educational cost comparison.
 # UI must label this "Estimated Token Cost", not "Actual Cost".
 TOKEN_COST_PER_1M: float = 0.50  # dollars per 1 million tokens
@@ -58,7 +58,7 @@ class PolicyQueryRequest(BaseModel):
     case_id: Optional[str] = Field(None, description="Optional benchmark case ID")
     top_k: Optional[int] = Field(5, description="Top K retrieval count")
     temperature: Optional[float] = Field(0.3, description="LLM sampling temperature")
-    model: Optional[str] = Field(OLLAMA_CHAT_MODEL, description="Model name")
+    model: Optional[str] = Field(LLM_MODEL, description="Model name")
 
 
 # Telemetry record for a single LLM call (including retries)
@@ -70,9 +70,7 @@ class LLMCallRecord(BaseModel):
     output_tokens: int = 0
     total_tokens: int = 0
     latency_ms: float = 0.0
-    token_source: str = (
-        "ollama_live"  # "ollama_live" | "proxy_estimate" | "unavailable"
-    )
+    token_source: str = "unavailable"
     status: str = "SUCCESS"  # "SUCCESS" | "RETRY" | "FAILED"
     retry_reason: Optional[str] = None
     retryable: bool = True
@@ -117,18 +115,16 @@ class PolicyOutputContract(BaseModel):
     tool_calls: List[Dict[str, Any]] = Field(default_factory=list)
     iterations: int = 1
 
-    # Token accounting — real Ollama metadata preferred
+    # Token accounting from the configured provider when available
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
-    token_source: str = (
-        "unavailable"  # "ollama_live" | "proxy_estimate" | "unavailable"
-    )
+    token_source: str = "unavailable"
     llm_calls: List[Dict[str, Any]] = Field(default_factory=list)  # per-call breakdown
 
     # Cost — labeled as estimated, never as actual billing
     cost_usd: float = 0.0  # estimated token cost
-    provider_cost: str = "N/A"  # always "N/A" for local Ollama
+    provider_cost: str = "N/A"  # Actual provider billing is not reported here.
 
     # Latency
     latency_ms: float = 0.0  # total request latency via time.perf_counter()

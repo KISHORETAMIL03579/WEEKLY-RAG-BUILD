@@ -146,10 +146,32 @@ if __name__ == "__main__":
 
     ensure_frontend_built()
 
-    uvicorn.run(
-        "backend.main:app" if debug else app,
-        host=host,
-        port=port,
-        reload=debug,
-        log_level="debug" if debug else "info",
-    )
+    if debug:
+        uvicorn.run(
+            "backend.main:app",
+            host=host,
+            port=port,
+            reload=True,
+            reload_dirs=[str(BACKEND_DIR)],
+            reload_excludes=[
+                "*.sqlite3*",
+                "*.json",
+                "*.jsonl",
+                "*.log",
+                "uploads/*",
+                "vectorstore/*",
+                "traces/*",
+                "week6/*",
+                "eval/*",
+                "dist/*",
+            ],
+            log_level="debug",
+        )
+    else:
+        uvicorn.run(
+            app,
+            host=host,
+            port=port,
+            reload=False,
+            log_level="info",
+        )

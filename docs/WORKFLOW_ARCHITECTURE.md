@@ -23,13 +23,13 @@ FastAPI (backend/main.py)
 
 ### Data ownership
 
-| Data | Owner | Purpose |
-| --- | --- | --- |
-| Uploaded source files | `uploads/` | Preserve files used for extraction and document viewing |
-| Embeddings and indexed chunks | Qdrant / configured vector backend | Semantic and hybrid retrieval |
-| Session manifests and document metadata | Session storage plus SQLite metadata | Track session documents, hashes, chunk counts, revisions, and worker activity |
-| Shared run state | `APP_STATE_DB` SQLite file | Coordinate chat/upload cancellation and persist evaluation/policy-run snapshots across Gunicorn workers |
-| Request traces | `TRACE_LOG_PATH` JSONL file | Diagnostics and replayable request telemetry |
+| Data                                    | Owner                                | Purpose                                                                                                 |
+| --------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| Uploaded source files                   | `uploads/`                           | Preserve files used for extraction and document viewing                                                 |
+| Embeddings and indexed chunks           | Qdrant / configured vector backend   | Semantic and hybrid retrieval                                                                           |
+| Session manifests and document metadata | Session storage plus SQLite metadata | Track session documents, hashes, chunk counts, revisions, and worker activity                           |
+| Shared run state                        | `APP_STATE_DB` SQLite file           | Coordinate chat/upload cancellation and persist evaluation/policy-run snapshots across Gunicorn workers |
+| Request traces                          | `TRACE_LOG_PATH` JSONL file          | Diagnostics and replayable request telemetry                                                            |
 
 SQLite is the Python-standard-library database engine, not a Docker service or
 image. It creates a local database file automatically and applies schema
@@ -139,11 +139,30 @@ not a claim that every production-readiness gate above has passed.
   does not overwrite a concurrent cancellation state.
 - Shared run snapshot and active-run lookups use deferred/read transactions;
   write locks remain reserved for mutations and abandoned-run recovery.
+- Week 6 Judge health checks now probe the host and port from the configured
+  `OLLAMA_URL`, including Compose service DNS, rather than assuming
+  `127.0.0.1:11434`. Its stop sequence no longer terminates generation on the
+  JSON closing brace. An LLM-engine run with any non-LLM judge result now ends
+  in `ERROR` with case/judge provenance instead of reporting a successful run.
+- Live Week 6 verification completed two benchmark cases through
+  `POST /api/evaluation/runs` using `llama3.1:8b`, Top-K 5, and temperature
+  0.3. Run `eval_91322d6190f7` completed all 2/2 cases in 30.2 seconds; all
+  four V1/V2 results reported `source=LLM`, `llm_completed=true`, and complete
+  JSON verdicts. The selected model, K, and temperature were persisted.
+- After an API process was stopped mid-run, its persisted run was recovered as
+  `ERROR` on the next read, with the worker-exited explanation, rather than
+  remaining indefinitely active.
 - After this correction, the Agent regression suite passed (13 tests), Policy
   execution tests passed (13 tests), and the non-route benchmark tests passed
   (4 tests). The isolated Week 6 retrieval-K and Temperature tests passed
   (2 tests). Chat cancellation/heartbeat tests passed (2 tests), and shared
   state tests passed (2 tests).
+- The focused judge URL, JSON-stop, and failed-LLM-run regressions completed
+  cleanly when pytest was launched as a waited child process: `3 passed`,
+  process exit code 0. Direct native invocation through the interactive
+  PowerShell tool had previously reported exit code 1 despite the same passing
+  output; that was a command-harness status artifact, not a pytest teardown
+  failure.
 - Frontend TypeScript checking and the production Vite build passed after the
   latest changes.
 
@@ -151,8 +170,6 @@ not a claim that every production-readiness gate above has passed.
 
 - Re-run the new regression tests and execute a live Week 7 Agent request after
   integer normalization. A live Agent success has not yet been established.
-- Complete a live Week 6 Judge run and confirm selected model/config provenance
-  in persisted results.
 - Exercise Retrieval Benchmark with indexed test documents; the currently
   observed environment has no indexed chunks, so its successful retrieval
   path remains unverified.

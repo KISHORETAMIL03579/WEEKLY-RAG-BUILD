@@ -285,8 +285,7 @@ def upload(
 
     for item in pending:
         if upload_id and (
-            upload_id in cancelled_map
-            or upload_cancellation_requested(upload_id)
+            upload_id in cancelled_map or upload_cancellation_requested(upload_id)
         ):
             was_cancelled = True
             item["filepath"].unlink(missing_ok=True)

@@ -20,7 +20,10 @@ def _load_env():
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
                 key, value = line.split("=", 1)
-                os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if not os.environ.get(key, "").strip():
+                    os.environ[key] = value
 
 
 _load_env()
@@ -53,7 +56,7 @@ ALLOWED_EXTENSIONS = {"pdf", "txt", "md"}
 # Backend selectors
 EMBED_BACKEND = os.environ.get("EMBED_BACKEND", "ollama").lower()
 VISION_BACKEND = os.environ.get("VISION_BACKEND", "ollama").lower()
-CHAT_BACKEND = os.environ.get("CHAT_BACKEND", "ollama").lower()
+CHAT_BACKEND = os.environ.get("CHAT_BACKEND", "groq").lower()
 VECTOR_BACKEND = os.environ.get("VECTOR_BACKEND", "memory")
 
 # Local Ollama configuration
@@ -72,7 +75,27 @@ GEMINI_VISION_MODEL = os.environ.get("GEMINI_VISION_MODEL", "gemini-3.7-flash")
 XAI_API_KEY = os.environ.get("XAI_API_KEY", "")
 XAI_URL = os.environ.get("XAI_URL", "https://api.x.ai/v1")
 XAI_MODEL = os.environ.get("XAI_MODEL", "grok-4.3")
-LLM_MODEL = OLLAMA_CHAT_MODEL if CHAT_BACKEND == "ollama" else XAI_MODEL
+
+# Groq uses the OpenAI-compatible Chat Completions API.
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GROQ_URL = os.environ.get("GROQ_URL", "https://api.groq.com/openai/v1")
+GROQ_MODEL = os.environ.get(
+    "LLM_MODEL", os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
+)
+GROQ_AGENT_MODELS = {
+    model.strip()
+    for model in os.environ.get("GROQ_AGENT_MODELS", GROQ_MODEL).split(",")
+    if model.strip()
+}
+
+LLM_MODEL = os.environ.get(
+    "LLM_MODEL",
+    {
+        "ollama": OLLAMA_CHAT_MODEL,
+        "xai": XAI_MODEL,
+        "groq": GROQ_MODEL,
+    }.get(CHAT_BACKEND, XAI_MODEL),
+)
 
 # Qdrant configuration
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")

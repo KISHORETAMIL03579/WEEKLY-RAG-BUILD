@@ -4,6 +4,10 @@ import { api } from "../../services/api";
 import { EvaluationProgressCard } from "./EvaluationProgressCard";
 import { EvaluationDatasetManager } from "./EvaluationDatasetManager";
 import { QADataSetCase, DatasetMode } from "../../types/dataset";
+import { ModelSelect } from "../common/ModelSelect";
+import { useAvailableModels } from "../../hooks/useAvailableModels";
+import { ParameterSelect } from "../common/ParameterSelect";
+import { FileImportButton } from "../common/FileImportButton";
 
 interface JudgeEvaluatorViewProps {
   onNotify?: (msg: string, type?: "info" | "success" | "error") => void;
@@ -43,11 +47,15 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
   const [topK, setTopK] = useState<number>(5);
   const [temperature, setTemperature] = useState<number>(0.3);
-  const [model, setModel] = useState<string>("");
-  const [defaultModel, setDefaultModel] = useState<string>("");
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
-  const [isLoadingModels, setIsLoadingModels] = useState<boolean>(true);
-  const [modelsError, setModelsError] = useState<string | null>(null);
+  const {
+    model,
+    setModel,
+    defaultModel,
+    models: availableModels,
+    provider,
+    isLoadingModels,
+    modelsError,
+  } = useAvailableModels("chat");
 
   // Common Dataset State
   const [datasetMode, setDatasetMode] = useState<DatasetMode>("builtin");
@@ -88,40 +96,6 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
       alert(msg);
     }
   };
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .getAvailableOllamaModels(controller.signal)
-      .then(({ default_model, models }) => {
-        if (controller.signal.aborted) return;
-        setAvailableModels(models);
-        setDefaultModel(default_model);
-        if (models.length === 0) {
-          setModel("");
-          setModelsError("No chat-capable Ollama models are installed.");
-          return;
-        }
-        setModelsError(null);
-        setModel((current) =>
-          models.includes(current)
-            ? current
-            : models.includes(default_model)
-              ? default_model
-              : models[0],
-        );
-      })
-      .catch((error: Error) => {
-        if (!controller.signal.aborted) {
-          setModel("");
-          setModelsError(`Could not load installed Ollama models: ${error.message}`);
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setIsLoadingModels(false);
-      });
-    return () => controller.abort();
-  }, []);
 
   const updateLoadingState = (isLoading: boolean) => {
     setLoading(isLoading);
@@ -531,7 +505,10 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
   const handleRunEvaluation = async () => {
     const selectedModel = model || defaultModel;
     if (!availableModels.includes(selectedModel)) {
-      notify("Select an installed Ollama model before running the LLM judge.", "error");
+      notify(
+        "Select an installed Ollama model before running the LLM judge.",
+        "error",
+      );
       return;
     }
     if (datasetMode === "custom") {
@@ -1267,127 +1244,105 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
             </span>
           </div>
 
-          {/* Top-K Selector */}
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <label
-              style={{ fontSize: "0.8rem", fontWeight: 600, color: "#e2e8f0" }}
-            >
-              Top K:
-            </label>
-            <select
-              value={topK}
-              onChange={(e) => setTopK(parseInt(e.target.value, 10))}
-              disabled={loading}
-              style={{
-                background: "rgba(30, 41, 59, 0.9)",
-                border: "1px solid var(--border)",
-                color: "#fff",
-                borderRadius: "6px",
-                padding: "5px 10px",
-                fontSize: "0.82rem",
-                fontWeight: 600,
-                cursor: loading ? "not-allowed" : "pointer",
-              }}
-            >
-              {[4, 5, 6, 8, 10, 12].map((kVal) => (
-                <option key={kVal} value={kVal}>
-                  {kVal}{" "}
-                  {kVal === 8
-                    ? "(Week 6 Baseline)"
-                    : kVal === 5
-                      ? "(App Default)"
-                      : ""}
-                </option>
-              ))}
-            </select>
-          </div>
+          <ParameterSelect
+            label="Top K:"
+            value={topK}
+            onChange={(value) => setTopK(Number.parseInt(value, 10))}
+            options={[4, 5, 6, 8, 10, 12].map((kVal) => ({
+              value: kVal,
+              label: `${kVal}${kVal === 8 ? " (Week 6 Baseline)" : kVal === 5 ? " (App Default)" : ""}`,
+            }))}
+            disabled={loading}
+            containerStyle={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}
+            labelStyle={{
+              fontSize: "0.8rem",
+              fontWeight: 600,
+              color: "#e2e8f0",
+            }}
+            selectStyle={{
+              background: "rgba(30, 41, 59, 0.9)",
+              border: "1px solid var(--border)",
+              color: "#fff",
+              borderRadius: "6px",
+              padding: "5px 10px",
+              fontSize: "0.82rem",
+              fontWeight: 600,
+              cursor: loading ? "not-allowed" : "pointer",
+            }}
+          />
 
-          {/* Temperature Selector */}
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <label
-              style={{ fontSize: "0.8rem", fontWeight: 600, color: "#e2e8f0" }}
-            >
-              Temperature:
-            </label>
-            <select
-              value={temperature}
-              onChange={(e) => setTemperature(parseFloat(e.target.value))}
-              disabled={loading}
-              style={{
-                background: "rgba(30, 41, 59, 0.9)",
-                border: "1px solid var(--border)",
-                color: "#fff",
-                borderRadius: "6px",
-                padding: "5px 10px",
-                fontSize: "0.82rem",
-                fontWeight: 600,
-                cursor: loading ? "not-allowed" : "pointer",
-              }}
-            >
-              {[0.0, 0.1, 0.2, 0.3, 0.5, 0.7].map((tVal) => (
-                <option key={tVal} value={tVal}>
-                  {tVal.toFixed(1)}{" "}
-                  {tVal === 0.0
-                    ? "(Week 6 Baseline)"
-                    : tVal === 0.3
-                      ? "(App Default)"
-                      : ""}
-                </option>
-              ))}
-            </select>
-          </div>
+          <ParameterSelect
+            label="Temperature:"
+            value={temperature}
+            onChange={(value) => setTemperature(Number.parseFloat(value))}
+            options={[0.0, 0.1, 0.2, 0.3, 0.5, 0.7].map((tVal) => ({
+              value: tVal,
+              label: `${tVal.toFixed(1)}${tVal === 0.0 ? " (Week 6 Baseline)" : tVal === 0.3 ? " (App Default)" : ""}`,
+            }))}
+            disabled={loading}
+            containerStyle={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}
+            labelStyle={{
+              fontSize: "0.8rem",
+              fontWeight: 600,
+              color: "#e2e8f0",
+            }}
+            selectStyle={{
+              background: "rgba(30, 41, 59, 0.9)",
+              border: "1px solid var(--border)",
+              color: "#fff",
+              borderRadius: "6px",
+              padding: "5px 10px",
+              fontSize: "0.82rem",
+              fontWeight: 600,
+              cursor: loading ? "not-allowed" : "pointer",
+            }}
+          />
 
-          <div style={{ minWidth: 160 }}>
-            <label
-              style={{
-                fontSize: "0.8rem",
-                fontWeight: 600,
-                color: "#e2e8f0",
-                display: "block",
-                marginBottom: 4,
-              }}
-            >
-              Model:
-            </label>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              disabled={loading || isLoadingModels || availableModels.length === 0}
-              style={{
-                background: "rgba(30, 41, 59, 0.9)",
-                border: "1px solid var(--border)",
-                color: "#fff",
-                borderRadius: "6px",
-                padding: "5px 10px",
-                fontSize: "0.82rem",
-                fontWeight: 600,
-                cursor:
-                  loading || isLoadingModels || availableModels.length === 0
-                    ? "not-allowed"
-                    : "pointer",
-              }}
-            >
-              {availableModels.length === 0 ? (
-                <option value="">
-                  {isLoadingModels ? "Loading models…" : "No models available"}
-                </option>
-              ) : (
-                availableModels.map((availableModel) => (
-                  <option key={availableModel} value={availableModel}>
-                    {availableModel}
-                  </option>
-                ))
-              )}
-            </select>
-            {modelsError && (
-              <div
-                role="alert"
-                style={{ color: "#f87171", fontSize: "0.72rem", marginTop: 4 }}
-              >
-                {modelsError}
-              </div>
-            )}
-          </div>
+          <ModelSelect
+            label={`Model (${provider || "configured provider"}):`}
+            value={model}
+            onChange={setModel}
+            models={availableModels}
+            isLoading={isLoadingModels}
+            disabled={loading}
+            loadingLabel="Loading models…"
+            emptyLabel="No models available"
+            error={modelsError}
+            containerStyle={{ minWidth: 160 }}
+            labelStyle={{
+              fontSize: "0.8rem",
+              fontWeight: 600,
+              color: "#e2e8f0",
+              display: "block",
+              marginBottom: 4,
+            }}
+            selectStyle={{
+              background: "rgba(30, 41, 59, 0.9)",
+              border: "1px solid var(--border)",
+              color: "#fff",
+              borderRadius: "6px",
+              padding: "5px 10px",
+              fontSize: "0.82rem",
+              fontWeight: 600,
+              cursor:
+                loading || isLoadingModels || availableModels.length === 0
+                  ? "not-allowed"
+                  : "pointer",
+            }}
+            errorStyle={{
+              color: "#f87171",
+              fontSize: "0.72rem",
+              marginTop: 4,
+            }}
+          />
 
           {/* Active Config Tag */}
           <div
@@ -1408,7 +1363,10 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
               Active: Top-K = <strong>{topK}</strong> | Temp ={" "}
               <strong>{temperature.toFixed(1)}</strong> | Model:{" "}
               <strong>
-                {model || (isLoadingModels ? "Loading…" : defaultModel || "Unavailable")}
+                {model ||
+                  (isLoadingModels
+                    ? "Loading…"
+                    : defaultModel || "Unavailable")}
               </strong>
             </span>
           </div>
@@ -2187,7 +2145,9 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
                       >
                         ➕ Add Q&amp;A
                       </button>
-                      <label
+                      <FileImportButton
+                        accept=".txt,.md,.json"
+                        onFileSelect={handleFileUpload}
                         className="btn-secondary"
                         style={{
                           fontSize: "0.8rem",
@@ -2200,13 +2160,7 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
                         }}
                       >
                         📥 Import File (.txt / .json)
-                        <input
-                          type="file"
-                          accept=".txt,.md,.json"
-                          style={{ display: "none" }}
-                          onChange={handleFileUpload}
-                        />
-                      </label>
+                      </FileImportButton>
                       <button
                         type="button"
                         onClick={handleLoadBenchmark}

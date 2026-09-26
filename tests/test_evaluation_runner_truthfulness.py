@@ -8,8 +8,9 @@ from unittest.mock import patch
 from backend.errors import ConflictError
 from backend.routes.evaluation import cancel_evaluation_run
 from backend.services.search import build_index
-from backend.services.evaluation_runner import EvaluationRunManager
+from backend.services.evaluation_runner import EvaluationRunManager, EvaluationRunState
 from backend.storage import shared_state
+from backend.storage.shared_state import create_background_run
 
 
 class TestEvaluationRunnerTruthfulness(unittest.TestCase):
@@ -76,6 +77,91 @@ class TestEvaluationRunnerTruthfulness(unittest.TestCase):
         self.assertEqual(result["retrieved_scores"], [])
         self.assertEqual(result["final_context_chunk_ids"], [])
         self.assertEqual(result["retrieved_context"], "")
+
+    def test_llm_judge_failure_marks_run_error_not_completed(self):
+        manager = EvaluationRunManager()
+        case = {
+            "case_id": "case_llm_failure",
+            "question": "What is the leave policy?",
+            "answer": "The policy answer.",
+            "human_label": 1,
+        }
+        corpus = [{"id": "test-chunk", "text": "Policy leave information"}]
+        judge_results = iter(
+            [
+                (1, '{"verdict": 1}', "LLM", 12.0, True),
+                (
+                    1,
+                    "ERROR_FALLBACK (Ollama unavailable)",
+                    "ERROR",
+                    12.0,
+                    False,
+                ),
+            ]
+        )
+        with (
+            patch(
+                "backend.services.evaluation_runner.get_handbook_corpus",
+                return_value=(corpus, build_index(corpus)),
+            ),
+            patch(
+                "backend.services.evaluation_runner.search_chunks",
+                return_value=corpus,
+            ),
+            patch(
+                "backend.services.evaluation_runner.run_all_assertions",
+                return_value={"policy_section_reference_resolves": True},
+            ),
+            patch(
+                "backend.services.evaluation_runner.evaluate_case_with_judge_detailed",
+                side_effect=lambda *args, **kwargs: next(judge_results),
+            ),
+        ):
+            run = EvaluationRunState(
+                run_id="eval_llm_failure",
+                cases=[case],
+                eval_engine="llm",
+            )
+            create_background_run("evaluation", run.run_id, run.status, run.to_dict())
+            manager._run_worker(
+                run,
+                "Judge V1",
+                "Judge V2",
+                {"case_llm_failure": 1},
+            )
+            manager._finalize_run(run)
+
+        self.assertEqual(run.status, "ERROR")
+        self.assertIn("1 result(s)", run.error_message)
+        self.assertIn("Judge V2", run.error_message)
+        self.assertEqual(run.cases[0]["judge_v1_source"], "LLM")
+        self.assertEqual(run.cases[0]["judge_v2_source"], "ERROR")
+
+    def test_get_run_returns_latest_persisted_progress_snapshot(self):
+        manager = EvaluationRunManager()
+        run = EvaluationRunState(
+            run_id="eval_fresh_progress",
+            cases=[
+                {"case_id": "case_1", "question": "First"},
+                {"case_id": "case_2", "question": "Second"},
+            ],
+        )
+        manager._runs[run.run_id] = run
+        latest_snapshot = run.to_dict()
+        latest_snapshot["completed_cases"] = 1
+        latest_snapshot["cases"][0]["status"] = "COMPLETED"
+        latest_snapshot["results"] = latest_snapshot["cases"]
+
+        with patch(
+            "backend.services.evaluation_runner.get_background_run",
+            return_value=latest_snapshot,
+        ):
+            current_run = manager.get_run(run.run_id)
+
+        self.assertIsNotNone(current_run)
+        self.assertIsNot(current_run, run)
+        self.assertEqual(current_run.completed_cases, 1)
+        self.assertEqual(current_run.cases[0]["status"], "COMPLETED")
 
     def test_cancellation_keeps_run_active_until_blocked_case_finishes(self):
         manager = EvaluationRunManager()

@@ -4,6 +4,8 @@ from io import BytesIO
 from urllib.error import HTTPError
 from unittest.mock import patch
 
+import pytest
+
 from backend.schemas.policy import PolicyOutputContract
 from backend.services import policy_agent, policy_tools
 from backend.services.policy_agent import run_agent_case
@@ -11,13 +13,25 @@ from backend.services.policy_router import MODE_AGENT, MODE_WORKFLOW
 from backend.services.policy_workflow import run_workflow_case
 
 
+@pytest.fixture(autouse=True)
+def use_local_provider_dispatch(monkeypatch):
+    monkeypatch.setattr(policy_agent, "CHAT_BACKEND", "ollama")
+
+
 def _tool_response(name, arguments, prompt_tokens=10, completion_tokens=5):
+    return _tool_calls_response([(name, arguments)], prompt_tokens, completion_tokens)
+
+
+def _tool_calls_response(calls, prompt_tokens=10, completion_tokens=5):
     return (
         {
             "message": {
                 "role": "assistant",
                 "content": "",
-                "tool_calls": [{"function": {"name": name, "arguments": arguments}}],
+                "tool_calls": [
+                    {"function": {"name": name, "arguments": arguments}}
+                    for name, arguments in calls
+                ],
             }
         },
         prompt_tokens,
@@ -133,10 +147,61 @@ def test_agent_normalizes_numeric_string_from_model_to_integer_tool_argument():
     search.assert_called_once_with("annual leave entitlement", top_k=5)
 
 
+def test_agent_executes_validated_native_tool_call_batch_and_observes_all_results():
+    decisions = [
+        _tool_calls_response(
+            [
+                ("get_employee_record", {"employee_id": "EMP001"}),
+                (
+                    "search_handbook",
+                    {"query": "annual leave entitlement", "top_k": "5"},
+                ),
+                (
+                    "get_jurisdiction_rules",
+                    {"jurisdiction": "Kenya", "policy_category": "leave"},
+                ),
+            ]
+        ),
+        _final_response(),
+    ]
+    observed_messages = []
+
+    def model_step(messages, **kwargs):
+        observed_messages.append(messages)
+        return decisions.pop(0)
+
+    with patch.object(policy_agent, "_call_ollama_step", side_effect=model_step):
+        result = run_agent_case(
+            "native-tool-batch",
+            "EMP001",
+            "Compare the handbook leave policy with Kenya's statutory rules.",
+            top_k=5,
+            use_live_llm=True,
+        )
+
+    assert result.termination_reason == "SUCCESS"
+    assert result.iterations == 2
+    assert [call["tool_name"] for call in result.tool_calls] == [
+        "get_employee_record",
+        "search_handbook",
+        "get_jurisdiction_rules",
+    ]
+    assert type(result.tool_calls[1]["arguments"]["top_k"]) is int
+    assert (
+        len([message for message in observed_messages[1] if message["role"] == "tool"])
+        == 3
+    )
+    assistant_message = next(
+        message for message in observed_messages[1] if message["role"] == "assistant"
+    )
+    assert len(assistant_message["tool_calls"]) == 3
+    assert assistant_message["tool_calls"][1]["function"]["arguments"]["top_k"] == 5
+
+
 def test_agent_still_rejects_invalid_integer_string_tool_arguments():
     for top_k in ("0", "21", "5.0", "-1", " 5"):
         try:
-            policy_agent._tool_call_from_message(
+            policy_agent._tool_calls_from_message(
                 {
                     "tool_calls": [
                         {
@@ -155,6 +220,52 @@ def test_agent_still_rejects_invalid_integer_string_tool_arguments():
             pass
         else:
             raise AssertionError(f"Invalid top_k accepted: {top_k!r}")
+
+
+def test_agent_rejects_duplicate_or_oversized_tool_batches():
+    duplicate_calls = _tool_calls_response(
+        [
+            ("get_employee_record", {"employee_id": "EMP001"}),
+            ("get_employee_record", {"employee_id": "EMP001"}),
+        ]
+    )[0]["message"]
+    too_many_calls = _tool_calls_response(
+        [
+            ("get_employee_record", {"employee_id": "EMP001"}),
+            ("search_handbook", {"query": "leave"}),
+            (
+                "get_jurisdiction_rules",
+                {"jurisdiction": "Kenya", "policy_category": "leave"},
+            ),
+            ("get_employee_record", {"employee_id": "EMP001"}),
+        ]
+    )[0]["message"]
+
+    for message in (duplicate_calls, too_many_calls):
+        try:
+            policy_agent._tool_calls_from_message(message)
+        except policy_agent.PolicyAgentError:
+            pass
+        else:
+            raise AssertionError("Invalid tool-call batch was accepted")
+
+
+def test_agent_requires_policy_evidence_before_returning_a_final_answer():
+    decisions = [
+        _tool_response("get_employee_record", {"employee_id": "EMP001"}),
+        _final_response(),
+    ]
+    with patch.object(policy_agent, "_call_ollama_step", side_effect=decisions):
+        result = run_agent_case(
+            "missing-policy-evidence",
+            "EMP001",
+            "What annual leave applies?",
+            use_live_llm=True,
+        )
+
+    assert result.termination_reason == "MODEL_ERROR"
+    assert "policy evidence" in result.explanation.lower()
+    assert result.passed is False
 
 
 def test_unknown_employee_never_gets_plausible_agent_or_workflow_answer():
@@ -208,7 +319,7 @@ def test_provider_error_does_not_fall_back_to_success_or_fake_tokens():
         "provider-error", "EMP001", "annual leave", use_live_llm=False
     )
 
-    assert result.termination_reason == "OLLAMA_UNAVAILABLE"
+    assert result.termination_reason == "PROVIDER_UNAVAILABLE"
     assert result.passed is False
     assert result.entitlement_value == ""
     assert result.total_tokens == 0
@@ -357,6 +468,61 @@ def test_wall_clock_timeout_is_hard_budget_and_never_retried():
     assert failed.termination_reason == "BUDGET_WALL_CLOCK"
     assert [entry["status"] for entry in history] == ["FAILED"]
     assert history[0]["retryable"] is False
+
+
+def test_groq_agent_sends_openai_tool_call_ids_and_uses_actual_usage():
+    messages = [
+        {"role": "system", "content": "Use tools."},
+        {"role": "user", "content": "Find the leave policy."},
+        {
+            "role": "assistant",
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "function": {
+                        "name": "search_handbook",
+                        "arguments": {"query": "leave", "top_k": 5},
+                    },
+                }
+            ],
+        },
+        {
+            "role": "tool",
+            "name": "search_handbook",
+            "content": '{"matches": []}',
+        },
+    ]
+    response = {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": (
+                        '{"entitlement_value":"24 days",'
+                        '"rule_cited":"Section 5.2.1",'
+                        '"explanation":"Handbook evidence."}'
+                    ),
+                }
+            }
+        ],
+        "usage": {"prompt_tokens": 87, "completion_tokens": 23},
+    }
+
+    with patch.object(
+        policy_agent, "groq_chat_completion", return_value=response
+    ) as groq_call:
+        result = policy_agent._call_groq_step(
+            messages, model="openai/gpt-oss-20b"
+        )
+
+    request_messages = groq_call.call_args.args[0]
+    assert request_messages[2]["tool_calls"][0]["type"] == "function"
+    assert request_messages[2]["tool_calls"][0]["function"]["arguments"] == (
+        '{"query":"leave","top_k":5}'
+    )
+    assert request_messages[3]["tool_call_id"] == "call_1"
+    assert result[1:3] == (87, 23)
+    assert result[0]["provider_attempts"] == 1
 
 
 def test_returned_failure_is_not_recorded_as_success():

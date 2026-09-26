@@ -4,11 +4,18 @@ import json
 import socket
 import urllib.request
 import urllib.error
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Optional
+
+import httpx
 
 from backend.services.chat_runs import ChatRunCancelled, get_current_chat_run
 from backend.config import (
     CHAT_BACKEND,
+    GROQ_API_KEY,
+    GROQ_MODEL,
+    GROQ_URL,
     OLLAMA_CHAT_MODEL,
     OLLAMA_URL,
     XAI_API_KEY,
@@ -16,6 +23,29 @@ from backend.config import (
     XAI_URL,
     logger,
 )
+
+
+class ChatProviderError(RuntimeError):
+    def __init__(self, provider: str, message: str, status_code: Optional[int] = None):
+        super().__init__(message)
+        self.provider = provider
+        self.status_code = status_code
+
+
+def _retry_after_seconds(response: httpx.Response) -> Optional[float]:
+    value = response.headers.get("Retry-After")
+    if not value:
+        return None
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        try:
+            retry_at = parsedate_to_datetime(value)
+            if retry_at.tzinfo is None:
+                retry_at = retry_at.replace(tzinfo=timezone.utc)
+            return max(0.0, (retry_at - datetime.now(timezone.utc)).total_seconds())
+        except (TypeError, ValueError, OverflowError):
+            return None
 
 
 class RAGTracer:
@@ -70,7 +100,9 @@ def _xai_chat_call(
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=90 if not cancellation else 1) as resp:
+            with urllib.request.urlopen(
+                req, timeout=90 if not cancellation else 1
+            ) as resp:
                 if cancellation:
                     cancellation.attach_response(resp)
                     try:
@@ -170,6 +202,193 @@ def _xai_chat_call(
             raise
 
 
+def groq_chat_completion(
+    messages: list[dict],
+    model: Optional[str] = None,
+    temperature: float = 0,
+    max_tokens: Optional[int] = None,
+    timeout: float = 90,
+    tools: Optional[list[dict]] = None,
+    max_retries: int = 3,
+) -> dict:
+    """Call Groq's OpenAI-compatible API for text generation or tool calling."""
+    if not GROQ_API_KEY:
+        raise ChatProviderError("Groq", "GROQ_API_KEY is not configured")
+
+    target_model = model or GROQ_MODEL
+    payload: dict = {
+        "model": target_model,
+        "messages": messages,
+        "temperature": temperature,
+    }
+    if target_model.startswith("openai/gpt-oss-"):
+        payload["reasoning_effort"] = "low"
+        payload["include_reasoning"] = False
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
+    if tools:
+        payload["tools"] = tools
+
+    cancellation = get_current_chat_run() if not tools else None
+    if cancellation:
+        payload["stream"] = True
+
+    endpoint = f"{GROQ_URL.rstrip('/')}/chat/completions"
+    deadline = time.monotonic() + max(0.001, timeout)
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    for attempt in range(1, max(1, max_retries) + 1):
+        started = time.perf_counter()
+        request_timeout = deadline - time.monotonic()
+        if request_timeout <= 0:
+            raise TimeoutError("Groq request exceeded its execution time budget")
+        timeout_config = httpx.Timeout(
+            request_timeout,
+            connect=min(10.0, request_timeout),
+        )
+        try:
+            with httpx.Client(timeout=timeout_config) as client:
+                if cancellation:
+                    with client.stream(
+                        "POST", endpoint, headers=headers, json=payload
+                    ) as response:
+                        response.raise_for_status()
+                        cancellation.attach_response(response)
+                        try:
+                            pieces: list[str] = []
+                            for line in response.iter_lines():
+                                cancellation.check()
+                                if not line.startswith("data:"):
+                                    continue
+                                event_text = line[5:].strip()
+                                if event_text == "[DONE]":
+                                    break
+                                try:
+                                    event = json.loads(event_text)
+                                except json.JSONDecodeError:
+                                    continue
+                                choices = event.get("choices", [])
+                                if choices:
+                                    content = (
+                                        choices[0].get("delta", {}).get("content")
+                                    )
+                                    if isinstance(content, str):
+                                        pieces.append(content)
+                            data = {
+                                "choices": [
+                                    {"message": {"content": "".join(pieces)}}
+                                ]
+                            }
+                        finally:
+                            cancellation.detach_response(response)
+                else:
+                    response = client.post(
+                        endpoint, headers=headers, json=payload
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+
+            if not isinstance(data, dict) or not isinstance(
+                data.get("choices"), list
+            ):
+                raise ChatProviderError("Groq", "Groq returned an invalid response")
+            data["_provider_attempts"] = attempt
+            logger.info(
+                "Groq chat call succeeded in %.2fs (model: %s)",
+                time.perf_counter() - started,
+                target_model,
+            )
+            return data
+        except ChatRunCancelled:
+            raise
+        except httpx.HTTPStatusError as exc:
+            if cancellation and cancellation.cancelled.is_set():
+                raise ChatRunCancelled() from None
+            status_code = exc.response.status_code
+            if status_code in {429, 500, 502, 503, 504} and attempt < max_retries:
+                retry_after = _retry_after_seconds(exc.response)
+                delay = retry_after if retry_after is not None else min(
+                    2 ** (attempt - 1), 8
+                )
+                remaining = deadline - time.monotonic()
+                if delay >= remaining:
+                    raise ChatProviderError(
+                        "Groq",
+                        "Groq retry delay exceeds the remaining request budget",
+                        status_code,
+                    ) from exc
+                logger.warning(
+                    "Groq request returned HTTP %d; retrying in %.2fs (%d/%d)",
+                    status_code,
+                    delay,
+                    attempt,
+                    max_retries,
+                )
+                if cancellation:
+                    if delay > 0 and cancellation.cancelled.wait(delay):
+                        raise ChatRunCancelled() from None
+                    if delay == 0:
+                        cancellation.check()
+                elif delay > 0:
+                    time.sleep(delay)
+                continue
+            logger.error("Groq request failed with HTTP %d", status_code)
+            raise ChatProviderError(
+                "Groq", f"Groq request failed with HTTP {status_code}", status_code
+            ) from exc
+        except httpx.TimeoutException as exc:
+            if cancellation and cancellation.cancelled.is_set():
+                raise ChatRunCancelled() from None
+            if attempt < max_retries:
+                delay = min(2 ** (attempt - 1), 8)
+                logger.warning(
+                    "Groq request timed out; retrying in %ds (%d/%d)",
+                    delay,
+                    attempt,
+                    max_retries,
+                )
+                if cancellation:
+                    if cancellation.cancelled.wait(delay):
+                        raise ChatRunCancelled() from None
+                else:
+                    time.sleep(delay)
+                continue
+            raise TimeoutError("Groq request timed out") from exc
+        except httpx.RequestError as exc:
+            if cancellation and cancellation.cancelled.is_set():
+                raise ChatRunCancelled() from None
+            if attempt < max_retries:
+                delay = min(2 ** (attempt - 1), 8)
+                logger.warning(
+                    "Groq network request failed (%s); retrying in %ds (%d/%d)",
+                    type(exc).__name__,
+                    delay,
+                    attempt,
+                    max_retries,
+                )
+                if cancellation:
+                    if cancellation.cancelled.wait(delay):
+                        raise ChatRunCancelled() from None
+                else:
+                    time.sleep(delay)
+                continue
+            raise ChatProviderError("Groq", "Groq network request failed") from exc
+        except Exception as exc:
+            if cancellation and cancellation.cancelled.is_set():
+                raise ChatRunCancelled() from None
+            if isinstance(exc, ChatProviderError):
+                raise
+            logger.error(
+                "Groq request failed (error_type=%s)", type(exc).__name__
+            )
+            raise ChatProviderError("Groq", "Groq request failed") from exc
+
+    raise ChatProviderError("Groq", "Groq request failed after retries")
+
+
 def _ollama_chat_call(
     system: str,
     user: str,
@@ -201,7 +420,9 @@ def _ollama_chat_call(
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=180 if not cancellation else 1) as resp:
+        with urllib.request.urlopen(
+            req, timeout=180 if not cancellation else 1
+        ) as resp:
             if cancellation:
                 cancellation.attach_response(resp)
                 try:
@@ -258,21 +479,43 @@ def chat_call(
     max_tokens: Optional[int] = None,
     model: Optional[str] = None,
 ) -> str:
-    """Single entry point for chat generation — routes to xAI or Ollama per CHAT_BACKEND."""
+    """Single entry point for chat generation across the configured provider."""
     if CHAT_BACKEND == "ollama":
         return _ollama_chat_call(
             system, user, temperature=temperature, max_tokens=max_tokens, model=model
         )
-    return _xai_chat_call(
-        system, user, temperature=temperature, max_tokens=max_tokens, model=model
-    )
+    if CHAT_BACKEND == "groq":
+        response = groq_chat_completion(
+            [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        result_text = (
+            response["choices"][0].get("message", {}).get("content") or ""
+        ).strip()
+        if not result_text:
+            raise ChatProviderError("Groq", "Groq returned empty content")
+        return result_text
+    if CHAT_BACKEND == "xai":
+        return _xai_chat_call(
+            system, user, temperature=temperature, max_tokens=max_tokens, model=model
+        )
+    raise RuntimeError(f"Unsupported CHAT_BACKEND: {CHAT_BACKEND}")
 
 
 def chat_configured() -> bool:
     """True if the selected chat backend is usable."""
     if CHAT_BACKEND == "ollama":
         return True
-    return bool(XAI_API_KEY)
+    if CHAT_BACKEND == "xai":
+        return bool(XAI_API_KEY)
+    if CHAT_BACKEND == "groq":
+        return bool(GROQ_API_KEY)
+    return False
 
 
 _chat_call = chat_call
