@@ -290,13 +290,26 @@ export const PolicySearchView: React.FC<PolicySearchViewProps> = ({ onNotify }) 
       setResult(res);
       onNotify(`Search complete. Mode: ${res.execution_mode || res.implementation}. Run: ${res.run_id}`, 'success');
     } catch (e: any) {
-      if (e.name !== 'AbortError') {
+
+      if (e.name === 'AbortError') {
+        onNotify('Policy search generation cancelled.', 'info');
+      } else {
         onNotify('Search failed: ' + e.message, 'error');
       }
     } finally {
       setIsSearching(false);
     }
   };
+
+  const handleStop = () => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    setIsSearching(false);
+    onNotify('Policy search generation stopped.', 'info');
+  };
+
 
   const handleLoadExample = (ex: typeof EXAMPLE_QUESTIONS[0]) => {
     setEmpId(ex.empId);
@@ -408,20 +421,54 @@ export const PolicySearchView: React.FC<PolicySearchViewProps> = ({ onNotify }) 
             >
               {isPreviewingRoute ? '…' : '🔀 Preview Route'}
             </button>
-            <button
-              type="button"
-              disabled={isSearching}
-              onClick={handleSearch}
-              style={{
-                padding: '7px 18px', borderRadius: 6, fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer',
-                border: 'none', background: isSearching ? '#1e3a5f' : 'var(--accent)', color: '#fff',
-                opacity: isSearching ? 0.7 : 1,
-              }}
-            >
-              {isSearching ? '⏳ Searching…' : '🔍 Search'}
-            </button>
+            {isSearching ? (
+              <button
+                type="button"
+                onClick={handleStop}
+                style={{
+                  padding: '7px 18px',
+                  borderRadius: 6,
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  border: '1px solid #ef4444',
+                  background: 'rgba(239, 68, 68, 0.22)',
+                  color: '#ef4444',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+                title="Stop ongoing policy search"
+                aria-label="Stop policy search"
+              >
+                <span>■</span>
+                <span>Stop</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={!empId.trim() || !question.trim()}
+                onClick={handleSearch}
+                style={{
+                  padding: '7px 18px',
+                  borderRadius: 6,
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  cursor: !empId.trim() || !question.trim() ? 'not-allowed' : 'pointer',
+                  border: 'none',
+                  background: 'var(--accent)',
+                  color: '#fff',
+                  opacity: !empId.trim() || !question.trim() ? 0.5 : 1,
+                }}
+                title="Search HR policy"
+                aria-label="Search HR policy"
+              >
+                🔍 Search
+              </button>
+            )}
           </div>
         </div>
+
 
         {/* Route Preview */}
         {previewRouting && (
