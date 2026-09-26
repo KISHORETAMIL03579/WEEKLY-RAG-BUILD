@@ -1,9 +1,9 @@
-# ── Environment variables & secrets ─────────────────────────
+# Environment variables & secrets
 .env
 .env.*
 !.env.example
 
-# ── Python bytecode & caches ────────────────────────────────
+# Python bytecode & caches
 __pycache__/
 *.py[cod]
 *$py.class
@@ -25,21 +25,21 @@ wheels/
 .installed.cfg
 *.egg
 
-# ── Virtual environments ────────────────────────────────────
+# Virtual environments
 .venv/
 .venv*/
 venv/
 env/
 ENV/
 
-# ── Testing & code quality ──────────────────────────────────
+# Testing & code quality
 .pytest_cache/
 .coverage
 htmlcov/
 .mypy_cache/
 .ruff_cache/
 
-# ── Application runtime storage & logs ──────────────────────
+# Application runtime storage & logs
 uploads/
 vectorstore/
 *.log
@@ -47,7 +47,7 @@ server.log
 server.err.log
 scratch/
 
-# ── Node & Frontend build artifacts ─────────────────────────
+# Node & Frontend build artifacts
 node_modules/
 frontend/node_modules/
 frontend/dist/
@@ -61,7 +61,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# ── Operating System & Office Temporary Lock Files ───────────
+# Operating System & Office Temporary Lock Files
 .DS_Store
 Thumbs.db
 desktop.ini
@@ -72,7 +72,7 @@ ehthumbs.db
 ~$*.pptx
 *.tmp
 
-# ── IDE & Editor swap/temporary files ───────────────────────
+# IDE & Editor swap/temporary files
 .idea/
 *.swp
 *.swo
