@@ -290,9 +290,8 @@ export const PolicySearchView: React.FC<PolicySearchViewProps> = ({ onNotify }) 
       setResult(res);
       onNotify(`Search complete. Mode: ${res.execution_mode || res.implementation}. Run: ${res.run_id}`, 'success');
     } catch (e: any) {
-
       if (e.name === 'AbortError') {
-        onNotify('Policy search generation cancelled.', 'info');
+        onNotify('Policy search cancelled by user.', 'info');
       } else {
         onNotify('Search failed: ' + e.message, 'error');
       }
@@ -307,7 +306,7 @@ export const PolicySearchView: React.FC<PolicySearchViewProps> = ({ onNotify }) 
       abortRef.current = null;
     }
     setIsSearching(false);
-    onNotify('Policy search generation stopped.', 'info');
+    onNotify('Policy search cancelled by user.', 'info');
   };
 
 
