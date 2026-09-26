@@ -999,7 +999,8 @@ html, body {
 
 /* ── Accessibility & Focus Visible ─────────────────────────── */
 button:focus-visible,
-input:focus-visible,
+input:not(.query-input-field):focus-visible,
+textarea:not(.query-input-field):focus-visible,
 select:focus-visible,
 a:focus-visible,
 .dropzone:focus-visible,
@@ -1009,10 +1010,25 @@ a:focus-visible,
   outline-offset: 2px;
 }
 
+.query-input-field,
+.query-input-field:focus,
+.query-input-field:focus-visible,
+.input-bar-pill textarea,
+.input-bar-pill input {
+  outline: none !important;
+  outline-width: 0 !important;
+  outline-style: none !important;
+  box-shadow: none !important;
+  border: none !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+
 .input-bar-pill:focus-within {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent-glow), var(--shadow-lg);
 }
+
 
 .stepper-input:focus-visible {
   outline: 1px solid var(--accent);
