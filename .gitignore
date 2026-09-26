@@ -71,4 +71,5 @@ pnpm-debug.log*
 *~
 .DS_Store
 Thumbs.db
-frontend/dist/
+~$*
+frontend/dist/
