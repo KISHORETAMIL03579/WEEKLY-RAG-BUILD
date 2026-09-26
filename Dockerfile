@@ -17,11 +17,12 @@ RUN useradd --create-home --uid 10001 appuser
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application modules and assets
+# Copy application modules, datasets, benchmarks, prompts, and assets
 COPY app.py ./
 COPY backend/ backend/
 COPY prompts/ prompts/
 COPY week6/ week6/
+COPY benchmarks/ benchmarks/
 COPY scripts/ scripts/
 COPY tests/ tests/
 
