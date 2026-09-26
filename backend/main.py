@@ -12,8 +12,10 @@ from backend.config import (
     APP_DEBUG,
     CHAT_BACKEND,
     EMBED_BACKEND,
+    BACKEND_DIR,
     FRONTEND_DIST,
     HOST,
+    LLM_MODEL,
     MAX_CONTENT_LENGTH,
     PORT,
     SECRET_KEY,
@@ -125,26 +127,8 @@ def create_app() -> FastAPI:
 app = create_app()
 
 
-if __name__ == "__main__":
+def _run_server(debug: bool, host: str, port: int) -> None:
     import uvicorn
-
-    port = int(os.environ.get("PORT", PORT))
-    host = os.environ.get("HOST", HOST)
-    debug = os.environ.get("APP_DEBUG", "").lower() in ("1", "true", "yes") or APP_DEBUG
-
-    embed_label = "Ollama (local)" if EMBED_BACKEND == "ollama" else "Gemini"
-    chat_label = "Ollama (local)" if CHAT_BACKEND == "ollama" else "xAI Grok"
-    mode_label = (
-        f"embeddings ({embed_label}) + LLM ({chat_label})"
-        if (embeddings_configured() and chat_configured())
-        else "TF-IDF (offline fallback)"
-    )
-
-    print(f"\n🚀 Ask My Docs is running → http://localhost:{port}")
-    print(f"   Mode: {mode_label}")
-    print(f"   API docs: http://localhost:{port}/docs\n")
-
-    ensure_frontend_built()
 
     if debug:
         uvicorn.run(
@@ -175,3 +159,29 @@ if __name__ == "__main__":
             reload=False,
             log_level="info",
         )
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", PORT))
+    host = os.environ.get("HOST", HOST)
+    debug = os.environ.get("APP_DEBUG", "").lower() in ("1", "true", "yes") or APP_DEBUG
+
+    embed_label = "Ollama (local)" if EMBED_BACKEND == "ollama" else "Gemini"
+    chat_label = {
+        "ollama": "Ollama (local)",
+        "groq": f"Groq ({LLM_MODEL})",
+        "xai": "xAI Grok",
+    }.get(CHAT_BACKEND, CHAT_BACKEND)
+    mode_label = (
+        f"embeddings ({embed_label}) + LLM ({chat_label})"
+        if (embeddings_configured() and chat_configured())
+        else "TF-IDF (offline fallback)"
+    )
+
+    print(f"\n🚀 Ask My Docs is running → http://localhost:{port}")
+    print(f"   Mode: {mode_label}")
+    print(f"   API docs: http://localhost:{port}/docs\n")
+
+    ensure_frontend_built()
+
+    _run_server(debug, host, port)

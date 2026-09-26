@@ -2062,8 +2062,11 @@ a:focus-visible,
 .evaluation-page-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
   min-width: 0;
+}
+
+.evaluation-page-tabs {
+  gap: 8px;
 }
 
 .evaluation-page-actions {

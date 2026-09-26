@@ -25,10 +25,3 @@ export function getTempLabel(t: number): string {
 export function escapeRegex(str: string): string {
   return (str || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-
-export function navigateTo(url: string): void {
-  if (typeof window !== "undefined") {
-    window.history.pushState({}, "", url);
-    window.dispatchEvent(new PopStateEvent("popstate"));
-  }
-}
