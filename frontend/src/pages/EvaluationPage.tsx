@@ -4,6 +4,7 @@ import { FormView } from '../components/Evaluation/FormView';
 import { ResultsView } from '../components/Evaluation/ResultsView';
 import { JudgeEvaluatorView } from '../components/Evaluation/JudgeEvaluatorView';
 import { PolicyAssistantView } from '../components/Evaluation/PolicyAssistantView';
+import { PolicySearchView } from '../components/Evaluation/PolicySearchView';
 import { ToastContainer, ToastItem } from '../components/common/ToastContainer';
 import { PRESETS } from '../components/Evaluation/KeyTakeaways';
 import { CANONICAL_RETRIEVAL_QUESTIONS } from '../data/canonicalRetrievalQuestions';
@@ -27,6 +28,7 @@ export const EvaluationPage: React.FC = () => {
 
   const [activeTab, setActiveTabState] = useState<'policy' | 'judge' | 'retrieval'>(getInitialTab);
   const [isJudgeEvaluating, setIsJudgeEvaluating] = useState<boolean>(false);
+  const [policySubTab, setPolicySubTab] = useState<'search' | 'benchmark'>('search');
 
   const setActiveTab = (tab: 'policy' | 'judge' | 'retrieval') => {
     setActiveTabState(tab);
@@ -395,9 +397,44 @@ export const EvaluationPage: React.FC = () => {
 
       {/* MAIN CONTENT — ONLY ACTIVE TAB IS MOUNTED */}
       <main style={{ maxWidth: '1200px', width: '100%', margin: '0 auto', padding: '28px 20px 50px 20px', flex: 1 }}>
-        {/* TAB 1: POLICY ASSISTANT */}
+        {/* TAB 1: POLICY ASSISTANT — Week 7 */}
         {activeTab === 'policy' && (
-          <PolicyAssistantView onNotify={showToast} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Sub-tabs: Search vs Benchmark */}
+            <div style={{ display: 'flex', gap: 6, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
+              <button
+                type="button"
+                onClick={() => setPolicySubTab('search')}
+                style={{
+                  padding: '6px 14px', borderRadius: '6px', fontSize: '0.83rem', fontWeight: 600,
+                  cursor: 'pointer', border: policySubTab === 'search' ? '1px solid #22c55e' : '1px solid var(--border)',
+                  background: policySubTab === 'search' ? 'rgba(34,197,94,0.12)' : 'transparent',
+                  color: policySubTab === 'search' ? '#22c55e' : 'var(--text-muted)',
+                }}
+              >
+                🔍 Policy Search <span style={{ fontSize: '0.7rem', opacity: 0.8 }}>(Auto-Routed)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPolicySubTab('benchmark')}
+                style={{
+                  padding: '6px 14px', borderRadius: '6px', fontSize: '0.83rem', fontWeight: 600,
+                  cursor: 'pointer', border: policySubTab === 'benchmark' ? '1px solid #f59e0b' : '1px solid var(--border)',
+                  background: policySubTab === 'benchmark' ? 'rgba(245,158,11,0.12)' : 'transparent',
+                  color: policySubTab === 'benchmark' ? '#f59e0b' : 'var(--text-muted)',
+                }}
+              >
+                📊 Agent vs Workflow Benchmark
+              </button>
+            </div>
+
+            {/* Sub-tab content */}
+            {policySubTab === 'search' ? (
+              <PolicySearchView onNotify={showToast} />
+            ) : (
+              <PolicyAssistantView onNotify={showToast} />
+            )}
+          </div>
         )}
 
         {/* TAB 2: JUDGE EVALUATOR */}

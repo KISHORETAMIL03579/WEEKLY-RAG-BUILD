@@ -31,24 +31,83 @@ export interface ToolCallRecord {
   latency_ms: number;
 }
 
+export interface RetryRecord {
+  attempt: number;
+  status: 'SUCCESS' | 'RETRY' | 'FAILED' | 'BUDGET_EXHAUSTED';
+  retry_reason?: string | null;
+  retryable: boolean;
+  latency_ms: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  estimated_cost: number;
+  is_retry: boolean;
+}
+
+export interface RoutingDecision {
+  mode: 'workflow' | 'agent';
+  complexity: 'SIMPLE' | 'MODERATE' | 'COMPLEX';
+  reason: string;
+  requires_agent: boolean;
+  routing_ms: number;
+  routing_id: string;
+  matched_signals: string[];
+}
+
 export interface PolicyOutputContract {
+  // Identification
   case_id: string;
   employee_id: string;
   question: string;
+  run_id?: string;
+  evaluation_type?: string;
+
+  // Result
   entitlement_value: string;
   rule_cited: string;
   explanation: string;
   passed: boolean;
   implementation: 'agent' | 'workflow';
+
+  // Routing metadata
+  execution_mode?: 'workflow' | 'agent';
+  routing_reason?: string;
+  complexity?: 'SIMPLE' | 'MODERATE' | 'COMPLEX';
+  routing_ms?: number;
+  mode_history?: string[];
+  routing?: RoutingDecision;
+
+  // Execution telemetry
   tool_calls: ToolCallRecord[];
   iterations: number;
+
+  // Token accounting
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
+  token_source?: string;  // "ollama_live" | "proxy_estimate" | "unavailable"
+  llm_calls?: any[];
+
+  // Cost
   cost_usd: number;
+  provider_cost?: string;  // "N/A" for local Ollama
+
+  // Latency
   latency_ms: number;
+  router_latency_ms?: number;
+  execution_latency_ms?: number;
+
+  // Retry metadata
+  attempt?: number;
+  max_retries?: number;
+  total_attempts?: number;
+  retry_history?: RetryRecord[];
+
+  // Termination
   termination_reason: string;
-  top_k?: number;
+
+  // Config provenance
+  top_k?: number | null;
   temperature?: number | null;
   model?: string | null;
 }

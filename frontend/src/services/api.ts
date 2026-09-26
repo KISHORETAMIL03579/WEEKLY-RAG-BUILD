@@ -316,4 +316,32 @@ export const api = {
     const res = await fetch(`${API_BASE}/api/policy/benchmark/latest`, { signal });
     return handleResponse<any>(res);
   },
+
+  // Auto-routed HR Policy Search (Week 7 production search)
+  async runPolicySearch(payload: {
+    employee_id: string;
+    question: string;
+    case_id?: string;
+    top_k?: number;
+    temperature?: number;
+    model?: string;
+    max_retries?: number;
+    force_mode?: string;
+  }, signal?: AbortSignal): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/policy/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal,
+    });
+    return handleResponse<any>(res);
+  },
+
+  // Preview routing decision without executing
+  async classifyPolicyQuestion(question: string, employeeId?: string, signal?: AbortSignal): Promise<any> {
+    const params = new URLSearchParams({ question });
+    if (employeeId) params.append('employee_id', employeeId);
+    const res = await fetch(`${API_BASE}/api/policy/router/classify?${params.toString()}`, { signal });
+    return handleResponse<any>(res);
+  },
 };

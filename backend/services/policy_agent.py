@@ -377,6 +377,10 @@ Final Answer: {{"entitlement_value": "<exact entitlement>", "rule_cited": "<sect
     elif termination_reason == "SUCCESS" and not deterministic_pass_criteria:
         passed = True
 
+    token_src = "ollama_live" if (ollama_ready and prompt_tokens > 0) else (
+        "proxy_estimate" if prompt_tokens > 0 else "unavailable"
+    )
+
     return PolicyOutputContract(
         case_id=case_id,
         employee_id=employee_id,
@@ -386,12 +390,15 @@ Final Answer: {{"entitlement_value": "<exact entitlement>", "rule_cited": "<sect
         explanation=explanation,
         passed=passed,
         implementation="agent",
+        execution_mode="agent",
         tool_calls=tool_calls_record,
         iterations=iteration,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
+        token_source=token_src,
         cost_usd=round(cost_usd, 6),
+        provider_cost="N/A",
         latency_ms=round(max(0.01, elapsed_ms), 3),
         termination_reason=termination_reason,
         top_k=top_k,
