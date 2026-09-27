@@ -284,7 +284,7 @@ def run_judge_suite(
     Supports both dynamic deterministic rule evaluation and live LLM model inference with ZERO hardcoding.
     """
     if use_live_llm is None:
-        use_live_llm = os.environ.get("WEEK6_LIVE_LLM", "0").lower() in (
+        use_live_llm = os.environ.get("WEEK6_LIVE_LLM", "1").lower() in (
             "1",
             "true",
             "yes",
@@ -292,6 +292,13 @@ def run_judge_suite(
 
     prompt_template = pathlib.Path(prompt_path).read_text(encoding="utf-8")
     is_v1 = "v1" in prompt_path.lower()
+    expected_case_ids = {case["case_id"] for case in cases}
+    if set(labels) != expected_case_ids:
+        raise ValueError(
+            "Human labels must contain exactly one label per evaluation case"
+        )
+    if any(type(label) is not int or label not in {0, 1} for label in labels.values()):
+        raise ValueError("Human labels must be binary integers (0 or 1)")
 
     results = []
     agreements = 0
@@ -303,14 +310,25 @@ def run_judge_suite(
 
     for case in cases:
         cid = case["case_id"]
-        expected_human = labels.get(cid, 1)
+        expected_human = labels[cid]
         if expected_human == 1:
             human_correct += 1
         else:
             human_incorrect += 1
 
         if use_live_llm:
-            judge_verdict, raw_resp = evaluate_case_with_judge(case, prompt_template)
+            (
+                judge_verdict,
+                raw_resp,
+                judge_source,
+                judge_latency_ms,
+                llm_completed,
+            ) = evaluate_case_with_judge_detailed(case, prompt_template)
+            if not llm_completed:
+                raise RuntimeError(
+                    f"Live judge evaluation stopped for {cid}: {judge_source} "
+                    f"({raw_resp})"
+                )
         else:
             raw_resp = (
                 "OFFLINE_DETERMINISTIC: Evaluated via deterministic policy assertions."
@@ -318,6 +336,8 @@ def run_judge_suite(
             judge_verdict = evaluate_case_deterministically(
                 case, is_strict_section=is_v1
             )
+            judge_source = "OFFLINE_DETERMINISTIC"
+            judge_latency_ms = 0.0
 
         if judge_verdict == 1:
             judge_correct += 1
@@ -339,6 +359,8 @@ def run_judge_suite(
                     "judge_label": judge_verdict,
                     "raw_response": raw_resp,
                     "taxonomy_mode": case.get("taxonomy_mode"),
+                    "judge_source": judge_source,
+                    "judge_latency_ms": judge_latency_ms,
                 }
             )
 
@@ -352,6 +374,8 @@ def run_judge_suite(
                 "agreed": is_agreed,
                 "raw_response": raw_resp,
                 "taxonomy_mode": case.get("taxonomy_mode"),
+                "judge_source": judge_source,
+                "judge_latency_ms": judge_latency_ms,
             }
         )
 

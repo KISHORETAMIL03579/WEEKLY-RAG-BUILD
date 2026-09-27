@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -182,19 +183,33 @@ class TestRetryLogic:
     """Tests for retry behavior in the policy routes."""
 
     def test_workflow_succeeds_without_retry(self):
-        """A normal workflow call succeeds on first attempt without retry."""
+        """A fixed workflow uses one configured model call without retry."""
         from backend.services.policy_workflow import run_workflow_case
         from backend.schemas.policy import PolicyOutputContract
 
-        result = run_workflow_case(
-            case_id="test_retry_wf",
-            employee_id="EMP001",
-            question="What is EMP001's annual leave entitlement?",
-            deterministic_pass_criteria=["24"],
-        )
+        with patch(
+            "backend.services.policy_workflow.call_policy_model_once",
+            return_value=(
+                {
+                    "message": {
+                        "content": '{"entitlement_value":"24 days","rule_cited":"Section 5.2.1","explanation":"Grounded."}'
+                    }
+                },
+                10,
+                5,
+                2.0,
+            ),
+        ):
+            result = run_workflow_case(
+                case_id="test_retry_wf",
+                employee_id="EMP001",
+                question="What is EMP001's annual leave entitlement?",
+                deterministic_pass_criteria=["24"],
+            )
         assert isinstance(result, PolicyOutputContract)
         assert result.termination_reason == "SUCCESS"
         assert result.total_tokens > 0
+        assert result.iterations == 1
 
     # Test 8: Non-retryable errors are identified correctly
     def test_non_retryable_budget_reason(self):
@@ -331,6 +346,55 @@ class TestBenchmarkCaseIsolation:
 class TestPolicyAPIRoutes:
     """Integration tests for the /api/policy/search and /router/classify endpoints."""
 
+    @pytest.fixture(autouse=True)
+    def stub_model_calls(self, monkeypatch):
+        from backend.schemas.policy import PolicyOutputContract
+
+        def fake_agent_case(
+            case_id,
+            employee_id,
+            question,
+            top_k=5,
+            temperature=0.3,
+            model="test-model",
+            **kwargs,
+        ):
+            return PolicyOutputContract(
+                case_id=case_id,
+                employee_id=employee_id,
+                question=question,
+                entitlement_value="24 working days",
+                rule_cited="Section 5.2.1",
+                explanation="Scripted route-test answer.",
+                passed=True,
+                implementation="agent",
+                execution_mode="agent",
+                prompt_tokens=20,
+                completion_tokens=10,
+                total_tokens=30,
+                token_source="test_live",
+                cost_usd=0.000015,
+                latency_ms=1.0,
+                top_k=top_k,
+                temperature=temperature,
+                model=model,
+            )
+
+        monkeypatch.setattr("backend.routes.policy.run_agent_case", fake_agent_case)
+        monkeypatch.setattr(
+            "backend.services.policy_workflow.call_policy_model_once",
+            lambda *args, **kwargs: (
+                {
+                    "message": {
+                        "content": '{"entitlement_value":"24 working days","rule_cited":"Section 5.2.1","explanation":"Scripted route-test answer."}'
+                    }
+                },
+                20,
+                10,
+                1.0,
+            ),
+        )
+
     def test_classify_endpoint_simple_question(self):
         """GET /api/policy/router/classify returns routing for a simple question."""
         from fastapi.testclient import TestClient
@@ -385,13 +449,27 @@ class TestPolicyAPIRoutes:
         from backend.main import app
 
         client = TestClient(app)
-        response = client.post(
-            "/api/policy/search",
-            json={
-                "employee_id": "EMP001",
-                "question": "What is the standard annual leave entitlement for EMP001?",
-            },
-        )
+        with patch(
+            "backend.services.policy_workflow.call_policy_model_once",
+            return_value=(
+                {
+                    "message": {
+                        "content": '{"entitlement_value":"24 days","rule_cited":"Section 5.2.1","explanation":"Grounded."}'
+                    }
+                },
+                20,
+                10,
+                2.0,
+            ),
+        ):
+            response = client.post(
+                "/api/policy/search",
+                json={
+                    "employee_id": "EMP001",
+                    "question": "What is the standard annual leave entitlement for EMP001?",
+                    "force_mode": "workflow",
+                },
+            )
         assert response.status_code == 200
         data = response.json()
         # Test 18: UI receives tokens
@@ -399,7 +477,7 @@ class TestPolicyAPIRoutes:
         assert "prompt_tokens" in data
         assert "completion_tokens" in data
         assert "token_source" in data
-        assert data["token_source"] in ("ollama_live", "proxy_estimate", "unavailable")
+        assert data["token_source"].endswith("_live")
 
     def test_search_endpoint_returns_latency(self):
         """POST /api/policy/search returns real latency_ms > 0."""

@@ -63,12 +63,88 @@ def validate_cases(cases: List[Dict[str, Any]]):
     return regression_count
 
 
+def validate_regression_traces(
+    cases: List[Dict[str, Any]],
+    trace_path: pathlib.Path = pathlib.Path("traces/traces.jsonl"),
+) -> None:
+    """Require marked regression examples to match their source trace verbatim."""
+    trace_path = pathlib.Path(trace_path)
+    if not trace_path.is_absolute():
+        trace_path = pathlib.Path(__file__).resolve().parents[1] / trace_path
+
+    traces = {}
+    with trace_path.open(encoding="utf-8") as trace_file:
+        for line_number, line in enumerate(trace_file, 1):
+            if not line.strip():
+                continue
+            try:
+                trace = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"Invalid JSON in trace file at line {line_number}"
+                ) from exc
+            trace_id = trace.get("trace_id")
+            if trace_id:
+                traces[trace_id] = trace
+
+    for case in cases:
+        if not case.get("regression"):
+            continue
+        trace_id = case.get("trace_id")
+        source_ref = case.get("source_trace_ref", "")
+        ref_path, separator, ref_trace_id = source_ref.rpartition("#")
+        if not separator or ref_trace_id != trace_id:
+            raise ValueError(
+                f"Regression case {case['case_id']} has an invalid source_trace_ref"
+            )
+        referenced_path = (pathlib.Path(__file__).resolve().parents[1] / ref_path).resolve()
+        if referenced_path != trace_path.resolve():
+            raise ValueError(
+                f"Regression case {case['case_id']} source_trace_ref points to another file"
+            )
+        trace = traces.get(case.get("trace_id"))
+        if trace is None:
+            raise ValueError(
+                f"Regression case {case['case_id']} does not resolve to a real trace"
+            )
+        if trace.get("question") != case.get("question") or trace.get(
+            "answer"
+        ) != case.get("answer"):
+            raise ValueError(
+                f"Regression case {case['case_id']} question/answer differs from its source trace"
+            )
+        retrieved_chunks = trace.get("retrieved")
+        if not isinstance(retrieved_chunks, list) or not retrieved_chunks:
+            raise ValueError(
+                f"Regression case {case['case_id']} has no retrieved source chunks"
+            )
+        context = case.get("retrieved_context", "")
+        if not all(
+            isinstance(chunk, dict)
+            and isinstance(chunk.get("text"), str)
+            and chunk["text"]
+            and chunk["text"] in context
+            for chunk in retrieved_chunks
+        ):
+            raise ValueError(
+                f"Regression case {case['case_id']} retrieved context differs from its source trace"
+            )
+
+
 def compute_mode_statistics(
     cases: List[Dict[str, Any]],
     labels: Dict[str, int],
     v1_results: List[Dict],
     v2_results: List[Dict],
 ) -> Dict[str, Any]:
+    expected_case_ids = {case["case_id"] for case in cases}
+    if set(labels) != expected_case_ids:
+        raise ValueError(
+            "Human labels must contain exactly one label per evaluation case"
+        )
+    if any(type(label) is not int or label not in {0, 1} for label in labels.values()):
+        raise ValueError("Human labels must be binary integers (0 or 1)")
+
     v1_map = {r["case_id"]: r["judge_label"] for r in v1_results}
     v2_map = {r["case_id"]: r["judge_label"] for r in v2_results}
 
@@ -80,7 +156,7 @@ def compute_mode_statistics(
     for c in cases:
         cid = c["case_id"]
         mode = c["taxonomy_mode"]
-        h_label = labels.get(cid, 1)
+        h_label = labels[cid]
         v1_label = v1_map.get(cid, 0)
         v2_label = v2_map.get(cid, 0)
 
@@ -116,6 +192,7 @@ def run_week6_evaluation():
     cases = load_eval_cases("week6/eval_cases_25.json")
     labels = load_labels("week6/labels_25.json")
     regression_count = validate_cases(cases)
+    validate_regression_traces(cases)
 
     print(
         f"\n[1/5] Loaded {len(cases)} Evaluation Cases ({regression_count} Regression Cases)"

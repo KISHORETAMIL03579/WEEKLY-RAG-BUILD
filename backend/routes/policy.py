@@ -198,6 +198,11 @@ def _run_with_retries(
                     employee_id=employee_id,
                     question=question,
                     top_k=top_k,
+                    temperature=temperature,
+                    model=model,
+                    max_tokens=remaining_tokens,
+                    max_cost=remaining_cost,
+                    max_wall_clock=remaining_wall_clock,
                 )
             else:
                 result = run_agent_case(
@@ -594,8 +599,8 @@ def policy_search(payload: PolicySearchRequest):
     result.latency_ms = round(total_ms, 3)
     result.mode_history = [mode]
     result.top_k = top_k
-    result.temperature = temperature if mode == MODE_AGENT else None
-    result.model = model if mode == MODE_AGENT else None
+    result.temperature = temperature
+    result.model = model
     result.max_retries = max_retries
     result.provider_cost = "N/A"
 
@@ -667,6 +672,10 @@ def execute_policy_workflow(payload: PolicyQueryRequest):
             employee_id=payload.employee_id,
             question=payload.question,
             top_k=top_k_val,
+            temperature=(
+                payload.temperature if payload.temperature is not None else 0.3
+            ),
+            model=payload.model or LLM_MODEL,
         )
         result.run_id = f"wf_{uuid.uuid4().hex[:8]}"
         result.evaluation_type = "WEEK7_POLICY_EXECUTION"

@@ -2,6 +2,15 @@
 
 This document analyzes the disagreements between the Blind Human Ground Truth Labels and the Judge V1 automated evaluations across the 25 HR policy evaluation cases.
 
+> **Historical evidence warning:** The listed 68% V1 result and associated
+> disagreement artifacts are from an archived run. Its output contains judge
+> timeouts that the old evaluator converted into binary fallback verdicts.
+> A separate later artifact records different V1/V2 scores (76%/52%), and the
+> certified JSON contains duplicate/conflicting keys. Do not merge these
+> results or cite any of them as a current clean live comparison. The current
+> live runner fails closed on provider errors; it has not yet produced a new
+> completed comparison.
+
 ---
 
 ## 1. Disagreement Summary
@@ -42,7 +51,7 @@ This document analyzes the disagreements between the Blind Human Ground Truth La
 
 ---
 
-### Disagreement 2: `case_18` (Trace ID: `57b6a4af-6eb3-4ee1-b0be-3c6c9a35e406`)
+### Disagreement 2: `case_18` (Trace ID: `57b6a4af-1aec-40a9-af10-05ed074f73fc`)
 
 - **Question**: "Who is eligible for overtime compensation and how is the rate determined?"
 - **Taxonomy Failure Mode**: `Unstated Policy Invariant Refusal`

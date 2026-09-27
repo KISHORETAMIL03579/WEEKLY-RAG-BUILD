@@ -1,5 +1,13 @@
 # Week 6 RAG Findings & Trace Failure Root-Cause Analysis
 
+> **Evidence status:** This is a historical trace analysis, not a verification
+> that each proposed retrieval, temperature, embedding, or generation fix is
+> deployed and improves current live behavior. Treat root-cause assignments as
+> hypotheses tied to the listed saved traces. The current Week 6 evaluator
+> verifies saved answer/context pairs; it does not rerun retrieval or establish
+> before/after production accuracy. Historical judge scores also include
+> provider errors and must not be treated as clean agreement measurements.
+
 This document records the comprehensive failure taxonomy, trace error analysis, and code issue resolutions discovered during the Week 6 evaluation experiment against the 2018 GESCI HR Policy Manual (`WEEKLY_RAG_TASK/HRPolicy.pdf`).
 
 Per the Week 6 protocol:

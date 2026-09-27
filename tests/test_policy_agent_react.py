@@ -8,7 +8,7 @@ import pytest
 
 from backend.schemas.policy import PolicyOutputContract
 from backend.services import policy_agent, policy_tools
-from backend.services.policy_agent import run_agent_case
+from backend.services.policy_agent import call_policy_model_once, run_agent_case
 from backend.services.policy_router import MODE_AGENT, MODE_WORKFLOW
 from backend.services.policy_workflow import run_workflow_case
 
@@ -56,6 +56,28 @@ def _final_response(prompt_tokens=10, completion_tokens=5):
         completion_tokens,
         2.0,
     )
+
+
+def test_fixed_workflow_model_call_uses_selected_provider_without_tool_schemas():
+    with patch.object(
+        policy_agent,
+        "_call_ollama_step",
+        return_value=(_final_response()[0], 12, 4, 2.0),
+    ) as call_step:
+        response, prompt_tokens, completion_tokens, _ = call_policy_model_once(
+            [{"role": "user", "content": "Answer from supplied evidence."}],
+            model="llama3.1:8b",
+            temperature=0.4,
+            timeout=10.0,
+            max_tokens=120,
+        )
+
+    assert response["message"]["content"].startswith("{")
+    assert (prompt_tokens, completion_tokens) == (12, 4)
+    assert call_step.call_args.kwargs["include_tools"] is False
+    assert call_step.call_args.kwargs["model"] == "llama3.1:8b"
+    assert call_step.call_args.kwargs["temperature"] == 0.4
+    assert call_step.call_args.kwargs["num_predict"] == 120
 
 
 def test_agent_uses_model_tool_choice_and_validated_tool_schemas():
@@ -220,6 +242,31 @@ def test_agent_still_rejects_invalid_integer_string_tool_arguments():
             pass
         else:
             raise AssertionError(f"Invalid top_k accepted: {top_k!r}")
+
+
+def test_agent_stops_cleanly_after_one_actual_iteration_budget_step():
+    with patch.object(
+        policy_agent,
+        "_call_ollama_step",
+        return_value=_tool_response(
+            "get_employee_record", {"employee_id": "EMP001"}, 10, 5
+        ),
+    ) as call_step:
+        result = run_agent_case(
+            "iteration-budget",
+            "EMP001",
+            "What annual leave applies?",
+            max_iterations=1,
+            use_live_llm=True,
+        )
+
+    assert result.termination_reason == "BUDGET_ITERATIONS"
+    assert result.iterations == 1
+    assert len(result.tool_calls) == 1
+    assert result.tool_calls[0]["tool_name"] == "get_employee_record"
+    assert result.total_tokens == 15
+    assert result.passed is False
+    call_step.assert_called_once()
 
 
 def test_agent_rejects_duplicate_or_oversized_tool_batches():
@@ -569,7 +616,10 @@ def test_workflow_mode_dispatch_is_not_changed():
     with patch(
         "backend.routes.policy.run_workflow_case",
         wraps=run_workflow_case,
-    ) as workflow:
+    ) as workflow, patch(
+        "backend.services.policy_workflow.call_policy_model_once",
+        return_value=_final_response(),
+    ):
         result, history = _run_with_retries(
             mode=MODE_WORKFLOW,
             employee_id="EMP001",

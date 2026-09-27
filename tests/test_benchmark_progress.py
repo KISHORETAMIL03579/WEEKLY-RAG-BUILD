@@ -22,6 +22,52 @@ class TestBenchmarkProgress(unittest.TestCase):
         with open("benchmarks/policy_execution/cases.json", "r", encoding="utf-8") as f:
             cls.cases = json.load(f)
 
+    def setUp(self):
+        self.workflow_patcher = patch(
+            "backend.services.policy_benchmark_runner.run_workflow_case",
+            side_effect=self.run_scripted_workflow_case,
+        )
+        self.workflow_patcher.start()
+        self.addCleanup(self.workflow_patcher.stop)
+        self.csv_patcher = patch(
+            "backend.services.policy_benchmark_runner.PolicyBenchmarkRunManager._save_results_csv"
+        )
+        self.csv_patcher.start()
+        self.addCleanup(self.csv_patcher.stop)
+
+    @staticmethod
+    def run_scripted_workflow_case(
+        case_id,
+        employee_id,
+        question,
+        deterministic_pass_criteria=None,
+        top_k=5,
+        temperature=0.3,
+        model="test-model",
+        **kwargs,
+    ):
+        answer = " ".join(deterministic_pass_criteria or ["Policy answer"])
+        return PolicyOutputContract(
+            case_id=case_id,
+            employee_id=employee_id,
+            question=question,
+            entitlement_value=answer,
+            rule_cited="Section 5.2.1",
+            explanation="Scripted workflow benchmark answer.",
+            passed=True,
+            implementation="workflow",
+            execution_mode="workflow",
+            prompt_tokens=20,
+            completion_tokens=10,
+            total_tokens=30,
+            token_source="test_live",
+            cost_usd=0.000015,
+            latency_ms=1.0,
+            top_k=top_k,
+            temperature=temperature,
+            model=model,
+        )
+
     def test_benchmark_state_initialization(self):
         state = PolicyBenchmarkRunState(
             run_id="test_run_01",

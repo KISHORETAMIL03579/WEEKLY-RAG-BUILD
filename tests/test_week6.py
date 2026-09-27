@@ -5,6 +5,7 @@ import sys
 import json
 import unittest
 import pathlib
+from unittest.mock import patch
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -22,11 +23,13 @@ from week6.assertions import (
     JUDGE_CRITERION_COUNT,
 )
 from week6.judge import parse_judge_output
+from week6.judge import run_judge_suite
 from week6.eval_week6 import (
     load_eval_cases,
     load_labels,
     validate_cases,
     compute_mode_statistics,
+    validate_regression_traces,
     WEEK5_TAXONOMY_MODES,
 )
 
@@ -102,6 +105,38 @@ class TestWeek6Evaluation(unittest.TestCase):
                     len(case["trace_id"]) >= 8,
                     f"Regression case {case['case_id']} missing valid trace_id",
                 )
+        validate_regression_traces(cases)
+
+    def test_regression_case_must_match_source_trace(self):
+        cases = load_eval_cases(self.cases_path)
+        reg_case = next(case for case in cases if case.get("regression"))
+        altered = [dict(case) for case in cases]
+        altered_case = next(
+            case for case in altered if case["case_id"] == reg_case["case_id"]
+        )
+        altered_case["answer"] += " altered"
+        with self.assertRaisesRegex(ValueError, "differs from its source trace"):
+            validate_regression_traces(altered)
+
+    def test_regression_source_reference_must_match_trace_id(self):
+        cases = load_eval_cases(self.cases_path)
+        reg_case = next(case for case in cases if case.get("regression"))
+        altered = [dict(case) for case in cases]
+        altered_case = next(
+            case for case in altered if case["case_id"] == reg_case["case_id"]
+        )
+        altered_case["source_trace_ref"] = "traces/traces.jsonl#wrong-id"
+        with self.assertRaisesRegex(ValueError, "invalid source_trace_ref"):
+            validate_regression_traces(altered)
+
+    def test_judge_v2_contains_two_concrete_v1_disagreement_examples(self):
+        prompt = (REPO_ROOT / "week6" / "judge_v2.txt").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("emergency salary advance", prompt)
+        self.assertIn("Who is eligible for overtime compensation", prompt)
+        self.assertIn("Verdict: 0", prompt)
+        self.assertIn("Verdict: 1", prompt)
 
     def test_blind_human_labels_integrity(self):
         """Verify that blind human labels exist for all cases and are binary 0 or 1."""
@@ -197,12 +232,12 @@ class TestWeek6Evaluation(unittest.TestCase):
         self.assertGreater(stats["llm_model"], 0)
 
     def test_deterministic_assertion_version_present(self):
-        """Verify handbook_version_present checks for edition / manual markers."""
+        """Require the actual handbook version rather than a generic document name."""
         self.assertTrue(
             handbook_version_present("According to the 2018 HR Policy Manual")
         )
-        self.assertTrue(handbook_version_present("Citing HRPolicy.pdf (page 11)"))
-        self.assertTrue(handbook_version_present("Per HRPPM rules"))
+        self.assertFalse(handbook_version_present("Citing HRPolicy.pdf (page 11)"))
+        self.assertFalse(handbook_version_present("Per HRPPM rules"))
         self.assertFalse(handbook_version_present("You get 28 days of vacation."))
 
     def test_deterministic_assertion_numeric_value(self):
@@ -240,6 +275,7 @@ class TestWeek6Evaluation(unittest.TestCase):
                 "Overtime is paid at 1.5x.", is_out_of_jurisdiction=True
             )
         )
+        self.assertFalse(out_of_jurisdiction_refusal("", is_out_of_jurisdiction=True))
         self.assertTrue(
             out_of_jurisdiction_refusal(
                 "Probation is 6 months.", is_out_of_jurisdiction=False
@@ -274,6 +310,31 @@ class TestWeek6Evaluation(unittest.TestCase):
             self.assertGreater(s["total"], 0)
             self.assertEqual(s["v1_pass"], s["total"])
             self.assertEqual(s["v2_pass"], 0)
+
+    def test_live_judge_provider_failure_does_not_count_as_a_verdict(self):
+        case = load_eval_cases(self.cases_path)[0]
+        labels = {case["case_id"]: 1}
+        with patch(
+            "week6.judge.evaluate_case_with_judge_detailed",
+            return_value=(0, "ERROR: provider unavailable", "ERROR", 0.1, False),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Live judge evaluation stopped"):
+                run_judge_suite(
+                    [case],
+                    str(REPO_ROOT / "week6" / "judge_v1.txt"),
+                    labels,
+                    use_live_llm=True,
+                )
+
+    def test_judge_suite_rejects_missing_human_labels(self):
+        case = load_eval_cases(self.cases_path)[0]
+        with self.assertRaisesRegex(ValueError, "exactly one label"):
+            run_judge_suite(
+                [case],
+                str(REPO_ROOT / "week6" / "judge_v1.txt"),
+                {},
+                use_live_llm=False,
+            )
 
 
 if __name__ == "__main__":

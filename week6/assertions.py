@@ -232,20 +232,10 @@ def policy_section_reference_resolves(
 
 
 def handbook_version_present(answer: str, expected_version: str = "2018") -> bool:
-    """Checks if the cited handbook edition (2018, HRPPM, HRPolicy.pdf, HR Policy, GESCI, Company Policy, or Handbook) is referenced."""
+    """Checks that the answer cites the expected handbook edition."""
     if not answer or not answer.strip():
         return False
-    ans_lower = answer.lower()
-    return (
-        expected_version in ans_lower
-        or "hrppm" in ans_lower
-        or "hrpolicy" in ans_lower
-        or "hr policy" in ans_lower
-        or "human resource" in ans_lower
-        or "company policy" in ans_lower
-        or "gesci" in ans_lower
-        or "handbook" in ans_lower
-    )
+    return expected_version.lower() in answer.lower()
 
 
 def numeric_policy_value_present(answer: str, expected_numeric: str = None) -> bool:
@@ -306,7 +296,7 @@ def out_of_jurisdiction_refusal(
         return True
 
     if not answer or not answer.strip():
-        return True
+        return False
 
     ans_lower = answer.lower()
     refusal_indicators = [

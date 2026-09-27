@@ -1,5 +1,11 @@
 # HR Policy Assistant: Policy Agent vs. Policy Workflow Benchmark Report
 
+> **Evidence status:** The historical scorecard below is not valid evidence.
+> The workflow originally emitted fixed token estimates, and recorded
+> `0.00 ms`/sub-millisecond latencies are incompatible with measured live-model
+> execution. The workflow has since been updated to use the selected model and
+> actual provider token metadata, but a new live race has not yet been recorded.
+
 ## 1. Problem Statement
 
 Organizations frequently deploy LLM-based autonomous agent loops (ReAct) for multi-step tasks without first evaluating whether a deterministic, hard-coded workflow would be faster, cheaper, more predictable, and equally accurate. This benchmark evaluates both architectures over an identical 10-question HR policy entitlement benchmark based on the verified organizational handbook (`HRPolicy.pdf`) and canonical employee records.
@@ -13,13 +19,15 @@ Organizations frequently deploy LLM-based autonomous agent loops (ReAct) for mul
   - `MAX_ITERATIONS = 5`
   - `MAX_TOKENS = 4000`
   - `MAX_COST = $0.0500`
-  - `MAX_WALL_CLOCK = 30.0s`
+  - `MAX_WALL_CLOCK = 45.0s` (current code limit)
 - **Token Tracking**: Re-sends cumulative conversation context on every iteration, reflecting true production token consumption.
 
 ### B. Fixed 3-Step Policy Workflow (`policy_workflow.py`)
 
 - **Pipeline Structure**: (1) Call `get_employee_record` -> (2) Branch on discovered employee attributes (tenure, status, separation reason) -> (3) Call `search_handbook` / `get_jurisdiction_rules` -> (4) Synthesize structured answer.
-- **Zero Agent Loops**: Single-pass execution without conversation loop overhead.
+- **Zero Agent Loops**: Fixed employee lookup and handbook search, optional
+  jurisdiction lookup, and one final model call with the selected model and
+  temperature used by the agent.
 
 ## 3. Jurisdiction Rules Tool: `get_jurisdiction_rules`
 
@@ -46,18 +54,21 @@ All 10 benchmark cases are verified against verbatim clauses from `HRPolicy.pdf`
 
 ## 5. Benchmark Results (The 8 Scorecard Metrics)
 
-| Metric              | Policy Agent (ReAct) | Policy Workflow (Fixed) | Delta / Advantage              |
-| :------------------ | :------------------- | :---------------------- | :----------------------------- |
-| **Pass Rate**       | **100.0%** (10/10)   | **100.0%** (10/10)      | **Tied (100% Correctness)**    |
-| **p50 Latency**     | **0.035 ms**         | **0.026 ms**            | **Workflow is faster**         |
-| **Total Tokens**    | **31800 tokens**     | **8250 tokens**         | **Workflow saves ~77% tokens** |
-| **Cost / Question** | **$0.001590**        | **$0.000412**           | **Workflow is ~4.4x cheaper**  |
+No valid same-model comparison is currently available. Discard the old
+numeric results: the latency and workflow token values are not measured
+execution evidence. Run a fresh ten-case comparison and report pass rate,
+p50 latency, total tokens, and cost per question from the persisted case-level
+results. Cost is a token-cost proxy, not provider billing.
 
 > _Note on Cost: Cost is evaluated using the benchmark token-cost proxy ($0.50 per 1,000,000 tokens) because local inference carries $0.00 monetary provider cost._
 
 ## 6. Budget Enforcement Evidence
 
-The agent loop strictly checks iterations, token counts, cost proxy, and elapsed wall-clock time on every lap. A verified budget-termination test was executed with `max_iterations=1`, proving clean halt without process hanging (`benchmarks/policy_execution/budget_termination.log`).
+The agent loop checks iterations, tokens, cost proxy, and elapsed wall-clock
+time. The historical budget log is inconsistent with its claimed iteration
+limit and should not be treated as execution evidence. Automated budget tests
+are the available verification until a captured live-provider termination is
+recorded.
 
 ## 7. Limitations
 
@@ -69,4 +80,6 @@ The agent loop strictly checks iterations, token counts, cost proxy, and elapsed
 **Decision Rule**: _Does the path vary dynamically by unpredictable input, or are the branches deterministic once the employee record is retrieved?_
 
 **Verdict**:
-The benchmark demonstrates that while policy entitlements vary significantly by employee attributes (probation vs. confirmed notice, tenure-based severance formulas, and statutory qualification minimums), **the execution path itself is fully deterministic once the employee record is fetched**. The fixed 3-step workflow achieves identical 100% accuracy while reducing token consumption by over 77% and delivering lower latency with zero risk of agent loop thrashing or budget overruns. Therefore, an autonomous agent loop is unnecessary for standard HR entitlement calculations; a deterministic workflow is superior.
+No winner is supported by the historical run. Decide only after both
+implementations have executed the same ten questions using the same configured
+model with valid latency, token, and answer pass measurements.

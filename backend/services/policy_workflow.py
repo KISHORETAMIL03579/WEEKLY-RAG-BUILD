@@ -1,19 +1,120 @@
-# backend/services/policy_workflow.py — Production Fixed 3-Step Deterministic HR Policy Workflow
+"""Fixed-sequence HR policy workflow using the shared policy tools and model."""
+
 from __future__ import annotations
 
+import json
+import math
 import time
 from typing import Any, Callable, Dict, List, Optional
 
+from backend.config import CHAT_BACKEND, LLM_MODEL
 from backend.schemas.policy import (
+    MAX_COST,
+    MAX_TOKENS,
+    MAX_WALL_CLOCK_SECONDS,
+    JurisdictionEnum,
+    PolicyCategoryEnum,
     PolicyOutputContract,
     TOKEN_COST_PROXY_RATE,
 )
-from backend.services.policy_tools import (
-    execute_tool_call,
-    get_employee_record,
-    get_jurisdiction_rules,
-    search_handbook,
+from backend.services.policy_agent import (
+    PolicyAgentError,
+    call_policy_model_once,
+    parse_policy_answer,
 )
+from backend.services.policy_tools import execute_tool_call
+
+
+def _policy_category(question: str) -> PolicyCategoryEnum:
+    normalized = question.lower()
+    if any(word in normalized for word in ("working hour", "public holiday", "workweek")):
+        return PolicyCategoryEnum.HOLIDAYS_AND_WORKING_HOURS
+    if any(word in normalized for word in ("leave", "sick", "maternity")):
+        return PolicyCategoryEnum.LEAVE
+    if any(word in normalized for word in ("notice", "resign", "severance", "redundan")):
+        return PolicyCategoryEnum.NOTICE_AND_SEPARATION
+    if any(word in normalized for word in ("pension", "benefit", "salary", "pay")):
+        return PolicyCategoryEnum.BENEFITS_AND_PENSION
+    return PolicyCategoryEnum.CONDUCT_AND_DISCIPLINE
+
+
+def _requires_jurisdiction_rules(question: str) -> bool:
+    normalized = question.lower()
+    return any(
+        phrase in normalized
+        for phrase in (
+            "jurisdiction",
+            "statutory",
+            "statute",
+            "local law",
+            "public holiday",
+            "duty station law",
+            "country law",
+        )
+    )
+
+
+def _record_tool_call(
+    calls: List[Dict[str, Any]],
+    step: int,
+    name: str,
+    arguments: Dict[str, Any],
+) -> Any:
+    started = time.perf_counter()
+    output = execute_tool_call(name, arguments)
+    calls.append(
+        {
+            "step": step,
+            "tool_name": name,
+            "arguments": arguments,
+            "output": output,
+            "latency_ms": round((time.perf_counter() - started) * 1000, 3),
+        }
+    )
+    return output
+
+
+def _failed_result(
+    *,
+    case_id: str,
+    employee_id: str,
+    question: str,
+    reason: str,
+    explanation: str,
+    calls: List[Dict[str, Any]],
+    started: float,
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+    model_call_attempted: bool = False,
+    top_k: int,
+    temperature: float,
+    model: str,
+) -> PolicyOutputContract:
+    total_tokens = prompt_tokens + completion_tokens
+    return PolicyOutputContract(
+        case_id=case_id,
+        employee_id=employee_id,
+        question=question,
+        entitlement_value="",
+        rule_cited="",
+        explanation=explanation,
+        passed=False,
+        implementation="workflow",
+        execution_mode="workflow",
+        tool_calls=calls,
+        iterations=1 if model_call_attempted else 0,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        token_source=f"{CHAT_BACKEND}_live" if total_tokens else "unavailable",
+        cost_usd=round(total_tokens * TOKEN_COST_PROXY_RATE, 8),
+        provider_cost="N/A",
+        latency_ms=round(max(0.01, (time.perf_counter() - started) * 1000), 3),
+        termination_reason=reason,
+        top_k=top_k,
+        temperature=temperature,
+        model=model,
+    )
 
 
 def run_workflow_case(
@@ -22,230 +123,247 @@ def run_workflow_case(
     question: str,
     deterministic_pass_criteria: Optional[List[str]] = None,
     top_k: int = 5,
+    temperature: float = 0.3,
+    model: str = LLM_MODEL,
+    max_tokens: int = MAX_TOKENS,
+    max_cost: float = MAX_COST,
+    max_wall_clock: float = MAX_WALL_CLOCK_SECONDS,
     on_stage: Optional[Callable[[str], None]] = None,
 ) -> PolicyOutputContract:
-    """
-    Execute the Fixed 3-Step Deterministic Workflow on a single employee entitlement question.
-    Hard-coded path: (1) Fetch Employee -> (2) Branch on Attributes -> (3) Fetch Handbook Rule -> (4) Synthesize.
-    No ReAct loop, no iterative re-prompting.
-    Uses time.perf_counter() for accurate sub-millisecond latency tracking.
-    """
-    start_time = time.perf_counter()
-    tool_calls_record: List[Dict[str, Any]] = []
-
-    # -----------------------------------------------------------------------
-    # Step 1: Fetch Employee Record (Deterministic)
-    # -----------------------------------------------------------------------
-    if on_stage:
-        on_stage("Step 1: Employee lookup")
-    t0 = time.perf_counter()
-    emp_record = execute_tool_call("get_employee_record", {"employee_id": employee_id})
-    t_ms = (time.perf_counter() - t0) * 1000
-    tool_calls_record.append(
-        {
-            "step": 1,
-            "tool_name": "get_employee_record",
-            "arguments": {"employee_id": employee_id},
-            "output": emp_record,
-            "latency_ms": round(max(0.01, t_ms), 3),
-        }
+    """Run one hard-coded tool sequence and exactly one final model call."""
+    started = time.perf_counter()
+    calls: List[Dict[str, Any]] = []
+    valid = (
+        type(top_k) is int and 1 <= top_k <= 20,
+        isinstance(temperature, (int, float))
+        and math.isfinite(temperature)
+        and 0 <= temperature <= 1,
+        isinstance(model, str) and bool(model.strip()),
+        type(max_tokens) is int and 1 <= max_tokens <= MAX_TOKENS,
+        isinstance(max_cost, (int, float))
+        and math.isfinite(max_cost)
+        and 0 < max_cost <= MAX_COST,
+        isinstance(max_wall_clock, (int, float))
+        and math.isfinite(max_wall_clock)
+        and 0 < max_wall_clock <= MAX_WALL_CLOCK_SECONDS,
     )
-
-    if not emp_record.get("found"):
-        elapsed_ms = (time.perf_counter() - start_time) * 1000
-        return PolicyOutputContract(
+    if not all(valid):
+        return _failed_result(
             case_id=case_id,
             employee_id=employee_id,
             question=question,
-            entitlement_value="",
-            rule_cited="",
-            explanation=emp_record.get(
+            reason="INVALID_ARGUMENTS",
+            explanation="Workflow configuration exceeds supported limits.",
+            calls=calls,
+            started=started,
+            top_k=top_k,
+            temperature=temperature,
+            model=model,
+        )
+
+    if on_stage:
+        on_stage("Step 1: Employee lookup")
+    employee = _record_tool_call(
+        calls, 1, "get_employee_record", {"employee_id": employee_id}
+    )
+    if not employee.get("found"):
+        return _failed_result(
+            case_id=case_id,
+            employee_id=employee_id,
+            question=question,
+            reason="INVALID_EMPLOYEE",
+            explanation=employee.get(
                 "error", f"Employee record '{employee_id}' was not found."
             ),
-            passed=False,
-            implementation="workflow",
-            execution_mode="workflow",
-            tool_calls=tool_calls_record,
-            iterations=1,
-            token_source="unavailable",
-            provider_cost="N/A",
-            latency_ms=round(max(0.01, elapsed_ms), 3),
-            termination_reason="INVALID_EMPLOYEE",
+            calls=calls,
+            started=started,
             top_k=top_k,
+            temperature=temperature,
+            model=model,
         )
 
-    emp_status = (
-        emp_record.get("employment_status", "Confirmed") if emp_record else "Confirmed"
-    )
-    tenure_m = emp_record.get("tenure_months", 0) if emp_record else 0
-    jurisdiction = emp_record.get("jurisdiction", "Kenya") if emp_record else "Kenya"
-    sep_reason = emp_record.get("separation_reason", "") if emp_record else ""
-
-    # -----------------------------------------------------------------------
-    # Step 2: Determine Policy Query Branch from Employee Data & Intent
-    # -----------------------------------------------------------------------
     if on_stage:
-        on_stage("Step 2: Policy rule match")
-    q_lower = question.lower()
-    if "annual leave" in q_lower or "carry" in q_lower:
-        search_query = "annual leave entitlement carry forward Section 5.2"
-    elif (
-        "severance" in q_lower or "redundancy" in q_lower or "unsatisfactory" in q_lower
-    ):
-        search_query = "severance redundancy performance separation Section 10.5"
-    elif "notice" in q_lower or "resign" in q_lower:
-        search_query = "resignation notice probation confirmed Section 10.1"
-    elif "sick leave" in q_lower:
-        search_query = "paid sick leave qualifying consecutive months Section 5.3.2"
-    elif "pension" in q_lower:
-        search_query = (
-            "pension contribution allowance probation eligibility Section 4.4.1"
-        )
-    elif "commute" in q_lower or "cash" in q_lower:
-        search_query = "commutation accrued annual leave separation Section 10.7"
-    else:
-        search_query = question
-
-    # -----------------------------------------------------------------------
-    # Step 3: Fetch Policy Rule & Synthesize Fixed Output
-    # -----------------------------------------------------------------------
-    t0 = time.perf_counter()
-    handbook_results = execute_tool_call(
-        "search_handbook", {"query": search_query, "top_k": top_k}
+        on_stage("Step 2: Handbook search")
+    handbook = _record_tool_call(
+        calls,
+        2,
+        "search_handbook",
+        {"query": question, "top_k": top_k},
     )
-    t_ms = (time.perf_counter() - t0) * 1000
-    tool_calls_record.append(
+    evidence: Dict[str, Any] = {
+        "employee_record": employee,
+        "handbook_results": handbook,
+    }
+
+    if _requires_jurisdiction_rules(question):
+        if on_stage:
+            on_stage("Step 3: Jurisdiction rule lookup")
+        jurisdiction = JurisdictionEnum(employee["jurisdiction"])
+        category = _policy_category(question)
+        evidence["jurisdiction_rules"] = _record_tool_call(
+            calls,
+            3,
+            "get_jurisdiction_rules",
+            {
+                "jurisdiction": jurisdiction.value,
+                "policy_category": category.value,
+            },
+        )
+
+    if on_stage:
+        on_stage("Final answer synthesis")
+    remaining = max_wall_clock - (time.perf_counter() - started)
+    if remaining <= 0:
+        return _failed_result(
+            case_id=case_id,
+            employee_id=employee_id,
+            question=question,
+            reason="BUDGET_WALL_CLOCK",
+            explanation="Workflow stopped before synthesis because its time budget expired.",
+            calls=calls,
+            started=started,
+            top_k=top_k,
+            temperature=temperature,
+            model=model,
+        )
+
+    messages = [
         {
-            "step": 2,
-            "tool_name": "search_handbook",
-            "arguments": {"query": search_query, "top_k": top_k},
-            "output": handbook_results,
-            "latency_ms": round(max(0.01, t_ms), 3),
-        }
-    )
-
-    if on_stage:
-        on_stage("Step 3: Deterministic calculation")
-    emp_name = emp_record.get("name", employee_id) if emp_record else employee_id
-
-    # Deterministic rule synthesis
-    if "accrual" in q_lower and "annual leave" in q_lower:
-        entitlement_value = "24 working days per annum, accruing at 2 days per month"
-        rule_cited = "Section 5.2.1"
-        explanation = f"{emp_name} is a confirmed employee with {tenure_m} months of service. Under Section 5.2.1, standard annual leave entitlement is 24 days per year at 2 days per month."
-
-    elif "carry" in q_lower:
-        entitlement_value = (
-            "Maximum of 5 days (must be taken by June 30th of following year)"
+            "role": "system",
+            "content": (
+                "You answer HR policy questions using only the supplied employee "
+                "record and policy evidence. Account for the employee's tenure, "
+                "employment status, jurisdiction, and separation reason when they "
+                "affect the answer. If evidence is insufficient, say so. Return "
+                'only one JSON object with string fields "entitlement_value", '
+                '"rule_cited", and "explanation".'
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Employee ID: {employee_id}\n"
+                f"Question: {question}\n"
+                f"Requested handbook result limit: {top_k}\n"
+                f"Evidence:\n{json.dumps(evidence, ensure_ascii=False)}"
+            ),
+        },
+    ]
+    cost_token_limit = int(max_cost / TOKEN_COST_PROXY_RATE)
+    allowed_tokens = min(max_tokens, cost_token_limit)
+    if allowed_tokens < 1:
+        return _failed_result(
+            case_id=case_id,
+            employee_id=employee_id,
+            question=question,
+            reason="BUDGET_COST",
+            explanation="Workflow stopped before synthesis because its cost budget was exhausted.",
+            calls=calls,
+            started=started,
+            top_k=top_k,
+            temperature=temperature,
+            model=model,
         )
-        rule_cited = "Section 5.2.7"
-        explanation = f"Under Section 5.2.7, staff members cannot carry forward more than 5 days of unused annual leave beyond December 31st without CEO approval."
-
-    elif (
-        "severance" in q_lower or "redundancy" in q_lower or "unsatisfactory" in q_lower
-    ):
-        if sep_reason == "Redundancy" or "redundancy" in q_lower:
-            completed_years = tenure_m // 12
-            severance_days = completed_years * 15
-            entitlement_value = f"1 month written notice plus {severance_days} days' pay severance (15 days' pay per completed year across {completed_years} years = {severance_days} days' pay)"
-            rule_cited = "Section 10.5.1"
-            explanation = f"{emp_name} is separated due to Redundancy with {completed_years} completed years of service ({tenure_m} months). Under Section 10.5.1, the employee is entitled to 1 month written notice plus severance pay of 15 days per completed year ({severance_days} days total)."
-        elif sep_reason == "Unsatisfactory Performance" or "unsatisfactory" in q_lower:
-            entitlement_value = "0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay)"
-            rule_cited = "Section 10.5.2"
-            explanation = f"{emp_name} is separated due to Unsatisfactory Performance. Under Section 10.5.2, staff separated for unsatisfactory performance are not entitled to severance payments."
-        else:
-            entitlement_value = (
-                "Standard severance calculations apply based on separation ground."
-            )
-            rule_cited = "Section 10.5"
-            explanation = "Standard separation provisions apply."
-
-    elif "notice" in q_lower or "resign" in q_lower:
-        if emp_status == "Probation" or tenure_m < 6:
-            entitlement_value = "1 week (7 days) written notice"
-            rule_cited = "Section 10.1 & Section 3.6.4"
-            explanation = f"{emp_name} is currently on probation ({tenure_m} months tenure). Under Section 10.1 and Section 3.6.4, resigning employees on probation must give 1 week (7 calendar days) written notice."
-        else:
-            entitlement_value = "4 weeks written notice"
-            rule_cited = "Section 10.1"
-            explanation = f"{emp_name} is a confirmed staff member ({tenure_m} months tenure). Under Section 10.1, confirmed employees resigning from the organization must provide 4 weeks written notice."
-
-    elif "sick leave" in q_lower:
-        if tenure_m < 2:
-            entitlement_value = (
-                "Ineligible (requires at least 2 consecutive months of service)"
-            )
-            rule_cited = "Section 5.3.2"
-            explanation = f"{emp_name} has only completed {tenure_m} month of service. Under Section 5.3.2, paid sick leave entitlement is strictly conditional on completing at least 2 consecutive months of service."
-        else:
-            entitlement_value = "Rate of 2 working days per month (1 full pay / 1 half pay); minimum 7 days full + 7 days half pay (max 3 months full / 3 months half pay)"
-            rule_cited = "Section 5.3.2"
-            explanation = f"{emp_name} has completed {tenure_m} months of service (>= 2 months). Under Section 5.3.2, sick leave accrues at 2 working days per month of service (1 full pay / 1 half pay), with guaranteed minimum of 7 days full and 7 days half pay."
-
-    elif "pension" in q_lower:
-        if emp_status == "Probation" or tenure_m < 6:
-            entitlement_value = "Ineligible during probation; entitled to 10% basic salary pension contribution allowance once probation is confirmed"
-            rule_cited = "Section 4.4.1"
-            explanation = f"{emp_name} is currently on probation ({tenure_m} months tenure). Under Section 4.4.1, the 10% pension contribution allowance is only provided upon successful confirmation of probation."
-        else:
-            entitlement_value = (
-                "10% of basic monthly salary pension contribution allowance"
-            )
-            rule_cited = "Section 4.4.1"
-            explanation = f"{emp_name} is confirmed ({tenure_m} months tenure) and entitled to 10% pension contribution allowance under Section 4.4.1."
-
-    elif "commute" in q_lower or "cash" in q_lower:
-        entitlement_value = "Maximum of 10 working days on gross salary basis"
-        rule_cited = "Section 10.7"
-        explanation = f"{emp_name} is separating with {emp_record.get('annual_leave_balance', 0) if emp_record else 0} accrued leave days. Under Section 10.7, commutation of accrued annual leave upon separation is capped at a maximum of 10 working days based on gross salary."
-
-    else:
-        entitlement_value = "Entitlement calculated from handbook rules."
-        rule_cited = (
-            handbook_results[0].get("section", "Section 5.0")
-            if handbook_results
-            else "Section 5.0"
+    try:
+        response, prompt_tokens, completion_tokens, _ = call_policy_model_once(
+            messages,
+            model=model,
+            temperature=temperature,
+            timeout=remaining,
+            max_tokens=allowed_tokens,
         )
-        explanation = f"Evaluated for {emp_name} based on {rule_cited}."
+    except PolicyAgentError as exc:
+        return _failed_result(
+            case_id=case_id,
+            employee_id=employee_id,
+            question=question,
+            reason=exc.reason,
+            explanation="The configured model failed during workflow synthesis.",
+            calls=calls,
+            started=started,
+            model_call_attempted=True,
+            top_k=top_k,
+            temperature=temperature,
+            model=model,
+        )
 
-    # Fixed single-pass token consumption
-    prompt_tokens = 580 + (len(tool_calls_record) * 60)
-    completion_tokens = 125
     total_tokens = prompt_tokens + completion_tokens
-    cost_usd = total_tokens * TOKEN_COST_PROXY_RATE
-
-    elapsed_ms = (time.perf_counter() - start_time) * 1000
-
-    # Deterministic pass evaluation
-    passed = False
-    if deterministic_pass_criteria:
-        full_text = f"{entitlement_value} {rule_cited} {explanation}".lower()
-        passed = all(crit.lower() in full_text for crit in deterministic_pass_criteria)
+    cost = total_tokens * TOKEN_COST_PROXY_RATE
+    elapsed = time.perf_counter() - started
+    if elapsed > max_wall_clock:
+        reason = "BUDGET_WALL_CLOCK"
+    elif total_tokens > max_tokens:
+        reason = "BUDGET_TOKENS"
+    elif cost > max_cost:
+        reason = "BUDGET_COST"
     else:
-        passed = True
+        reason = ""
+    if reason:
+        return _failed_result(
+            case_id=case_id,
+            employee_id=employee_id,
+            question=question,
+            reason=reason,
+            explanation=f"Workflow synthesis exceeded the {reason.lower()} limit.",
+            calls=calls,
+            started=started,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            model_call_attempted=True,
+            top_k=top_k,
+            temperature=temperature,
+            model=model,
+        )
 
+    try:
+        answer = parse_policy_answer(response.get("message", {}).get("content"))
+    except PolicyAgentError as exc:
+        return _failed_result(
+            case_id=case_id,
+            employee_id=employee_id,
+            question=question,
+            reason=exc.reason,
+            explanation="The configured model returned an invalid workflow answer.",
+            calls=calls,
+            started=started,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            model_call_attempted=True,
+            top_k=top_k,
+            temperature=temperature,
+            model=model,
+        )
+
+    answer_text = " ".join(answer.values()).lower()
+    passed = (
+        all(
+            criterion.lower() in answer_text
+            for criterion in deterministic_pass_criteria
+        )
+        if deterministic_pass_criteria
+        else True
+    )
     return PolicyOutputContract(
         case_id=case_id,
         employee_id=employee_id,
         question=question,
-        entitlement_value=entitlement_value,
-        rule_cited=rule_cited,
-        explanation=explanation,
+        entitlement_value=answer["entitlement_value"],
+        rule_cited=answer["rule_cited"],
+        explanation=answer["explanation"],
         passed=passed,
         implementation="workflow",
         execution_mode="workflow",
-        tool_calls=tool_calls_record,
+        tool_calls=calls,
         iterations=1,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
-        token_source="proxy_estimate",  # Workflow has no Ollama call; tokens are fixed-path estimates
-        cost_usd=round(cost_usd, 6),
+        token_source=f"{CHAT_BACKEND}_live",
+        cost_usd=round(cost, 8),
         provider_cost="N/A",
-        latency_ms=round(max(0.01, elapsed_ms), 3),
+        latency_ms=round(max(0.01, (time.perf_counter() - started) * 1000), 3),
         termination_reason="SUCCESS",
         top_k=top_k,
-        temperature=None,
-        model=None,
+        temperature=temperature,
+        model=model,
     )

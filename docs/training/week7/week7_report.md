@@ -1,5 +1,12 @@
 # Week 7 Practical Report: Racing the HR Agent Against a Fixed Workflow
 
+> **Evidence status:** The previously reported race is invalid and must not be
+> used as a performance result. Its `race.csv` records `0.0 ms` latencies,
+> although runtime latency is clamped to at least `0.01 ms`; workflow token
+> counts in the original implementation were fixed estimates, not provider
+> usage. The workflow now uses the selected model and reports provider token
+> metadata, but a fresh live race has not yet been recorded.
+
 ## 1. Problem Statement
 
 Organizations frequently deploy LLM-based autonomous agent loops (ReAct) for multi-step tasks without first asking whether a deterministic, hard-coded workflow would be faster, cheaper, more predictable, and equally accurate. This experiment evaluates both architectures over an identical 10-question HR policy entitlement benchmark based on the verified organizational handbook (`HRPolicy.pdf`) and canonical employee records.
@@ -13,17 +20,22 @@ Organizations frequently deploy LLM-based autonomous agent loops (ReAct) for mul
   - `MAX_ITERATIONS = 5`
   - `MAX_TOKENS = 4000`
   - `MAX_COST = $0.0500`
-  - `MAX_WALL_CLOCK = 30.0s`
+  - `MAX_WALL_CLOCK = 45.0s` (current code limit)
 - **Token Tracking**: Re-sends cumulative conversation context on every iteration, reflecting true production token consumption.
 
 ### B. Fixed 3-Step Deterministic Workflow
 
 - **Pipeline Structure**: (1) Call `get_employee_record` -> (2) Branch on discovered employee attributes (tenure, status, separation reason) -> (3) Call `search_handbook` / `get_jurisdiction_rules` -> (4) Synthesize structured answer.
-- **Zero Agent Loops**: Single-pass execution without conversation loop overhead.
+- **Zero Agent Loops**: Fixed employee lookup, handbook search, optional
+  jurisdiction-rule lookup, and exactly one structured-answer model call. The
+  workflow uses the same selected provider/model, temperature, benchmark
+  inputs, tool implementations, output contract, and token-cost proxy as the
+  agent.
 
 ## 3. The Third Tool: `get_jurisdiction_rules`
 
-- **Single Job**: Returns duty-station statutory guidelines and public holiday frameworks.
+- **Single Job**: Retrieves one policy rule for a specified jurisdiction and
+  policy category.
 - **Typed Enums**: Strict `JurisdictionEnum` and `PolicyCategoryEnum` parameters.
 - **Zero Description Overlap**: Dedicated schema distinct from employee profile retrieval (`get_employee_record`) and global handbook search (`search_handbook`).
 
@@ -46,18 +58,23 @@ All 10 benchmark cases are verified against verbatim clauses from `HRPolicy.pdf`
 
 ## 5. Race Results (The 8 Benchmark Numbers)
 
-| Metric              | Agent (ReAct)      | Fixed Workflow     | Delta / Advantage              |
-| :------------------ | :----------------- | :----------------- | :----------------------------- |
-| **Pass Rate**       | **100.0%** (10/10) | **100.0%** (10/10) | **Tied (100% Correctness)**    |
-| **p50 Latency**     | **0.00 ms**        | **0.00 ms**        | **Workflow is faster**         |
-| **Total Tokens**    | **32160 tokens**   | **7305 tokens**    | **Workflow saves ~77% tokens** |
-| **Cost / Question** | **$0.001608**      | **$0.000366**      | **Workflow is ~4.4x cheaper**  |
+No valid same-model comparison is currently available. Discard the old
+numeric results: latency is invalid, and workflow tokens were fixed estimates.
+After this implementation change, record a fresh live run with provider, model,
+settings, and per-case outputs before calculating the four metrics for each
+system. Do not infer a winner from the old `race.csv`.
 
-> _Note on Cost: Cost is evaluated using the benchmark token-cost proxy ($0.50 per 1,000,000 tokens) because Ollama inference is hosted locally at $0.00 monetary provider cost._
+Cost remains an explicitly estimated token-cost proxy ($0.50 per 1,000,000
+tokens), not provider billing.
 
 ## 6. Budget Enforcement Evidence
 
-The agent loop strictly checks iterations, token counts, cost proxy, and elapsed wall-clock time on every lap. A verified budget-termination test was executed with `max_iterations=1`, proving clean halt without process hanging (`week7/budget_termination.log`).
+The agent loop checks iterations, tokens, cost proxy, and elapsed wall-clock
+time. The historical `budget_termination.log` is invalid: it reports two
+iterations despite a one-iteration limit and a `0.00 ms` duration. Do not treat
+it as execution evidence. A corrected automated test now exercises clean
+iteration-budget termination after one model step; the test result is the
+available verification until a captured live-provider budget run is recorded.
 
 ## 7. Limitations
 
@@ -69,4 +86,9 @@ The agent loop strictly checks iterations, token counts, cost proxy, and elapsed
 **Decision Rule**: _Does the path vary dynamically by unpredictable input, or are the branches deterministic once the employee record is retrieved?_
 
 **Verdict**:
-The benchmark demonstrates that while policy entitlements vary significantly by employee attributes (probation vs. confirmed notice, tenure-based severance formulas, and statutory qualification minimums), **the execution path itself is fully deterministic once the employee record is fetched**. The fixed 3-step workflow achieves identical 100% accuracy while reducing token consumption by over 77% and delivering lower latency with zero risk of agent loop thrashing or budget overruns. Therefore, an autonomous agent loop is unnecessary for standard HR entitlement calculations; a deterministic workflow is superior.
+No architecture winner can yet be declared: the previous measurements are
+invalid and a fresh live comparison has not been run. Employee status, tenure,
+separation reason, and jurisdiction affect the answer or selected evidence.
+Apply the decision rule only after both implementations have run the same ten
+cases with the same configured provider/model and valid latency/token
+measurements.

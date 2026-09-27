@@ -83,23 +83,25 @@ def _call_ollama_step(
     temperature: float = 0.3,
     timeout: float = 60.0,
     num_predict: int = 512,
+    include_tools: bool = True,
 ) -> Tuple[Dict[str, Any], int, int, float]:
-    """Ask Ollama for one ReAct decision and return its actual usage metadata."""
+    """Ask Ollama for one model step and return its actual usage metadata."""
     started = time.perf_counter()
     endpoint = f"{OLLAMA_URL.rstrip('/')}/api/chat"
     payload = {
         "model": model,
         "messages": messages,
-        "tools": [
-            {"type": "function", "function": definition}
-            for definition in POLICY_TOOL_DEFINITIONS
-        ],
         "stream": False,
         "options": {
             "temperature": float(temperature),
             "num_predict": max(1, int(num_predict)),
         },
     }
+    if include_tools:
+        payload["tools"] = [
+            {"type": "function", "function": definition}
+            for definition in POLICY_TOOL_DEFINITIONS
+        ]
     request = urllib.request.Request(
         endpoint,
         data=json.dumps(payload).encode("utf-8"),
@@ -166,8 +168,9 @@ def _call_groq_step(
     temperature: float = 0.3,
     timeout: float = 60.0,
     num_predict: int = 512,
+    include_tools: bool = True,
 ) -> Tuple[Dict[str, Any], int, int, float]:
-    """Call Groq with OpenAI-compatible policy tools and require actual usage."""
+    """Call Groq for one model step and require actual usage."""
     started = time.perf_counter()
     groq_messages: List[Dict[str, Any]] = []
     for message in messages:
@@ -213,10 +216,14 @@ def _call_groq_step(
             normalized["tool_call_id"] = tool_call_id
         groq_messages.append(normalized)
 
-    groq_tools = [
-        {"type": "function", "function": definition}
-        for definition in POLICY_TOOL_DEFINITIONS
-    ]
+    groq_tools = (
+        [
+            {"type": "function", "function": definition}
+            for definition in POLICY_TOOL_DEFINITIONS
+        ]
+        if include_tools
+        else None
+    )
     try:
         data = groq_chat_completion(
             groq_messages,
@@ -276,6 +283,7 @@ def _call_agent_step(
     temperature: float,
     timeout: float,
     num_predict: int,
+    include_tools: bool = True,
 ) -> Tuple[Dict[str, Any], int, int, float]:
     if CHAT_BACKEND == "groq":
         return _call_groq_step(
@@ -284,6 +292,7 @@ def _call_agent_step(
             temperature=temperature,
             timeout=timeout,
             num_predict=num_predict,
+            include_tools=include_tools,
         )
     if CHAT_BACKEND == "ollama":
         return _call_ollama_step(
@@ -292,9 +301,28 @@ def _call_agent_step(
             temperature=temperature,
             timeout=timeout,
             num_predict=num_predict,
+            include_tools=include_tools,
         )
     raise PolicyAgentError(
         "PROVIDER_ERROR", f"Policy Agent does not support CHAT_BACKEND={CHAT_BACKEND!r}"
+    )
+
+
+def call_policy_model_once(
+    messages: List[Dict[str, Any]],
+    model: str,
+    temperature: float,
+    timeout: float,
+    max_tokens: int,
+) -> Tuple[Dict[str, Any], int, int, float]:
+    """Make one policy-model call without tool schemas or an agent loop."""
+    return _call_agent_step(
+        messages,
+        model=model,
+        temperature=temperature,
+        timeout=timeout,
+        num_predict=max_tokens,
+        include_tools=False,
     )
 
 
@@ -380,6 +408,11 @@ def _parse_final_answer(content: Any) -> Dict[str, str]:
             "Final answer must contain non-empty entitlement_value, rule_cited, and explanation strings",
         )
     return answer
+
+
+def parse_policy_answer(content: Any) -> Dict[str, str]:
+    """Parse the shared structured answer contract used by agent and workflow."""
+    return _parse_final_answer(content)
 
 
 def _failure_result(

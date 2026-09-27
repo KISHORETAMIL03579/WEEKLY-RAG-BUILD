@@ -413,7 +413,7 @@ def get_jurisdiction_rules(
     jurisdiction: JurisdictionEnum, policy_category: PolicyCategoryEnum
 ) -> Dict[str, Any]:
     """
-    Retrieve statutory duty-station guidelines and public holiday frameworks for a specific jurisdiction.
+    Retrieve one policy rule for the specified jurisdiction and policy category.
     """
     jur_key = (
         jurisdiction.value
@@ -484,7 +484,7 @@ POLICY_TOOL_DEFINITIONS = [
     },
     {
         "name": "get_jurisdiction_rules",
-        "description": "Retrieve jurisdiction-specific statutory rules, public holiday entitlements, local statutory compliance baselines, and duty-station guidelines.",
+        "description": "Retrieve the policy rule for one specified jurisdiction and policy category.",
         "parameters": {
             "type": "object",
             "properties": {

@@ -13,6 +13,23 @@ Evaluation Rubric:
 Guidelines:
 - Do not penalize for minor phrasing differences or citation bracket formatting [1].
 - When a policy in the context specifies multiple mandatory conditions or required approval steps for an application or entitlement, an answer that lists only some triggers while leaving out the required approval/justification criteria is incomplete and must receive 0.
+- A refusal is correct only when the retrieved context does not state the requested policy. Do not reward a refusal when the context contains the answer.
+
+Few-shot examples from Judge V1 disagreements:
+
+Example 1
+Question: Under what conditions can a staff member apply for an emergency salary advance?
+Context: Section 4.2.1 states that an emergency salary advance may be granted for serious illness, legitimate emergencies, or exceptional and compelling circumstances when supported by detailed written justification and approved by the CEO.
+Answer: A staff member can apply in cases of serious illness or legitimate emergencies.
+Verdict: 0
+Reason: The answer omits the exceptional-circumstances route and its required written justification and CEO approval, so its list is materially incomplete.
+
+Example 2
+Question: Who is eligible for overtime compensation and how is the rate determined?
+Context: The retrieved handbook excerpts discuss remuneration and salary administration but state no eligibility rule or rate for overtime compensation.
+Answer: I don't know.
+Verdict: 1
+Reason: The retrieved context does not state an overtime policy, so refusing is faithful rather than an unsupported answer.
 
 Input to Evaluate:
 Question: {question}

@@ -444,6 +444,8 @@ class PolicyBenchmarkRunManager:
                         question=q,
                         deterministic_pass_criteria=crit,
                         top_k=run_state.top_k,
+                        temperature=run_state.temperature,
+                        model=run_state.model or LLM_MODEL,
                         on_stage=make_wf_stage_cb(idx),
                     )
                 except Exception:

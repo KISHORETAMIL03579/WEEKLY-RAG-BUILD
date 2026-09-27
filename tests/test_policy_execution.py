@@ -81,16 +81,44 @@ class TestPolicyExecution(unittest.TestCase):
 
     def test_all_10_workflow_cases_pass(self):
         for case in self.benchmark_cases:
-            cid = case["case_id"]
-            empid = case["employee_id"]
-            q = case["question"]
-            crit = case["deterministic_pass_criteria"]
-            result = run_workflow_case(cid, empid, q, deterministic_pass_criteria=crit)
-            self.assertEqual(result.termination_reason, "SUCCESS")
-            self.assertTrue(
-                result.passed, f"Workflow failed on {cid}: {result.explanation}"
-            )
-            self.assertEqual(result.iterations, 1)
+            with patch(
+                "backend.services.policy_workflow.call_policy_model_once",
+                return_value=(
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "entitlement_value": " ".join(
+                                        case["deterministic_pass_criteria"]
+                                    ),
+                                    "rule_cited": case["source_section"],
+                                    "explanation": "Scripted grounded benchmark answer.",
+                                }
+                            )
+                        }
+                    },
+                    100,
+                    40,
+                    1.0,
+                ),
+            ):
+                result = run_workflow_case(
+                    case["case_id"],
+                    case["employee_id"],
+                    case["question"],
+                    deterministic_pass_criteria=case["deterministic_pass_criteria"],
+                    temperature=0.65,
+                    model="test-model",
+                )
+                self.assertEqual(result.termination_reason, "SUCCESS")
+                self.assertTrue(
+                    result.passed,
+                    f"Workflow failed on {case['case_id']}: {result.explanation}",
+                )
+                self.assertEqual(result.iterations, 1)
+                self.assertEqual(result.temperature, 0.65)
+                self.assertEqual(result.model, "test-model")
+                self.assertEqual(result.total_tokens, 140)
 
     def test_agent_budget_enforcement(self):
         res = run_agent_case("t1", "EMP001", "q", force_budget_trap="iterations")
@@ -197,6 +225,28 @@ class TestPolicyExecution(unittest.TestCase):
             patch(
                 "backend.services.policy_benchmark_runner.run_agent_case",
                 side_effect=run_scripted_agent_case,
+            ),
+            patch(
+                "backend.services.policy_benchmark_runner.PolicyBenchmarkRunManager._save_results_csv"
+            ),
+            patch(
+                "backend.services.policy_workflow.call_policy_model_once",
+                return_value=(
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "entitlement_value": "24 working days",
+                                    "rule_cited": "Section 5.2.1",
+                                    "explanation": "Scripted grounded answer.",
+                                }
+                            )
+                        }
+                    },
+                    100,
+                    40,
+                    1.0,
+                ),
             ),
         ):
             agent_resp = self.client.post(
@@ -315,7 +365,25 @@ class TestPolicyExecution(unittest.TestCase):
         with patch(
             "backend.routes.policy.run_workflow_case",
             wraps=run_workflow_case,
-        ) as run_workflow:
+        ) as run_workflow, patch(
+            "backend.services.policy_workflow.call_policy_model_once",
+            return_value=(
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "entitlement_value": "24 working days",
+                                "rule_cited": "Section 5.2.1",
+                                "explanation": "Scripted grounded answer.",
+                            }
+                        )
+                    }
+                },
+                100,
+                40,
+                1.0,
+            ),
+        ):
             workflow_response = self.client.post(
                 "/api/policy/search",
                 json={
@@ -331,8 +399,10 @@ class TestPolicyExecution(unittest.TestCase):
 
         self.assertEqual(workflow_response.status_code, 200)
         self.assertEqual(run_workflow.call_args.kwargs["top_k"], 7)
-        self.assertIsNone(workflow_response.json()["temperature"])
-        self.assertIsNone(workflow_response.json()["model"])
+        self.assertEqual(run_workflow.call_args.kwargs["temperature"], 0.65)
+        self.assertEqual(run_workflow.call_args.kwargs["model"], "llama3.1:8b")
+        self.assertEqual(workflow_response.json()["temperature"], 0.65)
+        self.assertEqual(workflow_response.json()["model"], "llama3.1:8b")
 
     def test_policy_search_rejects_retry_limit_above_hard_cap(self):
         response = self.client.post(
