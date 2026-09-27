@@ -7,6 +7,7 @@ import { EvaluationDatasetManager } from "./EvaluationDatasetManager";
 import { CancelButton } from "../common/CancelButton";
 import { QADataSetCase, DatasetMode } from "../../types/dataset";
 import { Card } from "../common/Card";
+import { TopKSlider } from "../common/ModelParameterControls";
 
 interface FormViewProps {
   questions: EvalQuestionInput[];
@@ -259,158 +260,31 @@ export const FormView: React.FC<FormViewProps> = ({
           }}
         >
           <div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "6px",
-              }}
-            >
-              <label
-                htmlFor="top-k-stepper-input"
-                style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}
-              >
-                Top-k
-              </label>
-              <div style={{ display: "flex", gap: "6px" }}>
-                <button
-                  type="button"
-                  onClick={() => setTopK(5)}
-                  style={{
-                    fontSize: "0.7rem",
-                    padding: "2px 6px",
-                    borderRadius: "4px",
-                    border:
-                      Number(topK) === 5
-                        ? "1px solid var(--accent)"
-                        : "1px solid var(--border)",
-                    background:
-                      Number(topK) === 5 ? "var(--accent-dim)" : "transparent",
-                    color: Number(topK) === 5 ? "#fff" : "var(--text-muted)",
-                    cursor: "pointer",
-                  }}
-                  title="Application Default (K=5)"
-                >
-                  K=5 (Default)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTopK(8)}
-                  style={{
-                    fontSize: "0.7rem",
-                    padding: "2px 6px",
-                    borderRadius: "4px",
-                    border:
-                      Number(topK) === 8
-                        ? "1px solid var(--accent)"
-                        : "1px solid var(--border)",
-                    background:
-                      Number(topK) === 8 ? "var(--accent-dim)" : "transparent",
-                    color: Number(topK) === 8 ? "#fff" : "var(--text-muted)",
-                    cursor: "pointer",
-                  }}
-                  title="Week 6 Baseline (K=8)"
-                >
-                  K=8 (Week 6)
-                </button>
-              </div>
-            </div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                background: "var(--bg-raised)",
-                border: "1px solid var(--border)",
-                borderRadius: "8px",
-                overflow: "hidden",
-                height: "38px",
-              }}
-            >
+            <div style={{ display: "flex", gap: "6px", marginBottom: "8px" }}>
               <button
                 type="button"
-                onClick={() => {
-                  const current = parseInt(String(topK), 10) || 1;
-                  setTopK(Math.max(1, current - 1));
-                }}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "var(--text-muted)",
-                  width: "36px",
-                  height: "100%",
-                  cursor: "pointer",
-                  fontSize: "1.1rem",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-                title="Decrease Top-k"
+                onClick={() => setTopK(5)}
+                disabled={isRunning}
+                className={`quick-pill ${Number(topK) === 5 ? "active" : ""}`}
+                title="Application Default (K=5)"
               >
-                −
+                K=5 (Default)
               </button>
-              <input
-                id="top-k-stepper-input"
-                type="number"
-                min="1"
-                max="20"
-                step="1"
-                value={topK}
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  if (raw === "") {
-                    setTopK("");
-                  } else {
-                    const val = parseInt(raw, 10);
-                    if (!isNaN(val)) {
-                      setTopK(Math.max(1, Math.min(20, val)));
-                    }
-                  }
-                }}
-                onBlur={() => {
-                  const trimmed = String(topK).trim();
-                  if (!/^\d+$/.test(trimmed)) {
-                    setTopK(5);
-                    return;
-                  }
-                  const val = Number(trimmed);
-                  setTopK(Math.max(1, Math.min(20, val)));
-                }}
-                style={{
-                  flex: 1,
-                  textAlign: "center",
-                  background: "transparent",
-                  border: "none",
-                  color: "#fff",
-                  fontSize: "0.85rem",
-                  fontWeight: 600,
-                  outline: "none",
-                  padding: 0,
-                }}
-              />
               <button
                 type="button"
-                onClick={() => {
-                  const current = parseInt(String(topK), 10) || 1;
-                  setTopK(Math.min(20, current + 1));
-                }}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "var(--text-muted)",
-                  width: "36px",
-                  height: "100%",
-                  cursor: "pointer",
-                  fontSize: "1.1rem",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-                title="Increase Top-k"
+                onClick={() => setTopK(8)}
+                disabled={isRunning}
+                className={`quick-pill ${Number(topK) === 8 ? "active" : ""}`}
+                title="Week 6 Baseline (K=8)"
               >
-                +
+                K=8 (Week 6)
               </button>
             </div>
+            <TopKSlider
+              value={Number(topK) || 5}
+              onChange={setTopK}
+              disabled={isRunning}
+            />
           </div>
           <div>
             <label

@@ -6,7 +6,10 @@ import { EvaluationDatasetManager } from "./EvaluationDatasetManager";
 import { QADataSetCase, DatasetMode } from "../../types/dataset";
 import { ModelSelect } from "../common/ModelSelect";
 import { useAvailableModels } from "../../hooks/useAvailableModels";
-import { ParameterSelect } from "../common/ParameterSelect";
+import {
+  TemperatureSlider,
+  TopKSlider,
+} from "../common/ModelParameterControls";
 import { FileImportButton } from "../common/FileImportButton";
 
 interface JudgeEvaluatorViewProps {
@@ -1244,66 +1247,11 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
             </span>
           </div>
 
-          <ParameterSelect
-            label="Top K:"
-            value={topK}
-            onChange={(value) => setTopK(Number.parseInt(value, 10))}
-            options={[4, 5, 6, 8, 10, 12].map((kVal) => ({
-              value: kVal,
-              label: `${kVal}${kVal === 8 ? " (Week 6 Baseline)" : kVal === 5 ? " (App Default)" : ""}`,
-            }))}
-            disabled={loading}
-            containerStyle={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-            }}
-            labelStyle={{
-              fontSize: "0.8rem",
-              fontWeight: 600,
-              color: "#e2e8f0",
-            }}
-            selectStyle={{
-              background: "rgba(30, 41, 59, 0.9)",
-              border: "1px solid var(--border)",
-              color: "#fff",
-              borderRadius: "6px",
-              padding: "5px 10px",
-              fontSize: "0.82rem",
-              fontWeight: 600,
-              cursor: loading ? "not-allowed" : "pointer",
-            }}
-          />
-
-          <ParameterSelect
-            label="Temperature:"
+          <TopKSlider value={topK} onChange={setTopK} disabled={loading} />
+          <TemperatureSlider
             value={temperature}
-            onChange={(value) => setTemperature(Number.parseFloat(value))}
-            options={[0.0, 0.1, 0.2, 0.3, 0.5, 0.7].map((tVal) => ({
-              value: tVal,
-              label: `${tVal.toFixed(1)}${tVal === 0.0 ? " (Week 6 Baseline)" : tVal === 0.3 ? " (App Default)" : ""}`,
-            }))}
+            onChange={setTemperature}
             disabled={loading}
-            containerStyle={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-            }}
-            labelStyle={{
-              fontSize: "0.8rem",
-              fontWeight: 600,
-              color: "#e2e8f0",
-            }}
-            selectStyle={{
-              background: "rgba(30, 41, 59, 0.9)",
-              border: "1px solid var(--border)",
-              color: "#fff",
-              borderRadius: "6px",
-              padding: "5px 10px",
-              fontSize: "0.82rem",
-              fontWeight: 600,
-              cursor: loading ? "not-allowed" : "pointer",
-            }}
           />
 
           <ModelSelect

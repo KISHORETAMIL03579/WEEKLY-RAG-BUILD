@@ -385,6 +385,8 @@ export const api = {
       question: string;
       case_id?: string;
       top_k?: number;
+      temperature?: number;
+      model?: string;
     },
     signal?: AbortSignal,
   ): Promise<any> {

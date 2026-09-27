@@ -1,6 +1,9 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useRef } from "react";
 import { DocumentInfo, StagedFile } from "../../types/document";
-import { getTempClass, getTempLabel } from "../../utils/helpers";
+import {
+  TemperatureSlider,
+  TopKSlider,
+} from "../common/ModelParameterControls";
 
 interface SidebarProps {
   strategy: string;
@@ -47,12 +50,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [urlInput, setUrlInput] = useState("");
   const [isLoadingUrl, setIsLoadingUrl] = useState(false);
   const [showCompare, setShowCompare] = useState(false);
-  const [topKInput, setTopKInput] = useState(String(topK));
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    setTopKInput(String(topK));
-  }, [topK]);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -89,37 +87,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       setUrlInput("");
     } finally {
       setIsLoadingUrl(false);
-    }
-  };
-
-  const handleTopKInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawVal = e.target.value;
-    setTopKInput(rawVal);
-    if (/^\d+$/.test(rawVal)) {
-      const parsed = parseInt(rawVal, 10);
-      if (parsed >= 1 && parsed <= 20) {
-        setTopK(parsed);
-      }
-    }
-  };
-
-  const handleTopKInputBlur = () => {
-    const trimmed = topKInput.trim();
-    if (!/^\d+$/.test(trimmed)) {
-      setTopK(8);
-      setTopKInput("8");
-      return;
-    }
-    const parsed = parseInt(trimmed, 10);
-    if (parsed < 1) {
-      setTopK(1);
-      setTopKInput("1");
-    } else if (parsed > 20) {
-      setTopK(20);
-      setTopKInput("20");
-    } else {
-      setTopK(parsed);
-      setTopKInput(String(parsed));
     }
   };
 
@@ -285,45 +252,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="sidebar-section">
         <div className="sidebar-label">RAG PARAMETERS & CONTROLS</div>
 
-        {/* Top-K Stepper */}
+        {/* Retrieval controls */}
         <div className="param-control-group">
-          <div className="param-header">
-            <span className="param-title">Retrieval Top-K</span>
-            <span className="param-badge">K = {topK}</span>
-          </div>
-          <div className="stepper-wrap">
-            <button
-              type="button"
-              className="stepper-btn"
-              disabled={topK <= 1 || isBusy}
-              onClick={() => setTopK((k) => Math.max(1, k - 1))}
-              title="Decrease Top-K"
-              aria-label="Decrease retrieval Top-K"
-            >
-              −
-            </button>
-            <input
-              type="number"
-              min="1"
-              max="20"
-              value={topKInput}
-              disabled={isBusy}
-              onChange={handleTopKInputChange}
-              onBlur={handleTopKInputBlur}
-              className="stepper-input"
-              aria-label="Retrieval Top-K value"
-            />
-            <button
-              type="button"
-              className="stepper-btn"
-              disabled={topK >= 20 || isBusy}
-              onClick={() => setTopK((k) => Math.min(20, k + 1))}
-              title="Increase Top-K"
-              aria-label="Increase retrieval Top-K"
-            >
-              +
-            </button>
-          </div>
+          <TopKSlider value={topK} onChange={setTopK} disabled={isBusy} />
           <div className="quick-pills">
             {[3, 5, 8, 12, 16].map((p) => (
               <button
@@ -343,35 +274,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        {/* Temperature Slider */}
         <div className="param-control-group param-group-spaced">
-          <div className="param-header">
-            <span className="param-title">Generation Temperature</span>
-            <span className={`temp-badge temp-${getTempClass(temperature)}`}>
-              {temperature.toFixed(2)} · {getTempLabel(temperature)}
-            </span>
-          </div>
-          <div className="slider-wrap">
-            <input
-              type="range"
-              min="0.0"
-              max="1.0"
-              step="0.05"
-              value={temperature}
-              disabled={isBusy}
-              onChange={(e) => setTemperature(parseFloat(e.target.value))}
-              className="temp-slider"
-              aria-label="Generation temperature slider"
-            />
-            <div className="slider-ticks">
-              <span>0.0 (Strict)</span>
-              <span>0.5 (Balanced)</span>
-              <span>1.0 (Creative/Test)</span>
-            </div>
-          </div>
+          <TemperatureSlider
+            value={temperature}
+            onChange={setTemperature}
+            disabled={isBusy}
+          />
           <div className="param-hint">
-            Set 0.0 for strict factuality, or &gt;0.7 to evaluate hallucination
-            risk.
+            Use low temperature for grounded answers, or the hallucination-risk
+            preset to stress-test answer variability.
           </div>
         </div>
       </div>

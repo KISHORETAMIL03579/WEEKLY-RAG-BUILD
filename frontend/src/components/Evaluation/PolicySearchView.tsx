@@ -13,6 +13,10 @@ import {
   RetryRecord,
 } from "../../types/policy";
 import { ModelSelect } from "../common/ModelSelect";
+import {
+  TemperatureSlider,
+  TopKSlider,
+} from "../common/ModelParameterControls";
 import { useAvailableModels } from "../../hooks/useAvailableModels";
 
 interface PolicySearchViewProps {
@@ -829,46 +833,8 @@ export const PolicySearchView: React.FC<PolicySearchViewProps> = ({
             alignItems: "flex-end",
           }}
         >
-          {[
-            {
-              label: "Top-K",
-              value: topK,
-              setter: (v: number) => setTopK(v),
-              min: 1,
-              max: 20,
-              step: 1,
-            },
-            {
-              label: "Temperature",
-              value: temperature,
-              setter: (v: number) => setTemperature(v),
-              min: 0,
-              max: 1,
-              step: 0.05,
-            },
-          ].map(({ label, value, setter, min, max, step }) => (
-            <div key={label} style={{ minWidth: 120 }}>
-              <label
-                style={{
-                  fontSize: "0.72rem",
-                  color: "var(--text-muted)",
-                  display: "block",
-                  marginBottom: 3,
-                }}
-              >
-                {label}: <strong>{value}</strong>
-              </label>
-              <input
-                type="range"
-                min={min}
-                max={max}
-                step={step}
-                value={value}
-                onChange={(e) => setter(Number(e.target.value))}
-                style={{ width: "100%" }}
-              />
-            </div>
-          ))}
+          <TopKSlider value={topK} onChange={setTopK} />
+          <TemperatureSlider value={temperature} onChange={setTemperature} />
           <ModelSelect
             label={`Model (${provider || "configured provider"})`}
             value={model}
@@ -937,8 +903,8 @@ export const PolicySearchView: React.FC<PolicySearchViewProps> = ({
           </div>
         </div>
         <div style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>
-          Top-K controls handbook retrieval. Temperature and model are used only
-          when routing selects Agent mode; Workflow execution is deterministic.
+          Top-K controls handbook retrieval. The selected model and temperature
+          are used for answer synthesis in both execution modes.
         </div>
 
         {/* Route Preview */}

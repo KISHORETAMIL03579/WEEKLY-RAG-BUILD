@@ -1300,7 +1300,8 @@ body {
   flex-direction: column;
   gap: 4px;
 }
-.temp-slider {
+.temp-slider,
+.parameter-range {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
@@ -1311,7 +1312,8 @@ body {
   outline: none;
   cursor: pointer;
 }
-.temp-slider::-webkit-slider-thumb {
+.temp-slider::-webkit-slider-thumb,
+.parameter-range::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 16px;
@@ -1322,11 +1324,13 @@ body {
   cursor: pointer;
   transition: transform 0.1s ease;
 }
-.temp-slider::-webkit-slider-thumb:hover {
+.temp-slider::-webkit-slider-thumb:hover,
+.parameter-range::-webkit-slider-thumb:hover {
   transform: scale(1.18);
   background: var(--accent-hover);
 }
-.temp-slider::-moz-range-thumb {
+.temp-slider::-moz-range-thumb,
+.parameter-range::-moz-range-thumb {
   width: 16px;
   height: 16px;
   border-radius: 50%;
@@ -1334,6 +1338,64 @@ body {
   border: none;
   box-shadow: 0 0 6px var(--accent-glow-btn);
   cursor: pointer;
+}
+
+.parameter-control {
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.parameter-control-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.parameter-control-label {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+.parameter-control-value {
+  color: var(--text-primary);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.parameter-control-ticks {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+}
+.temperature-presets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+.temperature-preset {
+  padding: 3px 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.62rem;
+  line-height: 1.2;
+}
+.temperature-preset:hover:not(:disabled),
+.temperature-preset.active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--text-primary);
+}
+.temperature-preset:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.parameter-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .slider-ticks {

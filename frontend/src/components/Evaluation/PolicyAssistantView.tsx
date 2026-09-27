@@ -14,7 +14,10 @@ import { MetricCard } from "../common/MetricCard";
 import { ModelSelect } from "../common/ModelSelect";
 import { useAvailableModels } from "../../hooks/useAvailableModels";
 import { CancelButton } from "../common/CancelButton";
-import { ParameterSelect } from "../common/ParameterSelect";
+import {
+  TemperatureSlider,
+  TopKSlider,
+} from "../common/ModelParameterControls";
 import { ProgressBar } from "../common/ProgressBar";
 
 interface PolicyAssistantViewProps {
@@ -309,6 +312,8 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
           question: queryText.trim(),
           case_id: selectedCaseId,
           top_k: topK,
+          temperature,
+          model: selectedModel,
         });
         setWorkflowSingleResult(wRes);
         results.push(wRes);
@@ -477,7 +482,7 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
               marginTop: "4px",
             }}
           >
-            Dynamic ReAct Agent vs 3-Step Deterministic Workflow
+            Dynamic ReAct Agent vs Fixed-Sequence LLM Workflow
           </div>
           <p
             style={{
@@ -488,8 +493,8 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
               lineHeight: "1.4",
             }}
           >
-            Compare a real LLM-based policy agent against a deterministic policy
-            workflow using 10 canonical HR policy cases.
+            Compare a tool-calling policy agent against a fixed-sequence,
+            LLM-backed workflow using HR policy cases.
           </p>
         </div>
 
@@ -690,78 +695,27 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
             opacity: isRunningBenchmark ? 0.75 : 1,
           }}
         >
-          <ParameterSelect
-            label="Top K"
+          <TopKSlider
             value={topK}
-            onChange={(value) => setTopK(Number(value))}
-            options={[
-              { value: 4, label: "4" },
-              { value: 5, label: "5 (Default)" },
-              { value: 6, label: "6" },
-              { value: 8, label: "8 (Baseline)" },
-              { value: 10, label: "10" },
-              { value: 12, label: "12" },
-            ]}
+            onChange={setTopK}
             disabled={isRunningBenchmark}
-            labelStyle={{
-              fontSize: "0.75rem",
-              color: "var(--text-muted)",
-              display: "block",
-              marginBottom: "4px",
-            }}
-            selectStyle={{
-              width: "100%",
-              padding: "6px 8px",
-              borderRadius: "6px",
-              background: "var(--bg-surface)",
-              border: "1px solid var(--border)",
-              color: "#fff",
-              fontSize: "0.82rem",
-              cursor: isRunningBenchmark ? "not-allowed" : "pointer",
-            }}
           />
-
-          <ParameterSelect
-            label="Agent Temperature"
+          <TemperatureSlider
             value={temperature}
-            onChange={(value) => setTemperature(Number(value))}
-            options={[
-              { value: 0.0, label: "0.0 (Deterministic)" },
-              { value: 0.1, label: "0.1" },
-              { value: 0.2, label: "0.2" },
-              { value: 0.3, label: "0.3 (Default)" },
-              { value: 0.5, label: "0.5" },
-              { value: 0.7, label: "0.7" },
-            ]}
+            onChange={setTemperature}
             disabled={isRunningBenchmark}
-            labelStyle={{
-              fontSize: "0.75rem",
-              color: "var(--text-muted)",
-              display: "block",
-              marginBottom: "4px",
-            }}
-            selectStyle={{
-              width: "100%",
-              padding: "6px 8px",
-              borderRadius: "6px",
-              background: "var(--bg-surface)",
-              border: "1px solid var(--border)",
-              color: "#fff",
-              fontSize: "0.82rem",
-              cursor: isRunningBenchmark ? "not-allowed" : "pointer",
-            }}
           />
 
-          {/* Agent Model Control */}
+          {/* Shared model selection for both execution paths */}
           <ModelSelect
-            label={`Agent Model (${provider || "configured provider"})`}
+            label={`Model (${provider || "configured provider"})`}
             value={selectedModel}
             onChange={setSelectedModel}
             models={availableModels}
             defaultModel={defaultModel}
             isLoading={isLoadingModels}
             disabled={isRunningBenchmark}
-            loadingLabel="Loading Agent models…"
+            loadingLabel="Loading models…"
             emptyLabel="No tool-capable models"
             showDefaultLabel
             preserveUnavailableValue
@@ -812,7 +766,7 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
                 fontWeight: 600,
               }}
             >
-              Deterministic
+              Fixed sequence · LLM synthesis
             </div>
           </div>
 
@@ -838,7 +792,7 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
                 color: "var(--text-muted)",
               }}
             >
-              N/A (Deterministic)
+              {temperature.toFixed(2)}
             </div>
           </div>
         </div>
@@ -873,8 +827,9 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
               maxWidth: "480px",
             }}
           >
-            Run the {activeCasesCount}-case benchmark to compare the real Agent
-            against the deterministic Workflow across 4 execution budgets.
+            Run the {activeCasesCount}-case benchmark to compare the tool-calling
+            Agent with the fixed-sequence, LLM-backed Workflow under shared
+            execution budgets.
           </p>
           <button
             type="button"
@@ -2317,13 +2272,13 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
               receives tool results before producing the final answer.
             </p>
             <p>
-              <strong>Workflow:</strong> Deterministic 3-step execution: (1)
-              Employee lookup, (2) Handbook lookup, (3) Deterministic policy
-              resolution.
+              <strong>Workflow:</strong> Fixed employee and handbook lookups
+              followed by one model synthesis call. The selected model and
+              temperature are shared with the Agent.
             </p>
             <p>
               <strong>Latency:</strong> Agent latency includes real provider
-              execution. Workflow latency measures deterministic execution.
+              execution for both Agent and Workflow synthesis.
             </p>
             <p>
               <strong>Cost:</strong> Estimated token-cost proxy based on
