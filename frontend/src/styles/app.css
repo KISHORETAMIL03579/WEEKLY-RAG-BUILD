@@ -5,10 +5,15 @@
   --bg-raised: hsl(220, 13%, 14%);
   --bg-card: hsl(220, 13%, 14%);
   --bg-hover: hsl(220, 12%, 17%);
+  /* Blocks that sit on top of a --bg-surface card (inset panels, tiles, tables).
+     Aliased so any theme that redefines --bg-raised / --text-primary keeps them in sync. */
+  --bg-surface-elevated: var(--bg-raised);
+  --bg-inset: hsl(220, 16%, 9%);
   --border: hsl(220, 12%, 20%);
   --border-mid: hsl(220, 10%, 26%);
 
   --text-primary: hsl(220, 20%, 94%);
+  --text-main: var(--text-primary);
   --text-secondary: hsl(220, 12%, 60%);
   --text-muted: hsl(220, 12%, 52%);
   --text-bright: #ffffff;
@@ -726,6 +731,72 @@ body {
 }
 .btn-green:hover {
   opacity: 0.9;
+}
+
+/* Destructive / stop actions. Combine with .btn-secondary (outlined red) or use alone. */
+.btn-danger,
+.btn-secondary.btn-danger {
+  background: var(--red-dim);
+  border: 1px solid var(--red-border);
+  border-radius: var(--radius-md);
+  color: var(--red);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 10px 14px;
+  transition:
+    background-color var(--ease),
+    border-color var(--ease),
+    color var(--ease);
+}
+.btn-danger:hover:not(:disabled),
+.btn-secondary.btn-danger:hover:not(:disabled) {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
+.btn-danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Surface used by <Card> */
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+}
+
+/* Indeterminate spinner; size it with width/height (defaults to 16px). */
+.spinner {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--accent-dim);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2.4s;
+  }
 }
 
 /* Generic Disabled States for Interactive Controls */

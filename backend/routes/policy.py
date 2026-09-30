@@ -1,91 +1,97 @@
-# backend/routes/policy.py — FastAPI Routes for HR Policy Assistant (Week 7)
-# Week 7 Responsibilities:
-#   - /api/policy/search   → auto-routes to workflow or agent based on question complexity
-#   - /api/policy/agent    → direct agent execution (for explicit/benchmark use)
-#   - /api/policy/workflow → direct workflow execution (for explicit/benchmark use)
-#   - /api/policy/benchmark* → 10-case benchmark comparison runs
+# backend/routes/policy.py — HR policy assistant API (Weeks 7-9)
 #
-# Week 6 is handled separately by backend/routes/evaluation.py
+#   /api/policy/search      auto-routes a question to the fixed workflow or the ReAct agent
+#   /api/policy/agent       run the agent directly
+#   /api/policy/workflow    run the fixed workflow directly
+#   /api/policy/benchmark*  race agent vs workflow over a case suite
+#   /api/policy/trajectory* expected tool paths and trajectory scoring (Week 8)
+#
+# Every tool reads the chunks the user uploaded (Qdrant, per browser session); none of
+# these endpoints answers from built-in data. Week 6 lives in routes/evaluation.py.
 from __future__ import annotations
 
 import csv
-import json
-import socket
 import time
-import urllib.error
-import urllib.request
 import uuid
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+import httpx
+from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-import httpx
-
 from backend.config import (
-    BASE_DIR,
     CHAT_BACKEND,
     GROQ_AGENT_MODELS,
     GROQ_API_KEY,
     GROQ_MODEL,
     GROQ_URL,
     LLM_MODEL,
-    OLLAMA_CHAT_MODEL,
-    OLLAMA_URL,
     logger,
 )
+from backend.errors import ConflictError, DependencyError, NotFoundError, ValidationError
+from backend.mcp.registry import get_tool_registry
 from backend.schemas.policy import (
-    MAX_RETRIES,
     MAX_COST,
+    MAX_RETRIES,
     MAX_TOKENS,
     MAX_WALL_CLOCK_SECONDS,
-    TOKEN_COST_PROXY_RATE,
-    BenchmarkCase,
-    EmployeeRecord,
     PolicyOutputContract,
     PolicyQueryRequest,
 )
+from backend.services import policy_retrieval, policy_trajectory
+from backend.services.embeddings import LEXICAL_ONLY, embeddings_configured
 from backend.services.policy_agent import run_agent_case
 from backend.services.policy_benchmark_runner import (
     PolicyBenchmarkRunManager,
     PolicyBenchmarkRunState,
+    load_suite,
 )
-from backend.services.policy_router import (
-    route_policy_question,
-    MODE_WORKFLOW,
-    MODE_AGENT,
-)
-from backend.services.policy_tools import CANONICAL_EMPLOYEES
+from backend.services.policy_router import MODE_AGENT, MODE_WORKFLOW, route_policy_question
 from backend.services.policy_workflow import run_workflow_case
+from backend.storage.exceptions import RetrievalBackendError
+from backend.storage.session_manager import OptionalSessionId, get_store
 
 router = APIRouter(prefix="/api/policy", tags=["policy"])
 
-
-# ── Non-retryable error reasons ──────────────────────────────────────────────
-_NON_RETRYABLE_TERMINATION_REASONS = {
-    "BUDGET_ITERATIONS",
-    "BUDGET_TOKENS",
-    "BUDGET_COST",
-    "BUDGET_WALL_CLOCK",
-    "INVALID_EMPLOYEE",
-    "INVALID_ARGUMENTS",
-}
-
-_RETRYABLE_REASONS = {
-    "OLLAMA_TIMEOUT",
-    "OLLAMA_UNAVAILABLE",
-    "TRANSIENT_NETWORK",
+# Run-level retries (whole agent/workflow run again). Budgets, bad input and "nothing
+# indexed" are never retried; provider/tool/model failures may be.
+_RETRYABLE_TERMINATIONS = {
     "PROVIDER_TRANSIENT",
-    "MODEL_ERROR",
+    "GROQ_UNAVAILABLE",
     "TOOL_ERROR",
+    "MODEL_ERROR",
 }
 
 
-def _is_retryable(termination_reason: str) -> bool:
-    """Return True only for transient, retryable failures."""
-    return termination_reason in _RETRYABLE_REASONS
+# ── Session scope ─────────────────────────────────────────────────────────────
+
+
+def _session_store(sid: Optional[str]):
+    if not sid:
+        raise ConflictError(
+            "Upload the HR policy documents first: policy tools only read uploaded documents.",
+            code="NO_INDEXED_DOCUMENTS",
+        )
+    try:
+        return get_store(sid)
+    except RetrievalBackendError as exc:
+        logger.error("Policy store unavailable: %s", exc)
+        raise DependencyError("The document index is unreachable.") from exc
+
+
+def _context(sid: Optional[str], document_ids: Optional[List[str]] = None) -> policy_retrieval.PolicyContext:
+    """Session scope for a request; 409 when nothing has been uploaded and indexed."""
+    store = _session_store(sid)
+    if not store.chunks:
+        raise ConflictError(
+            "No documents are indexed for this session. Upload the HR policy documents first.",
+            code="NO_INDEXED_DOCUMENTS",
+        )
+    return policy_retrieval.PolicyContext(sid, tuple(document_ids or ()))  # type: ignore[arg-type]
+
+
+# ── Run-level retry wrapper ───────────────────────────────────────────────────
 
 
 def _run_with_retries(
@@ -96,305 +102,124 @@ def _run_with_retries(
     top_k: int,
     temperature: float,
     model: str,
+    context: policy_retrieval.PolicyContext,
     max_retries: int = MAX_RETRIES,
     max_wall_clock: float = MAX_WALL_CLOCK_SECONDS,
 ) -> tuple[PolicyOutputContract, list[dict]]:
+    """Run the workflow or agent, retrying only transient failures.
+
+    Contract: attempt 1 is the initial run; at most ``max_retries`` (<= MAX_RETRIES)
+    further attempts follow a retryable termination. The mode never changes between
+    attempts. Tokens, cost and latency accumulate, and the four budgets apply to the
+    sum of all attempts. The returned result carries the final attempt's tool trace;
+    every attempt (reason, tokens, tool sequence, tool/model retries) is in
+    ``retry_history``.
     """
-    Execute workflow or agent with automatic retry for transient failures.
-
-    Retry contract:
-      - Initial attempt is attempt=1
-      - Maximum retries = MAX_RETRIES (2), so maximum total attempts = 3
-      - Non-retryable failures (budget exhausted, invalid data) are NOT retried
-      - Mode does NOT change during retry (agent retries as agent)
-      - All token/latency/cost from retries accumulate in total
-    """
-    retry_history: list[dict] = []
-    accumulated_tokens = 0
-    accumulated_prompt_tokens = 0
-    accumulated_completion_tokens = 0
-    accumulated_cost = 0.0
-    accumulated_latency = 0.0
-    accumulated_llm_calls: list[dict] = []
-    accumulated_token_source = "unavailable"
-    max_total_attempts = 1 + max_retries  # initial + retries
-    execution_started = time.perf_counter()
-
-    last_result: Optional[PolicyOutputContract] = None
-
     if type(max_retries) is not int or not 0 <= max_retries <= MAX_RETRIES:
-        raise ValueError(f"max_retries must be between 0 and {MAX_RETRIES}")
+        raise ValidationError(f"max_retries must be between 0 and {MAX_RETRIES}")
+    history: list[dict] = []
+    totals = {"prompt": 0, "completion": 0, "tokens": 0, "cost": 0.0}
+    llm_calls: list[dict] = []
+    started = time.perf_counter()
+    result: Optional[PolicyOutputContract] = None
 
-    for attempt in range(1, max_total_attempts + 1):
-        remaining_wall_clock = max_wall_clock - (
-            time.perf_counter() - execution_started
-        )
-        remaining_tokens = MAX_TOKENS - accumulated_tokens
-        remaining_cost = MAX_COST - accumulated_cost
-        budget_reason = (
+    for attempt in range(1, max_retries + 2):
+        remaining_time = max_wall_clock - (time.perf_counter() - started)
+        remaining_tokens = MAX_TOKENS - totals["tokens"]
+        remaining_cost = MAX_COST - totals["cost"]
+        exhausted = (
             "BUDGET_WALL_CLOCK"
-            if remaining_wall_clock <= 0
-            else (
-                "BUDGET_TOKENS"
-                if remaining_tokens <= 0
-                else "BUDGET_COST" if remaining_cost <= 0 else None
-            )
+            if remaining_time <= 0
+            else "BUDGET_TOKENS"
+            if remaining_tokens <= 0
+            else "BUDGET_COST"
+            if remaining_cost <= 0
+            else None
         )
-        if budget_reason:
-            budget_explanations = {
-                "BUDGET_WALL_CLOCK": "Policy execution stopped because its wall-clock budget was exhausted.",
-                "BUDGET_TOKENS": "Policy execution stopped because its token budget was exhausted.",
-                "BUDGET_COST": "Policy execution stopped because its cost budget was exhausted.",
-            }
-            retry_history.append(
-                {
-                    "attempt": attempt,
-                    "status": "BUDGET_EXHAUSTED",
-                    "latency_ms": 0.0,
-                    "input_tokens": 0,
-                    "output_tokens": 0,
-                    "total_tokens": 0,
-                    "estimated_cost": 0.0,
-                    "is_retry": attempt > 1,
-                    "retryable": False,
-                    "retry_reason": budget_reason,
-                }
+        if exhausted:
+            history.append(
+                {"attempt": attempt, "status": "BUDGET_EXHAUSTED", "retry_reason": exhausted, "retryable": False}
             )
-            failed_result = PolicyOutputContract(
-                case_id=case_id,
-                employee_id=employee_id,
-                question=question,
-                entitlement_value="",
-                rule_cited="",
-                explanation=budget_explanations[budget_reason],
-                passed=False,
-                implementation=mode,
-                execution_mode=mode,
-                termination_reason=budget_reason,
-                latency_ms=round((time.perf_counter() - execution_started) * 1000, 3),
-                prompt_tokens=accumulated_prompt_tokens,
-                completion_tokens=accumulated_completion_tokens,
-                total_tokens=accumulated_tokens,
-                cost_usd=accumulated_cost,
-                attempt=max(1, attempt - 1),
-                total_attempts=max(1, attempt - 1),
-                retry_history=retry_history,
-                llm_calls=accumulated_llm_calls,
-                token_source=accumulated_token_source,
-                top_k=top_k,
-                temperature=temperature,
-                model=model,
-            )
-            return failed_result, retry_history
+            assert result is not None  # attempt 1 always runs: budgets start full
+            result.termination_reason = exhausted
+            result.passed = False
+            break
 
-        attempt_start = time.perf_counter()
-        is_retry = attempt > 1
-        retry_reason = None
-
-        try:
-            if mode == MODE_WORKFLOW:
-                result = run_workflow_case(
-                    case_id=case_id,
-                    employee_id=employee_id,
-                    question=question,
-                    top_k=top_k,
-                    temperature=temperature,
-                    model=model,
-                    max_tokens=remaining_tokens,
-                    max_cost=remaining_cost,
-                    max_wall_clock=remaining_wall_clock,
-                )
-            else:
-                result = run_agent_case(
-                    case_id=case_id,
-                    employee_id=employee_id,
-                    question=question,
-                    top_k=top_k,
-                    temperature=temperature,
-                    model=model,
-                    max_tokens=remaining_tokens,
-                    max_cost=remaining_cost,
-                    max_wall_clock=remaining_wall_clock,
-                )
-
-            attempt_ms = (time.perf_counter() - attempt_start) * 1000
-            accumulated_prompt_tokens += result.prompt_tokens
-            accumulated_completion_tokens += result.completion_tokens
-            accumulated_tokens += result.total_tokens
-            accumulated_cost += result.cost_usd
-            accumulated_latency += attempt_ms
-            if result.token_source.endswith("_live"):
-                accumulated_token_source = result.token_source
-            elif (
-                result.token_source == "proxy_estimate"
-                and accumulated_token_source == "unavailable"
-            ):
-                accumulated_token_source = "proxy_estimate"
-            call_index_base = len(accumulated_llm_calls)
-            accumulated_llm_calls.extend(
-                {
-                    **call,
-                    "call_index": call_index_base + index + 1,
-                    "attempt": attempt,
-                    "is_retry": is_retry,
-                }
-                for index, call in enumerate(result.llm_calls)
-            )
-
-            if time.perf_counter() - execution_started >= max_wall_clock:
-                result.termination_reason = "BUDGET_WALL_CLOCK"
-                result.passed = False
-                result.entitlement_value = ""
-                result.rule_cited = ""
-                result.explanation = "Policy execution stopped because its wall-clock budget was exhausted."
-
-            result_ok = result.termination_reason == "SUCCESS"
-            retryable = False if result_ok else _is_retryable(result.termination_reason)
-            will_retry = retryable and attempt < max_total_attempts
-            retry_history.append(
-                {
-                    "attempt": attempt,
-                    "status": (
-                        "SUCCESS"
-                        if result_ok
-                        else ("RETRY" if will_retry else "FAILED")
-                    ),
-                    "latency_ms": round(attempt_ms, 3),
-                    "input_tokens": result.prompt_tokens,
-                    "output_tokens": result.completion_tokens,
-                    "total_tokens": result.total_tokens,
-                    "estimated_cost": round(result.cost_usd, 8),
-                    "is_retry": is_retry,
-                    "retryable": retryable,
-                    "retry_reason": None if result_ok else result.termination_reason,
-                }
-            )
-
-            if result_ok or not will_retry:
-                result.total_tokens = accumulated_tokens
-                result.prompt_tokens = accumulated_prompt_tokens
-                result.completion_tokens = accumulated_completion_tokens
-                result.cost_usd = accumulated_cost
-                result.latency_ms = round(accumulated_latency, 3)
-                result.llm_calls = accumulated_llm_calls
-                result.token_source = accumulated_token_source
-                result.attempt = attempt
-                result.total_attempts = attempt
-                result.retry_history = retry_history
-                last_result = result
-                return result, retry_history
-
-            last_result = result
-            logger.warning(
-                f"Attempt {attempt} failed ({result.termination_reason}), retrying... "
-                f"({max_total_attempts - attempt} remaining)"
-            )
-            continue
-
-        except Exception as exc:
-            attempt_ms = (time.perf_counter() - attempt_start) * 1000
-            # Determine if this is retryable
-            exc_str = str(exc).upper()
-            if "TIMEOUT" in exc_str:
-                retry_reason = "OLLAMA_TIMEOUT"
-                retryable = True
-            elif "CONNECTION" in exc_str or "NETWORK" in exc_str:
-                retry_reason = "TRANSIENT_NETWORK"
-                retryable = True
-            elif "BUDGET" in exc_str:
-                retry_reason = exc_str
-                retryable = False
-            else:
-                retry_reason = "MODEL_ERROR"
-                retryable = True
-            if time.perf_counter() - execution_started >= max_wall_clock:
-                retry_reason = "BUDGET_WALL_CLOCK"
-                retryable = False
-            else:
-                retryable = _is_retryable(retry_reason)
-
-            retry_history.append(
-                {
-                    "attempt": attempt,
-                    "status": (
-                        "RETRY"
-                        if (retryable and attempt < max_total_attempts)
-                        else "FAILED"
-                    ),
-                    "latency_ms": round(attempt_ms, 3),
-                    "input_tokens": 0,
-                    "output_tokens": 0,
-                    "total_tokens": 0,
-                    "estimated_cost": 0.0,
-                    "is_retry": is_retry,
-                    "retryable": retryable,
-                    "retry_reason": retry_reason,
-                }
-            )
-
-            accumulated_latency += attempt_ms
-
-            if not retryable or attempt >= max_total_attempts:
-                logger.exception(
-                    "Policy execution failed after %d attempt(s) (%s)",
-                    attempt,
-                    retry_reason,
-                )
-                if retry_reason == "OLLAMA_TIMEOUT":
-                    safe_message = (
-                        "The model provider timed out before generating an answer."
-                    )
-                elif retry_reason == "TRANSIENT_NETWORK":
-                    safe_message = "A required provider or tool could not be reached."
-                else:
-                    safe_message = "The policy request failed because the model provider returned an error."
-                failed_result = PolicyOutputContract(
-                    case_id=case_id,
-                    employee_id=employee_id,
-                    question=question,
-                    entitlement_value="",
-                    rule_cited="",
-                    explanation=safe_message,
-                    passed=False,
-                    implementation=mode,
-                    execution_mode=mode,
-                    termination_reason=(retry_reason or "MODEL_ERROR"),
-                    latency_ms=round(accumulated_latency, 3),
-                    prompt_tokens=accumulated_prompt_tokens,
-                    completion_tokens=accumulated_completion_tokens,
-                    total_tokens=accumulated_tokens,
-                    cost_usd=accumulated_cost,
-                    llm_calls=accumulated_llm_calls,
-                    token_source=accumulated_token_source,
-                    attempt=attempt,
-                    total_attempts=attempt,
-                    retry_history=retry_history,
-                    top_k=top_k,
-                    temperature=temperature,
-                    model=model,
-                )
-                return failed_result, retry_history
-
-            logger.warning(
-                f"Attempt {attempt} failed ({retry_reason}), retrying... ({max_total_attempts - attempt} remaining)"
-            )
-
-    # Should not reach here, but safety net
-    return (
-        last_result
-        or PolicyOutputContract(
+        common: Dict[str, Any] = dict(
             case_id=case_id,
             employee_id=employee_id,
             question=question,
-            entitlement_value="",
-            rule_cited="",
-            explanation="Unexpected retry exhaustion",
-            passed=False,
-            implementation=mode,
-            termination_reason="MAX_RETRIES",
-        ),
-        retry_history,
-    )
+            top_k=top_k,
+            temperature=temperature,
+            model=model,
+            context=context,
+            max_wall_clock=remaining_time,
+            max_cost=remaining_cost,
+        )
+        attempt_started = time.perf_counter()
+        if mode == MODE_WORKFLOW:
+            result = run_workflow_case(max_tokens=remaining_tokens, **common)
+        else:
+            result = run_agent_case(max_tokens=remaining_tokens, **common)
+        attempt_ms = (time.perf_counter() - attempt_started) * 1000
+
+        totals["prompt"] += result.prompt_tokens
+        totals["completion"] += result.completion_tokens
+        totals["tokens"] += result.total_tokens
+        totals["cost"] += result.cost_usd
+        base = len(llm_calls)
+        llm_calls.extend(
+            {**call, "call_index": base + index + 1, "attempt": attempt, "is_retry": attempt > 1}
+            for index, call in enumerate(result.llm_calls)
+        )
+        ok = result.termination_reason == "SUCCESS"
+        retryable = not ok and result.termination_reason in _RETRYABLE_TERMINATIONS
+        will_retry = retryable and attempt <= max_retries
+        retries = (result.tool_audit or {}).get("retries", {})
+        history.append(
+            {
+                "attempt": attempt,
+                "status": "SUCCESS" if ok else ("RETRY" if will_retry else "FAILED"),
+                "retry_reason": None if ok else result.termination_reason,
+                "retryable": retryable,
+                "latency_ms": round(attempt_ms, 3),
+                "input_tokens": result.prompt_tokens,
+                "output_tokens": result.completion_tokens,
+                "total_tokens": result.total_tokens,
+                "estimated_cost": round(result.cost_usd, 8),
+                "tool_sequence": [call["tool_name"] for call in result.tool_calls],
+                "tool_retries": retries.get("tool_retries", {}),
+                "model_call_retries": retries.get("model_call_retries", 0),
+                "is_retry": attempt > 1,
+            }
+        )
+        if not will_retry:
+            break
+        logger.warning(
+            "policy %s attempt %d failed (%s); retrying (%d left)",
+            mode,
+            attempt,
+            result.termination_reason,
+            max_retries + 1 - attempt,
+        )
+
+    assert result is not None
+    final_attempt = len([h for h in history if h["status"] != "BUDGET_EXHAUSTED"])
+    result.prompt_tokens = totals["prompt"]
+    result.completion_tokens = totals["completion"]
+    result.total_tokens = totals["tokens"]
+    result.cost_usd = round(totals["cost"], 8)
+    result.latency_ms = round((time.perf_counter() - started) * 1000, 3)
+    result.llm_calls = llm_calls
+    result.attempt = result.total_attempts = final_attempt
+    result.retry_history = history
+    if result.tool_audit.get("retries") is not None:
+        result.tool_audit["retries"]["run_attempts"] = final_attempt
+        result.tool_audit["retries"]["run_retries"] = max(0, final_attempt - 1)
+    return result, history
+
+
+# ── Request models ────────────────────────────────────────────────────────────
 
 
 class PolicyBenchmarkStartRequest(BaseModel):
@@ -402,11 +227,13 @@ class PolicyBenchmarkStartRequest(BaseModel):
     temperature: float = Field(default=0.3, ge=0.0, le=1.0)
     model: Optional[str] = LLM_MODEL
     background: bool = Field(default=False)
+    suite: str = Field(default="canonical", description="canonical | branching | all")
     cases: Optional[List[Dict[str, Any]]] = None
+    document_ids: Optional[List[str]] = None
 
 
 class PolicySearchRequest(BaseModel):
-    """Request for auto-routed HR policy search."""
+    """Request for an auto-routed HR policy question."""
 
     employee_id: str = Field(..., description="Employee ID, e.g. EMP001")
     question: str = Field(..., description="HR policy question")
@@ -416,388 +243,320 @@ class PolicySearchRequest(BaseModel):
     model: Optional[str] = LLM_MODEL
     max_retries: Optional[int] = Field(MAX_RETRIES, ge=0, le=MAX_RETRIES)
     force_mode: Optional[str] = None  # "workflow" | "agent" | None (auto-route)
+    document_ids: Optional[List[str]] = None
 
 
-def _load_benchmark_cases() -> List[Dict[str, Any]]:
-    """Loads benchmark cases from benchmarks/policy_execution/cases.json."""
-    cases_file = BASE_DIR / "benchmarks" / "policy_execution" / "cases.json"
-    if cases_file.exists():
-        try:
-            with open(cases_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"Failed to load benchmark cases from {cases_file}: {e}")
-    return []
+class TrajectoryEvaluateRequest(BaseModel):
+    run_id: Optional[str] = None
+    baseline_run_id: Optional[str] = None
+
+
+# ── Models / readiness ────────────────────────────────────────────────────────
 
 
 @router.get("/models")
 def get_available_models():
-    """Return available models for the configured chat provider."""
-    if CHAT_BACKEND == "groq":
-        if not GROQ_API_KEY:
-            raise HTTPException(
-                status_code=503, detail="GROQ_API_KEY is not configured."
-            )
-        try:
-            response = httpx.get(
-                f"{GROQ_URL.rstrip('/')}/models",
-                headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
-                timeout=5.0,
-            )
-            response.raise_for_status()
-            payload = response.json()
-        except httpx.HTTPStatusError as exc:
-            logger.warning("Groq model list returned HTTP %d", exc.response.status_code)
-            raise HTTPException(
-                status_code=503, detail="Unable to load available Groq models."
-            ) from exc
-        except httpx.RequestError as exc:
-            logger.warning(
-                "Groq model list request failed (error_type=%s)", type(exc).__name__
-            )
-            raise HTTPException(
-                status_code=503, detail="Unable to load available Groq models."
-            ) from exc
-        except ValueError as exc:
-            logger.error("Groq returned an invalid model list response")
-            raise HTTPException(
-                status_code=502, detail="Groq returned an invalid model list."
-            ) from exc
-        if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
-            raise HTTPException(
-                status_code=502, detail="Groq returned an invalid model list."
-            )
-        models = sorted(
-            {
-                item["id"]
-                for item in payload["data"]
-                if isinstance(item, dict) and isinstance(item.get("id"), str)
-            }
-        )
-        return {
-            "provider": "groq",
-            "default_model": GROQ_MODEL,
-            "models": models,
-            "agent_models": [model for model in models if model in GROQ_AGENT_MODELS],
-        }
-
-    request = urllib.request.Request(
-        f"{OLLAMA_URL.rstrip('/')}/api/tags",
-        headers={"User-Agent": "AskMyDocs-ModelList"},
-    )
+    """Models the configured Groq account can use; ``agent_models`` support tool calling."""
+    if CHAT_BACKEND != "groq":
+        raise DependencyError("The policy features require CHAT_BACKEND=groq.")
+    if not GROQ_API_KEY:
+        raise DependencyError("GROQ_API_KEY is not configured.")
     try:
-        with urllib.request.urlopen(request, timeout=3.0) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        logger.warning("Ollama model list returned HTTP %d", exc.code)
-        raise HTTPException(
-            status_code=503, detail="Unable to load installed Ollama models."
-        ) from exc
-    except (urllib.error.URLError, TimeoutError, socket.timeout) as exc:
-        logger.warning(
-            "Ollama model list request failed (error_type=%s)",
-            type(exc).__name__,
+        response = httpx.get(
+            f"{GROQ_URL.rstrip('/')}/models",
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+            timeout=5.0,
         )
-        raise HTTPException(
-            status_code=503, detail="Unable to load installed Ollama models."
-        ) from exc
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        logger.error("Ollama returned an invalid model list response")
-        raise HTTPException(
-            status_code=502, detail="Ollama returned an invalid model list."
-        ) from exc
-
-    if not isinstance(payload, dict) or not isinstance(payload.get("models"), list):
-        logger.error("Ollama model list response omitted its models array")
-        raise HTTPException(
-            status_code=502, detail="Ollama returned an invalid model list."
-        )
-
-    models = []
-    agent_models = []
-    for item in payload["models"]:
-        if not isinstance(item, dict) or not isinstance(item.get("name"), str):
-            continue
-        capabilities = item.get("capabilities")
-        if isinstance(capabilities, list) and "embedding" in capabilities:
-            if not any(
-                capability in {"completion", "tools"} for capability in capabilities
-            ):
-                continue
-        models.append(item["name"])
-        if isinstance(capabilities, list) and "tools" in capabilities:
-            agent_models.append(item["name"])
-
+        response.raise_for_status()
+        payload = response.json()
+    except httpx.HTTPStatusError as exc:
+        logger.warning("Groq model list returned HTTP %d", exc.response.status_code)
+        raise DependencyError("Unable to load available Groq models.") from exc
+    except httpx.RequestError as exc:
+        logger.warning("Groq model list request failed (%s)", type(exc).__name__)
+        raise DependencyError("Unable to load available Groq models.") from exc
+    except ValueError as exc:
+        raise DependencyError("Groq returned an invalid model list.") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
+        raise DependencyError("Groq returned an invalid model list.")
+    models = sorted(
+        {item["id"] for item in payload["data"] if isinstance(item, dict) and isinstance(item.get("id"), str)}
+    )
     return {
-        "provider": "ollama",
-        "default_model": OLLAMA_CHAT_MODEL,
-        "models": list(dict.fromkeys(models)),
-        "agent_models": list(dict.fromkeys(agent_models)),
+        "provider": "groq",
+        "default_model": GROQ_MODEL,
+        "models": models,
+        "agent_models": [model for model in models if model in GROQ_AGENT_MODELS],
     }
 
 
-# ── Policy Search Endpoint (Auto-Routed) ──────────────────────────────────────
+@router.get("/readiness")
+def policy_readiness(sid: OptionalSessionId):
+    """What the policy features can use right now: model, indexed documents, tools."""
+    documents: Dict[str, Dict[str, Any]] = {}
+    chunks = 0
+    semantic = False
+    if sid:
+        store = _session_store(sid)
+        semantic = bool(store.vectors) and len(store.vectors) == len(store.chunks)
+        for chunk in store.chunks:
+            chunks += 1
+            entry = documents.setdefault(
+                chunk["doc_id"], {"doc_id": chunk["doc_id"], "filename": chunk["filename"], "chunks": 0}
+            )
+            entry["chunks"] += 1
+    try:
+        tools = get_tool_registry().discovery_report()
+    except Exception as exc:  # report, don't hide: the UI shows why tools are missing
+        tools = {"error": f"{type(exc).__name__}: {exc}", "tool_count": 0, "tool_names": [], "servers": []}
+    return {
+        "chat_backend": CHAT_BACKEND,
+        "groq_configured": bool(GROQ_API_KEY),
+        "retrieval_mode": "hybrid" if semantic and embeddings_configured() and not LEXICAL_ONLY else "lexical",
+        "documents": list(documents.values()),
+        "document_count": len(documents),
+        "chunk_count": chunks,
+        "ready": bool(GROQ_API_KEY) and chunks > 0 and tools.get("tool_count", 0) > 0,
+        "tools": {"tool_count": tools.get("tool_count", 0), "tool_names": tools.get("tool_names", [])},
+    }
+
+
+# ── Auto-routed question ──────────────────────────────────────────────────────
 
 
 @router.post("/search")
-def policy_search(payload: PolicySearchRequest):
+def policy_search(payload: PolicySearchRequest, sid: OptionalSessionId):
     """
-    Auto-routed HR policy search.
+    USER QUESTION -> ROUTER -> WORKFLOW or AGENT -> ANSWER + FULL TRACE.
 
-    Flow:
-      USER QUESTION → POLICY ROUTER → WORKFLOW or AGENT → FINAL ANSWER + TELEMETRY
-
-    The router automatically decides based on question complexity and execution-path
-    characteristics. The routing decision, mode, reason, retries, tokens, latency,
-    and estimated cost are all returned in the response.
-
-    NEVER fabricates metrics. All telemetry is real.
+    The response carries the routing decision, the selected tools with arguments,
+    results and attempts, the tool-selection audit and every retry attempt. All
+    telemetry is measured; nothing is estimated except the labelled token-cost proxy.
     """
     request_start = time.perf_counter()
     run_id = f"search_{uuid.uuid4().hex[:12]}"
-
+    context = _context(sid, payload.document_ids)
     top_k = payload.top_k or 5
     temperature = payload.temperature if payload.temperature is not None else 0.3
     model = payload.model or LLM_MODEL
-    max_retries = (
-        payload.max_retries if payload.max_retries is not None else MAX_RETRIES
-    )
-    case_id = payload.case_id or f"search_{payload.employee_id}"
+    max_retries = payload.max_retries if payload.max_retries is not None else MAX_RETRIES
 
-    # ── 1. Router ─────────────────────────────────────────────────────────────
+    routing = route_policy_question(payload.question, payload.employee_id)
     if payload.force_mode in (MODE_WORKFLOW, MODE_AGENT):
-        # Explicit mode override (for testing/debugging only)
-        mode = payload.force_mode
-        routing_decision = route_policy_question(payload.question, payload.employee_id)
-        routing_decision.mode = mode
-        routing_decision.reason = f"Mode explicitly forced to '{mode}' by caller."
-    else:
-        routing_decision = route_policy_question(payload.question, payload.employee_id)
-        mode = routing_decision.mode
+        routing.mode = payload.force_mode
+        routing.requires_agent = payload.force_mode == MODE_AGENT
+        routing.reason = f"Mode explicitly forced to '{payload.force_mode}' by caller."
+    mode = routing.mode
 
-    # ── 2. Execute with retry ─────────────────────────────────────────────────
-    result, retry_history = _run_with_retries(
+    result, _ = _run_with_retries(
         mode=mode,
         employee_id=payload.employee_id,
         question=payload.question,
-        case_id=case_id,
+        case_id=payload.case_id or f"search_{payload.employee_id}",
         top_k=top_k,
         temperature=temperature,
         model=model,
+        context=context,
         max_retries=max_retries,
     )
-
-    # ── 3. Attach routing and provenance metadata ─────────────────────────────
-    total_ms = (time.perf_counter() - request_start) * 1000
-
     result.run_id = run_id
     result.evaluation_type = "WEEK7_POLICY_EXECUTION"
     result.execution_mode = mode
-    result.routing_reason = routing_decision.reason
-    result.complexity = routing_decision.complexity
-    result.routing_ms = round(routing_decision.routing_ms, 3)
-    result.latency_ms = round(total_ms, 3)
+    result.routing_reason = routing.reason
+    result.complexity = routing.complexity
+    result.routing_ms = round(routing.routing_ms, 3)
+    result.latency_ms = round((time.perf_counter() - request_start) * 1000, 3)
     result.mode_history = [mode]
-    result.top_k = top_k
-    result.temperature = temperature
-    result.model = model
     result.max_retries = max_retries
-    result.provider_cost = "N/A"
 
     response = result.model_dump()
-    response["routing"] = routing_decision.to_dict()
+    response["routing"] = routing.to_dict()
     response["run_id"] = run_id
-
     return JSONResponse(content=response)
 
 
-# ── Existing Endpoints (preserved exactly) ────────────────────────────────────
+@router.get("/router/classify")
+def classify_question(question: str = Query(...), employee_id: Optional[str] = Query(None)):
+    """Preview the routing decision without executing anything."""
+    return JSONResponse(content=route_policy_question(question, employee_id).to_dict())
 
 
-@router.get("/cases", response_model=List[Dict[str, Any]])
-def get_benchmark_cases():
-    """Retrieve the standard 10 verified HR policy benchmark cases."""
-    cases = _load_benchmark_cases()
-    return JSONResponse(content=cases)
+# ── Direct agent / workflow ───────────────────────────────────────────────────
 
 
-@router.get("/employees")
-def get_canonical_employees():
-    """Retrieve canonical employee records for testing policy execution."""
-    employees = [emp.model_dump() for emp in CANONICAL_EMPLOYEES.values()]
-    return JSONResponse(content=employees)
+def _direct_run(mode: str, payload: PolicyQueryRequest, sid: Optional[str], prefix: str) -> PolicyOutputContract:
+    context = _context(sid, payload.document_ids)
+    kwargs: Dict[str, Any] = dict(
+        case_id=payload.case_id or f"custom_{mode}_case",
+        employee_id=payload.employee_id,
+        question=payload.question,
+        top_k=payload.top_k or 5,
+        temperature=payload.temperature if payload.temperature is not None else 0.3,
+        model=payload.model or LLM_MODEL,
+        context=context,
+    )
+    result = run_agent_case(**kwargs) if mode == MODE_AGENT else run_workflow_case(**kwargs)
+    result.run_id = f"{prefix}_{uuid.uuid4().hex[:8]}"
+    result.evaluation_type = "WEEK7_POLICY_EXECUTION"
+    result.execution_mode = mode
+    return result
 
 
 @router.post("/agent", response_model=PolicyOutputContract)
-def execute_policy_agent(payload: PolicyQueryRequest):
-    """
-    Execute the Dynamic ReAct HR Policy Agent on an employee entitlement question.
-    Enforces the 4 strict budgets (iterations, tokens, cost, wall-clock).
-    evaluation_type = WEEK7_POLICY_EXECUTION
-    """
-    try:
-        top_k_val = getattr(payload, "top_k", 5) or 5
-        temp_val = getattr(payload, "temperature", 0.3)
-        if temp_val is None:
-            temp_val = 0.3
-        model_val = getattr(payload, "model", LLM_MODEL) or LLM_MODEL
-
-        result = run_agent_case(
-            case_id=payload.case_id or "custom_agent_case",
-            employee_id=payload.employee_id,
-            question=payload.question,
-            top_k=top_k_val,
-            temperature=temp_val,
-            model=model_val,
-        )
-        result.run_id = f"agent_{uuid.uuid4().hex[:8]}"
-        result.evaluation_type = "WEEK7_POLICY_EXECUTION"
-        result.execution_mode = "agent"
-        return result
-    except Exception as e:
-        logger.exception(f"Policy agent execution failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+def execute_policy_agent(payload: PolicyQueryRequest, sid: OptionalSessionId):
+    """Run the ReAct agent (four hard budgets enforced) on one employee question."""
+    return _direct_run(MODE_AGENT, payload, sid, "agent")
 
 
 @router.post("/workflow", response_model=PolicyOutputContract)
-def execute_policy_workflow(payload: PolicyQueryRequest):
-    """
-    Execute the Fixed 3-Step Deterministic HR Policy Workflow.
-    evaluation_type = WEEK7_POLICY_EXECUTION
-    """
+def execute_policy_workflow(payload: PolicyQueryRequest, sid: OptionalSessionId):
+    """Run the fixed workflow (no loop, one model call) on one employee question."""
+    return _direct_run(MODE_WORKFLOW, payload, sid, "wf")
+
+
+# ── Cases, employees ──────────────────────────────────────────────────────────
+
+
+@router.get("/cases", response_model=List[Dict[str, Any]])
+def get_benchmark_cases(suite: str = Query("canonical")):
+    """Benchmark cases: ``canonical`` (10 single-path), ``branching`` (path depends on data) or ``all``."""
     try:
-        top_k_val = getattr(payload, "top_k", 5) or 5
-        result = run_workflow_case(
-            case_id=payload.case_id or "custom_wf_case",
-            employee_id=payload.employee_id,
-            question=payload.question,
-            top_k=top_k_val,
-            temperature=(
-                payload.temperature if payload.temperature is not None else 0.3
-            ),
-            model=payload.model or LLM_MODEL,
-        )
-        result.run_id = f"wf_{uuid.uuid4().hex[:8]}"
-        result.evaluation_type = "WEEK7_POLICY_EXECUTION"
-        result.execution_mode = "workflow"
-        return result
-    except Exception as e:
-        logger.exception(f"Policy workflow execution failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return JSONResponse(content=load_suite(suite))
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
+
+
+@router.get("/employees")
+def get_employees(sid: OptionalSessionId):
+    """Employee records found in the uploaded roster (rows of ``ID | key: value | ...``)."""
+    context = _context(sid)
+    return JSONResponse(content=policy_retrieval.list_employee_records(context))
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+def _benchmark_cases(req: PolicyBenchmarkStartRequest) -> List[Dict[str, Any]]:
+    try:
+        cases = req.cases if req.cases else load_suite(req.suite)
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
+    if not cases:
+        raise NotFoundError("Benchmark cases not found", code="CASES_NOT_FOUND")
+    return cases
 
 
 @router.post("/benchmark")
-def start_or_run_benchmark(payload: Optional[PolicyBenchmarkStartRequest] = None):
-    """
-    Execute or start the 10-case policy benchmark comparison.
-    If payload.background is True, starts a background thread and returns run_id immediately.
-    Otherwise runs synchronously and returns completed summary and case records.
-    evaluation_type = WEEK7_POLICY_EXECUTION
-    """
+def start_or_run_benchmark(sid: OptionalSessionId, payload: Optional[PolicyBenchmarkStartRequest] = None):
+    """Start (``background: true``) or synchronously run the agent-vs-workflow benchmark."""
     req = payload or PolicyBenchmarkStartRequest()
-    cases = req.cases if req.cases else _load_benchmark_cases()
-    if not cases:
-        raise HTTPException(status_code=404, detail="Benchmark cases not found")
-
+    cases = _benchmark_cases(req)
+    context = _context(sid, req.document_ids)
     manager = PolicyBenchmarkRunManager.get_instance()
-
     if req.background:
         run_state = manager.start_benchmark(
-            cases=cases,
-            top_k=req.top_k,
-            temperature=req.temperature,
-            model=req.model,
+            cases=cases, top_k=req.top_k, temperature=req.temperature, model=req.model, context=context
         )
         return JSONResponse(content=run_state.to_dict())
-
-    # Synchronous execution
     run_state = PolicyBenchmarkRunState(
         run_id=f"bench_sync_{uuid.uuid4().hex[:8]}",
         cases=cases,
         top_k=req.top_k,
         temperature=req.temperature,
         model=req.model,
+        context=context,
     )
     manager._execute_benchmark_worker(run_state, cases)
     return JSONResponse(content=run_state.to_dict())
 
 
 @router.post("/benchmark/start")
-def start_benchmark_background(payload: Optional[PolicyBenchmarkStartRequest] = None):
-    """Explicit endpoint to start an asynchronous background benchmark run."""
+def start_benchmark_background(sid: OptionalSessionId, payload: Optional[PolicyBenchmarkStartRequest] = None):
+    """Start an asynchronous benchmark run and return its initial state."""
     req = payload or PolicyBenchmarkStartRequest(background=True)
-    cases = req.cases if req.cases else _load_benchmark_cases()
-    if not cases:
-        raise HTTPException(status_code=404, detail="Benchmark cases not found")
-
-    manager = PolicyBenchmarkRunManager.get_instance()
-    run_state = manager.start_benchmark(
-        cases=cases,
-        top_k=req.top_k,
-        temperature=req.temperature,
-        model=req.model,
+    cases = _benchmark_cases(req)
+    context = _context(sid, req.document_ids)
+    run_state = PolicyBenchmarkRunManager.get_instance().start_benchmark(
+        cases=cases, top_k=req.top_k, temperature=req.temperature, model=req.model, context=context
     )
     return JSONResponse(content=run_state.to_dict())
 
 
 @router.get("/benchmark/runs/active")
 def get_active_benchmark_run():
-    """Retrieve the currently running policy benchmark state, if any."""
-    manager = PolicyBenchmarkRunManager.get_instance()
-    active_run = manager.get_active_run()
-    if active_run:
-        return JSONResponse(content={"active": True, "run": active_run.to_dict()})
-    return JSONResponse(content={"active": False, "run": None})
+    active = PolicyBenchmarkRunManager.get_instance().get_active_run()
+    return JSONResponse(content={"active": bool(active), "run": active.to_dict() if active else None})
 
 
 @router.get("/benchmark/runs/{run_id}")
 def get_benchmark_run_status(run_id: str):
-    """Poll live execution status and case-by-case progress for a specific benchmark run."""
-    manager = PolicyBenchmarkRunManager.get_instance()
-    run_state = manager.get_run(run_id)
+    run_state = PolicyBenchmarkRunManager.get_instance().get_run(run_id)
     if not run_state:
-        raise HTTPException(status_code=404, detail=f"Benchmark run {run_id} not found")
+        raise NotFoundError(f"Benchmark run {run_id} not found")
     return JSONResponse(content=run_state.to_dict())
 
 
 @router.post("/benchmark/runs/{run_id}/cancel")
 def cancel_benchmark_run(run_id: str):
-    """Cancel an in-flight benchmark run."""
-    manager = PolicyBenchmarkRunManager.get_instance()
-    success = manager.cancel_run(run_id)
-    if not success:
-        raise HTTPException(
-            status_code=400, detail=f"Could not cancel benchmark run {run_id}"
-        )
+    if not PolicyBenchmarkRunManager.get_instance().cancel_run(run_id):
+        raise NotFoundError(f"Could not cancel benchmark run {run_id}")
     return JSONResponse(content={"cancelled": True, "run_id": run_id})
 
 
 @router.get("/benchmark/latest")
 def get_latest_benchmark_results():
-    """Retrieve the saved results.csv rows from the last benchmark run."""
-    csv_file = BASE_DIR / "benchmarks" / "policy_execution" / "results.csv"
+    """Rows of the last completed run (results.csv always holds exactly one run)."""
+    csv_file = PolicyBenchmarkRunManager._results_dir() / "results.csv"
     if not csv_file.exists():
         return JSONResponse(content={"rows": []})
-
-    rows = []
     try:
-        with open(csv_file, "r", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for r in reader:
-                rows.append(r)
-    except Exception as e:
-        logger.error(f"Error reading benchmark results CSV: {e}")
-
-    return JSONResponse(content={"rows": rows})
+        with open(csv_file, "r", encoding="utf-8") as handle:
+            return JSONResponse(content={"rows": list(csv.DictReader(handle))})
+    except OSError as exc:
+        logger.error("Error reading benchmark results CSV: %s", exc)
+        raise DependencyError("Could not read the latest benchmark results.") from exc
 
 
-@router.get("/router/classify")
-def classify_question(
-    question: str = Query(...), employee_id: Optional[str] = Query(None)
-):
-    """
-    Preview the routing decision for a given question without executing it.
-    Useful for testing and UI previews.
-    """
-    decision = route_policy_question(question, employee_id)
-    return JSONResponse(content=decision.to_dict())
+# ── Trajectory (Week 8) ───────────────────────────────────────────────────────
+
+
+@router.get("/trajectory/expected")
+def get_expected_trajectories(suite: str = Query("all")):
+    """Expected tool paths per case; cases with several entries accept any of them."""
+    try:
+        cases = load_suite(suite)
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
+    expected = policy_trajectory.load_expected_trajectories()
+    return JSONResponse(
+        content=[
+            {"case_id": case["case_id"], "employee_id": case["employee_id"], "question": case["question"], **expected[case["case_id"]]}
+            for case in cases
+            if case["case_id"] in expected
+        ]
+    )
+
+
+def _trajectory_for(run_id: str) -> Dict[str, Any]:
+    run_state = PolicyBenchmarkRunManager.get_instance().get_run(run_id)
+    if not run_state:
+        raise NotFoundError(f"Benchmark run {run_id} not found")
+    if run_state.status not in {"COMPLETED", "CANCELLED"}:
+        raise ConflictError("The benchmark run has not finished yet.", code="RUN_NOT_FINISHED")
+    return run_state.trajectory_report()
+
+
+
+@router.post("/trajectory/evaluate")
+def evaluate_trajectory(payload: TrajectoryEvaluateRequest):
+    """Trajectory report for a finished run; with ``baseline_run_id`` also the before/after comparison."""
+    if not payload.run_id:
+        raise ValidationError("run_id is required")
+    report = _trajectory_for(payload.run_id)
+    if payload.baseline_run_id:
+        baseline = _trajectory_for(payload.baseline_run_id)
+        report["comparison"] = {
+            "baseline_run_id": payload.baseline_run_id,
+            **policy_trajectory.compare(baseline["summary"], report["summary"]),
+        }
+    return JSONResponse(content=report)

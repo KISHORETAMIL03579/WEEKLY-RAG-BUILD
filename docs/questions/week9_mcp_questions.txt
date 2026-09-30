@@ -1,0 +1,79 @@
+# ==============================================================================
+# WEEK 9 - MCP: QUESTIONS THAT EXERCISE DISCOVERED TOOLS (HRIS server two)
+# Needs both servers in config/mcp_servers.json (policy-search in-process, hris over
+# stdio). The agent is unchanged; the HRIS tools are discovered via tools/list.
+# Live: MCP tab shows 2 servers / 5 tools and the raw JSON-RPC wire log; then run
+# these in Policy Search (they route to the agent because they need HRIS tools) and
+# read the tool trace: each call shows tool@server, arguments, attempts/retries.
+# HRIS values come from backend/data/samples/hris_records.json (a stand-in extract).
+# ==============================================================================
+
+### Case 01 [MCP] tool: get_grade_band@hris
+Case ID: w9_01
+Employee ID: EMP001
+Question: What is EMP001's grade band?
+Expected Answer: Grade band G7 (from the HRIS server).
+Section: HRIS
+
+### Case 02 [MCP] tool: get_leave_balance@hris
+Case ID: w9_02
+Employee ID: EMP004
+Question: How many days of annual leave does EMP004 have left?
+Expected Answer: 20 accrued leave days (from the HRIS server).
+Section: HRIS
+
+### Case 03 [MCP] tools: get_grade_band + get_leave_balance (both @hris)
+Case ID: w9_03
+Employee ID: EMP006
+Question: What is EMP006's grade band and accrued leave balance?
+Expected Answer: Grade band G6 and 10 accrued leave days.
+Section: HRIS
+
+### Case 04 [MCP] tools: get_leave_balance@hris + search_handbook
+Case ID: w9_04
+Employee ID: EMP003
+Question: How does EMP003's accrued leave balance compare with the standard annual leave entitlement?
+Expected Answer: EMP003 has 4 accrued days against a standard entitlement of 24 days per annum.
+Section: 5.2.1; HRIS
+
+### Case 05 [MCP] tools: get_grade_band@hris + search_handbook (+ employee record optional)
+Case ID: w9_05
+Employee ID: EMP004
+Question: What is EMP004's grade band and how much notice must they give to resign?
+Expected Answer: Grade band G9; four weeks written notice as a confirmed staff member.
+Section: 10.1; HRIS
+
+### Case 06 [MCP] tools: get_leave_balance@hris + search_handbook
+Case ID: w9_06
+Employee ID: EMP010
+Question: What is EMP010's leave balance and how many days can be carried forward without CEO consent?
+Expected Answer: 15 accrued leave days; at most 5 days may be carried forward without the CEO's consent.
+Section: 5.2.7; HRIS
+
+### Case 07 [MCP] tools: handbook path only - an HRIS call here is a wrong tool selection
+Case ID: w9_07
+Employee ID: EMP003
+Question: How much written notice must EMP003 provide if resigning on probation?
+Expected Answer: One week written notice. The HRIS must NOT be called for a handbook-only question.
+Section: 10.1
+
+### Case 08 [MCP] error path: EMPLOYEE_NOT_FOUND (not retried)
+Case ID: w9_08
+Employee ID: EMP999
+Question: What is EMP999's grade band?
+Expected Answer: The HRIS has no employee EMP999. The tool error is recoverable and distinct from the HRIS being down; the answer must not guess a band.
+Section: HRIS
+
+### Case 09 [MCP] recoverable-error path on server one: error names the documents searched and suggests search_handbook
+Case ID: w9_09
+Employee ID: EMP002
+Question: Which Irish statutory annual leave rules apply to EMP002?
+Expected Answer: No Irish rule is provided in the uploaded documents (NO_EVIDENCE); do not quote Irish law from memory.
+Section: 5.2.1
+
+### Case 10 [MCP] tool: get_leave_balance@hris
+Case ID: w9_10
+Employee ID: EMP008
+Question: How many days of annual leave does EMP008 have left?
+Expected Answer: 6 accrued leave days (from the HRIS server).
+Section: HRIS

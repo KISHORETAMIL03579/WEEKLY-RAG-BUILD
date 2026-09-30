@@ -1,0 +1,17 @@
+--- config/mcp_servers.server1.json
++++ config/mcp_servers.json
+@@ -4,6 +4,14 @@
+       "name": "policy-search",
+       "transport": "inprocess",
+       "module": "backend.mcp.servers.policy_server"
++    },
++    {
++      "name": "hris",
++      "transport": "stdio",
++      "module": "backend.mcp.servers.hris_server",
++      "env": {
++        "HRIS_DATA_PATH": "backend/data/samples/hris_records.json"
++      }
+     }
+   ]
+ }

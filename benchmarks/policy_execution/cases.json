@@ -6,7 +6,14 @@
     "source_section": "Section 5.2.1",
     "expected_value": "24 working days per annum, accruing at 2 days per month.",
     "tenure_dependency": "Standard full-time confirmed staff (tenure 18 months).",
-    "deterministic_pass_criteria": ["24", "2 days", "month"]
+    "deterministic_pass_criteria": [
+      "24",
+      "2 days",
+      "month"
+    ],
+    "headline_criteria": [
+      "24"
+    ]
   },
   {
     "case_id": "case_02",
@@ -15,16 +22,34 @@
     "source_section": "Section 5.2.7",
     "expected_value": "Maximum of 5 days (must be taken by June 30th of the following year).",
     "tenure_dependency": "Global annual leave carry forward rule under Section 5.2.7 (not 10 days separation commutation).",
-    "deterministic_pass_criteria": ["5 days", "5"]
+    "deterministic_pass_criteria": [
+      "5 days",
+      "5"
+    ],
+    "headline_criteria": [
+      "5"
+    ]
   },
   {
     "case_id": "case_03",
     "employee_id": "EMP003",
     "question": "How much written notice must EMP003 provide if they decide to resign while on probation?",
-    "source_section": "Section 10.1 & Section 3.6.4",
+    "source_section": "Section 10.1; Section 3.6.1",
     "expected_value": "1 week (7 days) written notice.",
     "tenure_dependency": "Branching on Probation status (tenure 4 months < 6 months): 1 week notice vs 4 weeks for confirmed staff.",
-    "deterministic_pass_criteria": ["1 week", "7 days", "probation"]
+    "deterministic_pass_criteria": [
+      "1 week",
+      "7 days",
+      "probation"
+    ],
+    "headline_criteria": [
+      "1 week"
+    ],
+    "criteria_aliases": {
+      "1 week": [
+        "7 days"
+      ]
+    }
   },
   {
     "case_id": "case_04",
@@ -33,7 +58,12 @@
     "source_section": "Section 10.1",
     "expected_value": "4 weeks written notice.",
     "tenure_dependency": "Branching on Confirmed status (tenure 36 months >= 6 months): 4 weeks written notice.",
-    "deterministic_pass_criteria": ["4 weeks"]
+    "deterministic_pass_criteria": [
+      "4 weeks"
+    ],
+    "headline_criteria": [
+      "4 weeks"
+    ]
   },
   {
     "case_id": "case_05",
@@ -42,7 +72,18 @@
     "source_section": "Section 5.3.2",
     "expected_value": "Not eligible; paid sick leave requires a minimum threshold of at least 2 consecutive months of service.",
     "tenure_dependency": "Branching on Minimum Service threshold (tenure 1 month < 2 consecutive months): Ineligible.",
-    "deterministic_pass_criteria": ["ineligible", "2 consecutive months"]
+    "deterministic_pass_criteria": [
+      "ineligible",
+      "2 consecutive months"
+    ],
+    "headline_criteria": [
+      "ineligible"
+    ],
+    "criteria_aliases": {
+      "ineligible": [
+        "no"
+      ]
+    }
   },
   {
     "case_id": "case_06",
@@ -65,7 +106,16 @@
     "source_section": "Section 10.5.1",
     "expected_value": "1 month written notice (or pay in lieu) plus severance pay of 60 days' pay (15 days' pay for each of the 4 completed years of service).",
     "tenure_dependency": "Calculation branching on Separation Reason (Redundancy) & Completed Years of Service (4 years * 15 days = 60 days pay).",
-    "deterministic_pass_criteria": ["1 month", "15 days", "60 days"]
+    "deterministic_pass_criteria": [
+      "1 month",
+      "15 days",
+      "60 days"
+    ],
+    "criteria_aliases": {
+      "60 days": [
+        "10000"
+      ]
+    }
   },
   {
     "case_id": "case_08",
@@ -74,7 +124,17 @@
     "source_section": "Section 10.5.2",
     "expected_value": "0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay).",
     "tenure_dependency": "Branching on Separation Reason (Unsatisfactory Performance vs Redundancy = 0 severance).",
-    "deterministic_pass_criteria": ["not entitled to severance", "0 severance"]
+    "deterministic_pass_criteria": [
+      "not entitled to severance",
+      "0 severance"
+    ],
+    "criteria_aliases": {
+      "0 severance": [
+        "no severance",
+        "zero severance",
+        "not entitled to severance"
+      ]
+    }
   },
   {
     "case_id": "case_09",
@@ -83,7 +143,19 @@
     "source_section": "Section 4.4.1",
     "expected_value": "Ineligible during probation; pension contribution allowance (10% of basic salary) is only provided once probation is successfully completed.",
     "tenure_dependency": "Branching on Probation status (tenure 4 months < 6 months = Ineligible).",
-    "deterministic_pass_criteria": ["ineligible", "10%", "probation"]
+    "deterministic_pass_criteria": [
+      "ineligible",
+      "10%",
+      "probation"
+    ],
+    "headline_criteria": [
+      "ineligible"
+    ],
+    "criteria_aliases": {
+      "ineligible": [
+        "no"
+      ]
+    }
   },
   {
     "case_id": "case_10",
@@ -92,6 +164,11 @@
     "source_section": "Section 10.7",
     "expected_value": "Maximum of 10 working days on gross salary alone.",
     "tenure_dependency": "Separation commutation cap under Section 10.7.",
-    "deterministic_pass_criteria": ["10 working days"]
+    "deterministic_pass_criteria": [
+      "10 working days"
+    ],
+    "headline_criteria": [
+      "10"
+    ]
   }
 ]

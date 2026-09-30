@@ -1,0 +1,9 @@
+{
+  "servers": [
+    {
+      "name": "policy-search",
+      "transport": "inprocess",
+      "module": "backend.mcp.servers.policy_server"
+    }
+  ]
+}

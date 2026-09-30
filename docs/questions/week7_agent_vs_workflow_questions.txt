@@ -1,0 +1,121 @@
+# ==============================================================================
+# WEEK 7 - RACE THE AGENT AGAINST THE FIXED WORKFLOW (Policy Assistant tab)
+# Cases 01-10 (canonical): every case uses the same tool path, answers differ.
+# branch_01-06: the path depends on data (jurisdiction read from the employee
+# record, HRIS tools, handbook silent on a country).
+# Upload first: HRPolicy.pdf + backend/data/samples/employee_records.md
+# Live: Policy Assistant -> suite canonical | branching | all -> Start benchmark.
+# Reports four numbers per system: pass rate, p50 latency, tokens, cost/question.
+# ==============================================================================
+
+### Case 01 [Standard full-time confirmed staff (tenure 18 months).]
+Case ID: case_01
+Employee ID: EMP001
+Question: What is the standard annual leave entitlement and monthly accrual rate for EMP001?
+Expected Answer: 24 working days per annum, accruing at 2 days per month.
+Section: Section 5.2.1
+
+### Case 02 [Global annual leave carry forward rule under Section 5.2.7 (not 10 day]
+Case ID: case_02
+Employee ID: EMP002
+Question: How many unused annual leave days can EMP002 carry forward into the next calendar year without special CEO consent?
+Expected Answer: Maximum of 5 days (must be taken by June 30th of the following year).
+Section: Section 5.2.7
+
+### Case 03 [Branching on Probation status (tenure 4 months < 6 months): 1 week not]
+Case ID: case_03
+Employee ID: EMP003
+Question: How much written notice must EMP003 provide if they decide to resign while on probation?
+Expected Answer: 1 week (7 days) written notice.
+Section: Section 10.1; Section 3.6.1
+
+### Case 04 [Branching on Confirmed status (tenure 36 months >= 6 months): 4 weeks ]
+Case ID: case_04
+Employee ID: EMP004
+Question: How much written notice must EMP004 provide if resigning as a confirmed staff member?
+Expected Answer: 4 weeks written notice.
+Section: Section 10.1
+
+### Case 05 [Branching on Minimum Service threshold (tenure 1 month < 2 consecutive]
+Case ID: case_05
+Employee ID: EMP005
+Question: Is EMP005 eligible for paid sick leave after 1 month of service, and what is the minimum qualifying service threshold?
+Expected Answer: Not eligible; paid sick leave requires a minimum threshold of at least 2 consecutive months of service.
+Section: Section 5.3.2
+
+### Case 06 [Confirmed tenure >= 2 months (tenure 14 months).]
+Case ID: case_06
+Employee ID: EMP006
+Question: What is the sick leave accrual rate and the minimum paid sick leave entitlement for EMP006?
+Expected Answer: Rate of 2 working days per month (1 day full pay / 1 day half pay), with a minimum of 7 days full pay and 7 days half pay (maximum 3 months full / 3 months half).
+Section: Section 5.3.2
+
+### Case 07 [Calculation branching on Separation Reason (Redundancy) & Completed Ye]
+Case ID: case_07
+Employee ID: EMP007
+Question: What severance payment and notice period is EMP007 entitled to upon separation due to redundancy with 4 completed years of service?
+Expected Answer: 1 month written notice (or pay in lieu) plus severance pay of 60 days' pay (15 days' pay for each of the 4 completed years of service).
+Section: Section 10.5.1
+
+### Case 08 [Branching on Separation Reason (Unsatisfactory Performance vs Redundan]
+Case ID: case_08
+Employee ID: EMP008
+Question: What severance pay is EMP008 entitled to upon termination for unsatisfactory performance?
+Expected Answer: 0 severance pay (not entitled to severance payments; receives only accrued unused leave and worked pay).
+Section: Section 10.5.2
+
+### Case 09 [Branching on Probation status (tenure 4 months < 6 months = Ineligible]
+Case ID: case_09
+Employee ID: EMP009
+Question: Is EMP009 currently eligible to receive the 10% pension contribution allowance while on probation?
+Expected Answer: Ineligible during probation; pension contribution allowance (10% of basic salary) is only provided once probation is successfully completed.
+Section: Section 4.4.1
+
+### Case 10 [Separation commutation cap under Section 10.7.]
+Case ID: case_10
+Employee ID: EMP010
+Question: How many days of accrued unused annual leave can EMP010 commute to cash upon separation from service?
+Expected Answer: Maximum of 10 working days on gross salary alone.
+Section: Section 10.7
+
+### Case 01 [The jurisdiction argument (Kenya) must be read from EMP001's record be]
+Case ID: branch_01
+Employee ID: EMP001
+Question: What does the handbook say about Kenyan employment law for EMP001's separation from service?
+Expected Answer: Separation is subject to the Employment Act of the Republic of Kenya.
+Section: Section 10 (separation from service)
+
+### Case 02 [EMP002's record gives Ireland; the local-rules tool then finds no Iris]
+Case ID: branch_02
+Employee ID: EMP002
+Question: Which Irish statutory annual leave rules apply to EMP002, and how do they compare with the handbook entitlement?
+Expected Answer: The uploaded documents contain no Irish rules; the handbook grants 24 days per annum.
+Section: Section 5.2.1
+
+### Case 03 [EMP007's record gives Rwanda; the local-rules tool finds no Rwandan pa]
+Case ID: branch_03
+Employee ID: EMP007
+Question: Under Rwandan statutory law, what notice must EMP007 receive on redundancy?
+Expected Answer: The uploaded documents contain no Rwandan rule; the handbook gives one month's written notice.
+Section: Section 10.5.1
+
+### Case 04 [EMP006's record gives Cote d'Ivoire; the local-rules tool finds no pas]
+Case ID: branch_04
+Employee ID: EMP006
+Question: What is EMP006's statutory annual leave accrual under Ivorian labour law?
+Expected Answer: The uploaded documents contain no Ivorian rule; the handbook accrues 2 days per month.
+Section: Section 5.2.1
+
+### Case 05 [Answerable only from the HRIS server's tools; no handbook search is ne]
+Case ID: branch_05
+Employee ID: EMP001
+Question: What is EMP001's grade band and accrued leave balance?
+Expected Answer: Grade band G7 and 12 accrued leave days, from the HRIS.
+Section: HRIS
+
+### Case 06 [Needs the HRIS balance and the handbook entitlement; neither result de]
+Case ID: branch_06
+Employee ID: EMP003
+Question: How does EMP003's accrued leave balance compare with the standard annual leave entitlement?
+Expected Answer: EMP003 has 4 accrued days against a standard entitlement of 24 days per annum.
+Section: Section 5.2.1; HRIS

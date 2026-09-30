@@ -1,5 +1,10 @@
 import React, { useId } from "react";
-import { getTempClass, getTempLabel } from "../../utils/helpers";
+import {
+  TEMPERATURE_LEVELS,
+  getTempClass,
+  getTempLabel,
+  sameNumber,
+} from "../../utils/helpers";
 
 interface TopKSliderProps {
   value: number;
@@ -53,13 +58,6 @@ interface TemperatureSliderProps {
   disabled?: boolean;
 }
 
-const TEMPERATURE_PRESETS = [
-  { value: 0, label: "Deterministic" },
-  { value: 0.2, label: "Grounded" },
-  { value: 0.5, label: "Balanced" },
-  { value: 0.8, label: "Hallucination risk" },
-];
-
 export const TemperatureSlider: React.FC<TemperatureSliderProps> = ({
   value,
   onChange,
@@ -94,20 +92,25 @@ export const TemperatureSlider: React.FC<TemperatureSliderProps> = ({
         }
         aria-label="Generation temperature slider"
       />
-      <div className="temperature-presets" role="group" aria-label="Temperature presets">
-        {TEMPERATURE_PRESETS.map((preset) => {
-          const active =
-            getTempLabel(value).toLowerCase() === preset.label.toLowerCase();
+      <div
+        className="temperature-presets"
+        role="group"
+        aria-label="Temperature presets"
+      >
+        {TEMPERATURE_LEVELS.map((level) => {
+          // Highlight only when the slider sits exactly on what the button applies.
+          const active = sameNumber(value, level.preset);
           return (
             <button
-              key={preset.value}
+              key={level.id}
               type="button"
               className={`temperature-preset ${active ? "active" : ""}`}
               disabled={disabled}
               aria-pressed={active}
-              onClick={() => onChange(preset.value)}
+              title={`Set temperature to ${level.preset.toFixed(1)}`}
+              onClick={() => onChange(level.preset)}
             >
-              {preset.label}
+              {level.label}
             </button>
           );
         })}

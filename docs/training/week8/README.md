@@ -1,67 +1,89 @@
-# Week 8: Policy Agent Trajectory Evaluation
+# Week 8: find the outcome-vs-trajectory gap, then close one mode
 
-Week 8 evaluates the Week 7 Agent's live tool trajectories on the existing
-10-case policy benchmark. It records the answer score, required tool ordering,
-extra and duplicate calls, termination reason, measured latency, actual token
-usage, and the existing token-cost proxy. It reads the canonical `cases.json`
-without changing its questions, expected values, or pass criteria.
-Each evidence record also lists which unchanged deterministic answer criteria
-matched the returned answer and which did not. The summary counts unmet
-criteria across the cases. This is diagnostic only: it does not change the
-pass predicate or benchmark ground truth.
+Brief: [`WEEKLY_RAG_TASK/W8-Task-Set-C.md`](../../../WEEKLY_RAG_TASK/W8-Task-Set-C.md).
+How it fits the system: [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md#5-week-8-scoring-the-path-not-just-the-answer).
 
-The reference trajectory requires `get_employee_record` before
-`search_handbook`. The evaluator also records, but does not hide, extra tool
-calls. A baseline must be completed before selecting a mitigation; implement
-only one mitigation for the highest-frequency observed failure mode, then run
-the same cases again and compare the two evidence files.
+## The problem in one sentence
 
-Set `CHAT_BACKEND=groq`, a rotated `GROQ_API_KEY`, `GROQ_MODEL`, and the same
-model in `GROQ_AGENT_MODELS` in the ignored local `.env`. The key pasted in chat
-must not be reused. Configure one live run at a time:
+An agent can give the right notice period **without ever reading the employee's tenure** (it guessed the common
+case and got lucky). That passes the outcome eval. The trajectory eval scores the *path* and exposes the gap as a number.
 
-```powershell
-python -m benchmarks.policy_execution.trajectory_eval run baseline
-# After reviewing baseline evidence and implementing one measured mitigation:
-python -m benchmarks.policy_execution.trajectory_eval run mitigation
-python -m benchmarks.policy_execution.trajectory_eval compare `
-  benchmarks/policy_execution/trajectory_baseline.json `
-  benchmarks/policy_execution/trajectory_mitigation.json
+## Requirement -> where it lives
+
+| # | Requirement | Implementation |
+| --- | --- | --- |
+| 1 | Expected tool sequences for the cases; alternate valid paths asserted as a set | `benchmarks/policy_execution/expected_trajectories.json`: per case a list of allowed paths (`case_03` lists both orders; `branch_01` lists three). A run passes if it matches **any one exactly** |
+| 2 | Four numbers: tool-choice accuracy, argument validity, step efficiency, cost **p50 and max** | `backend/services/policy_trajectory.py::summarize` (also latency and tokens p50/max) |
+| 3 | Outcome-vs-trajectory gap as a number, plus one named right-answer-wrong-path case | `summary.outcome_vs_trajectory_gap_pct` and `summary.right_answer_wrong_path[]` (observed sequence, allowed paths, why) |
+| 4 | Exactly ONE mitigation, top mode before -> after, price paid as a number | `trajectory_eval run baseline` -> one change -> `run mitigation` -> `compare` (`policy_trajectory.compare`: per-mode counts, latency/token/cost deltas) |
+| 5 | Regression check over every mode | `compare` always lists all nine modes and names any that increased (`regressions[]`) |
+
+Cases: 10 canonical (all follow `employee record + policy search`, either order) and 6 branching (`branch_01..06`:
+the jurisdiction argument must come from the record; two need the HRIS tools and are **skipped, not failed**, if that
+server is not connected). Without the branching cases the workflow wins by construction, because nothing varies.
+
+## The four numbers, exactly
+
+| Metric | Definition |
+| --- | --- |
+| Tool-choice accuracy | Jaccard overlap between the tools the agent used and the closest allowed path (1.0 = same tool set); also the exact-set rate |
+| Argument validity | Share of argument checks that passed. Checks: `employee_id_real` (the record was found and the id equals the request), `jurisdiction_matches_record` (argument equals the record's jurisdiction), `schema_valid` (every **rejected** model call counts as a failure), `citation_resolves` (cited section numbers exist in the uploaded document) |
+| Step efficiency | `(executed + rejected tool calls) / steps needed` (shortest allowed path); 1.0 is ideal, reported as mean and worst |
+| Cost | Token-proxy cost per question at **p50 and max** (plus latency and tokens). The mean hides the run that looped |
+| Gap | `outcome pass rate - trajectory pass rate` |
+
+**Failure-mode zoo** (one *primary* mode per case, all modes kept): `provider_error`, `budget_exhausted`, `tool_error`,
+`invalid_tool_call`, `skipped_required_tool`, `wrong_tool_selection`, `bad_arguments`, `redundant_calls`, `answer_wrong`.
+
+## What the recorded evidence actually says (re-scored offline, no model calls)
+
+`benchmarks/policy_execution/trajectory_baseline.json` and `trajectory_mitigation.json` are from a live Groq run
+(the old code path, hard-coded knowledge base). Re-grading the **recorded answers** with the fixed scorer:
+
+```text
+python -m benchmarks.policy_execution.trajectory_eval rescore benchmarks/policy_execution/trajectory_mitigation.json
+strict (old literal match):  20.0 %   <- what the old report quoted
+normalised (fixed scorer):   90.0 %
 ```
 
-## Live baseline and one-mitigation result
+- 7 of the 8 "answer_quality failures" were **correct answers the literal matcher rejected**: "One (1) week (7 calendar
+  days)" vs `1 week`, "not eligible" vs `ineligible`, "two (2) working days" vs `2 working days`.
+- The one genuine failure is `case_02`: it answered **"0"** days of carry-forward (the rule allows 5 with no CEO consent)
+  while its explanation quoted "five (5) days". A criterion matched anywhere in the answer would have hidden it, so the
+  scorer now has **headline criteria** that must be in `entitlement_value` itself. `case_02` fails, correctly.
+- So the old "outcome pass rate 20%" and the old gap were artifacts of the scorer, not the agent. The old recorded
+  mitigation (Groq retry honouring `Retry-After`) did what it claimed: 7/10 provider failures -> 0, at the price of
+  +16 s p50 latency and +16 480 tokens (because 7 more cases now ran to completion).
+- Argument validity and step efficiency **cannot** be computed from that old evidence (it stored tool names only, not
+  arguments). New runs store everything.
 
-The measured baseline had 7/10 runs terminate with Groq HTTP 429 and 3/10
-complete. Its required tool sequence was valid in 3/10 cases; none passed the
-existing deterministic answer criteria. The observed top failure mode was
-provider rate limiting.
+## Run it
 
-Exactly one mitigation was applied: bounded Groq retries now honor
-`Retry-After` and the existing request wall-clock budget. The rerun completed
-all 10 executions, with the required tool sequence valid in 10/10 cases and
-2/10 passing the unchanged answer criteria.
+```powershell
+# live, in the UI
+#   Policy Assistant -> suite "all" -> Start benchmark -> Trajectory panel
 
-| Measure | Baseline | After mitigation |
-| --- | ---: | ---: |
-| Provider executions completed | 3/10 | 10/10 |
-| Required tool sequence valid | 3/10 (30%) | 10/10 (100%) |
-| Existing answer criteria passed | 0/10 (0%) | 2/10 (20%) |
-| p50 end-to-end latency | 1,099.421 ms | 17,157.343 ms |
-| Actual provider-reported tokens | 9,555 | 26,035 |
-| Token-cost proxy (not provider billing) | $0.0047775 | $0.0130175 |
+# from the command line
+python scripts/index_documents.py --session-id policy-eval WEEKLY_RAG_TASK/HRPolicy.pdf backend/data/samples/employee_records.md
+python -m benchmarks.policy_execution.trajectory_eval run baseline --session-id policy-eval --suite all
+# ... apply exactly ONE mitigation ...
+python -m benchmarks.policy_execution.trajectory_eval run mitigation --session-id policy-eval --suite all --note "what changed"
+python -m benchmarks.policy_execution.trajectory_eval compare benchmarks/policy_execution/trajectory_baseline.json benchmarks/policy_execution/trajectory_mitigation.json
+```
 
-The mitigation removed terminal 429 failures in this run but increased p50
-latency because requests waited and retried. Eight answers still failed the
-unchanged deterministic criteria; benchmark data and criteria were not edited.
-This is not a claim of 100% answer correctness.
+`run` calls Groq once per case (agent loop), so it spends API quota; it refuses to overwrite evidence. Generated
+`trajectory_*.json` and `runs/*.csv` are git-ignored.
 
-The saved baseline and mitigation evidence predate criterion-level diagnostics.
-Use a distinct output path to rerun either phase and create records with
-`answer_criteria` and `unmet_answer_criteria`; do not overwrite prior evidence.
+## Choosing the mitigation (do this from data, not from a guess)
 
-Evidence JSON files are ignored by Git because they are generated runtime
-artifacts. The report distinguishes actual Groq token usage from the existing
-estimated token-cost proxy; it does not claim provider billing amounts.
+The candidates from the brief: a sharper tool description, argument validation, a hard step limit, re-planning, or
+replacing the agent with the workflow. Several already exist **by design** (schema validation of every argument,
+recoverable rejection with a bound, four budgets, retry with back-off) so they are part of the baseline, not the
+mitigation. Run the baseline on `all`, take the most frequent primary mode, change **one** thing aimed at it, re-run,
+and read `compare`: the mode count before -> after, the price (latency, tokens, cost p50 and max), and any mode that rose.
+A mitigation with no measured price, or two changes at once, does not count.
 
-The runner refuses to overwrite evidence. For subsequent runs, use a new
-`--output` path and pass that path to `compare`.
+## Not implemented
+
+The bonus (indirect prompt injection through a record comment, read-only scoping, output guardrail) is not built. What exists
+toward it: tool results are labelled as data in both system prompts, tools are read-only, and arguments are schema-validated.

@@ -6,6 +6,7 @@ import { Sidebar } from "../components/Sidebar/Sidebar";
 import { ChatArea, ChatMessage } from "../components/Chat/ChatArea";
 import { api } from "../services/api";
 import { generateId } from "../utils/helpers";
+import { useGenerationConfig } from "../hooks/useGenerationConfig";
 
 export const ChatPage: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() =>
@@ -20,8 +21,12 @@ export const ChatPage: React.FC = () => {
   const [selectedFiles, setSelectedFiles] = useState<StagedFile[]>([]);
   const [strategy, setStrategy] = useState<string>("structured");
   const [strategySelected, setStrategySelected] = useState<boolean>(false);
-  const [topK, setTopK] = useState<number>(8);
-  const [temperature, setTemperature] = useState<number>(0.0);
+  // Chat starts on the Week 6 baseline (Top-K 8, temperature 0.0).
+  const generation = useGenerationConfig({
+    capability: null,
+    defaults: { topK: 8, temperature: 0 },
+  });
+  const { topK, temperature } = generation;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [isThinking, setIsThinking] = useState<boolean>(false);
@@ -468,10 +473,7 @@ export const ChatPage: React.FC = () => {
         strategy={strategy}
         setStrategy={setStrategy}
         setStrategySelected={setStrategySelected}
-        topK={topK}
-        setTopK={setTopK}
-        temperature={temperature}
-        setTemperature={setTemperature}
+        generation={generation}
         files={files}
         onUpload={handleUpload}
         onLoadUrl={handleLoadUrl}

@@ -301,17 +301,11 @@ def run_week6_evaluation():
         )
     print(f"Outcome: Judge V1 agreement was {v1_output['agreement_pct']:.1f}%.")
     print(f"         Judge V2 agreement was {v2_output['agreement_pct']:.1f}%.")
-    if v2_output["agreement_pct"] < v1_output["agreement_pct"]:
-        print(
-            "Finding: The prompt iteration over-corrected by inducing a severe false-negative bias"
-        )
-        print(
-            "         in Llama 3.1 8B, rejecting valid concise summaries as incomplete."
-        )
-    else:
-        print(
-            "Finding: The prompt iteration improved judge alignment with human ground truth."
-        )
+    delta = v2_output["agreement_pct"] - v1_output["agreement_pct"]
+    direction = "higher" if delta > 0 else "lower" if delta < 0 else "equal"
+    print(f"Measured change: V2 agreement is {abs(delta):.1f} points {direction} than V1.")
+    print("         This is a measurement, not an explanation. Judge errors/timeouts count as")
+    print("         disagreements: read the disagreements to decide who was right (disagreements.md).")
     print("=" * 78)
 
     # Export complete trace-level evaluation artifact

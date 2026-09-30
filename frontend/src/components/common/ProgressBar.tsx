@@ -1,17 +1,23 @@
 import React from "react";
 
+export type ProgressTone =
+  "accent" | "success" | "warning" | "danger" | "rainbow";
+
 interface ProgressBarProps {
   percentage: number;
   ariaLabel: string;
-  trackStyle: React.CSSProperties;
-  fillStyle: React.CSSProperties;
+  tone?: ProgressTone;
+  size?: "md" | "lg";
+  className?: string;
 }
 
+/** Class-based progress bar (styles: .progress, .progress-fill.tone-*). */
 export const ProgressBar: React.FC<ProgressBarProps> = ({
   percentage,
   ariaLabel,
-  trackStyle,
-  fillStyle,
+  tone = "accent",
+  size = "md",
+  className,
 }) => {
   const safePercentage = Number.isFinite(percentage)
     ? Math.min(100, Math.max(0, percentage))
@@ -24,13 +30,13 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={safePercentage}
-      style={trackStyle}
+      className={["progress", size === "lg" ? "is-lg" : "", className || ""]
+        .filter(Boolean)
+        .join(" ")}
     >
       <div
-        style={{
-          ...fillStyle,
-          width: `${safePercentage}%`,
-        }}
+        className={`progress-fill tone-${tone}`}
+        style={{ width: `${safePercentage}%` }}
       />
     </div>
   );

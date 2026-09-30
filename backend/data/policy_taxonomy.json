@@ -1,0 +1,67 @@
+{
+  "jurisdictions": [
+    "Kenya",
+    "Ireland",
+    "Cote d'Ivoire",
+    "Rwanda",
+    "Global"
+  ],
+  "categories": {
+    "leave": [
+      "leave",
+      "annual leave",
+      "sick leave",
+      "maternity",
+      "paternity"
+    ],
+    "notice_and_separation": [
+      "notice",
+      "resignation",
+      "termination",
+      "redundancy",
+      "severance",
+      "separation"
+    ],
+    "benefits_and_pension": [
+      "pension",
+      "benefits",
+      "insurance",
+      "allowance",
+      "social security"
+    ],
+    "holidays_and_working_hours": [
+      "holiday",
+      "public holiday",
+      "working hours",
+      "workweek",
+      "overtime"
+    ],
+    "conduct_and_discipline": [
+      "disciplinary",
+      "conduct",
+      "grievance",
+      "misconduct",
+      "dismissal"
+    ]
+  },
+  "jurisdiction_terms": {
+    "Kenya": [
+      "kenya",
+      "kenyan"
+    ],
+    "Ireland": [
+      "ireland",
+      "irish"
+    ],
+    "Cote d'Ivoire": [
+      "cote d'ivoire",
+      "ivoire",
+      "ivorian"
+    ],
+    "Rwanda": [
+      "rwanda",
+      "rwandan"
+    ],
+    "Global": []
+  }
+}

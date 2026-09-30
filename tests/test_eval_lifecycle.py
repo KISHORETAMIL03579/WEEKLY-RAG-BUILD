@@ -13,6 +13,24 @@ class TestEvaluationLifecycle(unittest.TestCase):
         cls.app = create_app()
         cls.client = TestClient(cls.app)
 
+    def _settle_active_run(self, timeout: float = 60.0) -> None:
+        """Cancel any active judge run and wait until none is active (runs are exclusive)."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            active = self.client.get("/api/evaluation/runs/active").json()
+            run_id = active.get("active_run_id")
+            if not run_id:
+                return
+            self.client.post(f"/api/evaluation/runs/{run_id}/cancel")
+            time.sleep(0.05)
+        self.fail("An evaluation run stayed active")
+
+    def setUp(self):
+        self._settle_active_run()
+
+    def tearDown(self):
+        self._settle_active_run()
+
     def test_01_benchmark_endpoint_zero_precomputation_leakage(self):
         """Verify GET /api/evaluation/benchmark returns 25 cases all PENDING with no verdicts or failure reasons."""
         res = self.client.get("/api/evaluation/benchmark")
@@ -46,7 +64,8 @@ class TestEvaluationLifecycle(unittest.TestCase):
 
         # 3. Poll until completed
         final_state = None
-        for _ in range(50):
+        deadline = time.time() + 60
+        while time.time() < deadline:
             time.sleep(0.05)
             res_poll = self.client.get(f"/api/evaluation/runs/{run_id}")
             self.assertEqual(res_poll.status_code, 200)

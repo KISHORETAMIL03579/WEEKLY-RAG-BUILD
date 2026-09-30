@@ -4,13 +4,11 @@ import { api } from "../../services/api";
 import { EvaluationProgressCard } from "./EvaluationProgressCard";
 import { EvaluationDatasetManager } from "./EvaluationDatasetManager";
 import { QADataSetCase, DatasetMode } from "../../types/dataset";
-import { ModelSelect } from "../common/ModelSelect";
-import { useAvailableModels } from "../../hooks/useAvailableModels";
-import {
-  TemperatureSlider,
-  TopKSlider,
-} from "../common/ModelParameterControls";
+import { GenerationControls } from "../common/GenerationControls";
+import { useGenerationConfig } from "../../hooks/useGenerationConfig";
 import { FileImportButton } from "../common/FileImportButton";
+import { Modal } from "../common/Modal";
+import { Tabs, TabPanel } from "../common/Tabs";
 
 interface JudgeEvaluatorViewProps {
   onNotify?: (msg: string, type?: "info" | "success" | "error") => void;
@@ -48,17 +46,19 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
     null,
   );
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
-  const [topK, setTopK] = useState<number>(5);
-  const [temperature, setTemperature] = useState<number>(0.3);
+  // Shared with Policy Search / benchmark / chat: one hook, one set of presets.
+  const gen = useGenerationConfig({
+    capability: "chat",
+    defaults: { topK: 5, temperature: 0.3 },
+  });
   const {
+    topK,
+    temperature,
     model,
-    setModel,
     defaultModel,
     models: availableModels,
-    provider,
     isLoadingModels,
-    modelsError,
-  } = useAvailableModels("chat");
+  } = gen;
 
   // Common Dataset State
   const [datasetMode, setDatasetMode] = useState<DatasetMode>("builtin");
@@ -427,22 +427,13 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
     );
   };
 
-  const handleResetToBaseline = () => {
-    setTopK(8);
-    setTemperature(0.0);
-    setModel(defaultModel);
+  const handlePresetApplied = (preset: {
+    label: string;
+    topK: number;
+    temperature: number;
+  }) => {
     notify(
-      `Restored Authoritative Frozen Week 6 Baseline: Top-K = 8, Temperature = 0.0, Model = ${defaultModel}`,
-      "info",
-    );
-  };
-
-  const handleResetToAppDefault = () => {
-    setTopK(5);
-    setTemperature(0.3);
-    setModel(defaultModel);
-    notify(
-      `Restored Application Default: Top-K = 5, Temperature = 0.3, Model = ${defaultModel}`,
+      `Restored ${preset.label}: Top-K = ${preset.topK}, Temperature = ${preset.temperature.toFixed(1)}, Model = ${defaultModel || "default"}`,
       "info",
     );
   };
@@ -1247,49 +1238,12 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
             </span>
           </div>
 
-          <TopKSlider value={topK} onChange={setTopK} disabled={loading} />
-          <TemperatureSlider
-            value={temperature}
-            onChange={setTemperature}
+          <GenerationControls
+            config={gen}
+            showModel
             disabled={loading}
-          />
-
-          <ModelSelect
-            label={`Model (${provider || "configured provider"}):`}
-            value={model}
-            onChange={setModel}
-            models={availableModels}
-            isLoading={isLoadingModels}
-            disabled={loading}
-            loadingLabel="Loading models…"
-            emptyLabel="No models available"
-            error={modelsError}
-            containerStyle={{ minWidth: 160 }}
-            labelStyle={{
-              fontSize: "0.8rem",
-              fontWeight: 600,
-              color: "#e2e8f0",
-              display: "block",
-              marginBottom: 4,
-            }}
-            selectStyle={{
-              background: "rgba(30, 41, 59, 0.9)",
-              border: "1px solid var(--border)",
-              color: "#fff",
-              borderRadius: "6px",
-              padding: "5px 10px",
-              fontSize: "0.82rem",
-              fontWeight: 600,
-              cursor:
-                loading || isLoadingModels || availableModels.length === 0
-                  ? "not-allowed"
-                  : "pointer",
-            }}
-            errorStyle={{
-              color: "#f87171",
-              fontSize: "0.72rem",
-              marginTop: 4,
-            }}
+            modelLabel={`Model (${gen.provider || "configured provider"}):`}
+            onPresetApplied={handlePresetApplied}
           />
 
           {/* Active Config Tag */}
@@ -1322,50 +1276,6 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
 
         {/* Baseline / Default Quick-Reset Buttons */}
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-          <button
-            type="button"
-            onClick={handleResetToBaseline}
-            disabled={loading}
-            style={{
-              padding: "5px 12px",
-              fontSize: "0.78rem",
-              fontWeight: 600,
-              borderRadius: "6px",
-              border: "1px solid rgba(99, 102, 241, 0.4)",
-              background:
-                topK === 8 && temperature === 0.0
-                  ? "rgba(99, 102, 241, 0.25)"
-                  : "rgba(99, 102, 241, 0.1)",
-              color: "#a5b4fc",
-              cursor: loading ? "not-allowed" : "pointer",
-              transition: "all 0.15s ease",
-            }}
-            title="Restore Authoritative Frozen Week 6 Baseline (Top-K=8, Temp=0.0)"
-          >
-            🎯 Week 6 Baseline (K=8, T=0.0)
-          </button>
-          <button
-            type="button"
-            onClick={handleResetToAppDefault}
-            disabled={loading}
-            style={{
-              padding: "5px 12px",
-              fontSize: "0.78rem",
-              fontWeight: 600,
-              borderRadius: "6px",
-              border: "1px solid rgba(16, 185, 129, 0.4)",
-              background:
-                topK === 5 && temperature === 0.3
-                  ? "rgba(16, 185, 129, 0.25)"
-                  : "rgba(16, 185, 129, 0.1)",
-              color: "#6ee7b7",
-              cursor: loading ? "not-allowed" : "pointer",
-              transition: "all 0.15s ease",
-            }}
-            title="Restore Current Application Default (Top-K=5, Temp=0.3)"
-          >
-            ⚡ App Default (K=5, T=0.3)
-          </button>
           <button
             type="button"
             onClick={handleOpenCompare}
@@ -2802,279 +2712,257 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
 
       {/* INSPECT DETAIL MODAL (5 TABS) */}
       {selectedCase && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0, 0, 0, 0.8)",
-            zIndex: 100,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "20px",
-          }}
-          onClick={() => setSelectedCase(null)}
+        <Modal
+          bare
+          padded
+          size="lg"
+          ariaLabel={`Inspection of ${selectedCase.case_id}`}
+          onClose={() => setSelectedCase(null)}
         >
+          {/* Modal Header */}
           <div
             style={{
-              background: "var(--bg-surface)",
-              border: "1px solid var(--border)",
-              borderRadius: "12px",
-              maxWidth: "920px",
-              width: "100%",
-              maxHeight: "92vh",
-              overflowY: "auto",
-              padding: "24px",
               display: "flex",
-              flexDirection: "column",
-              gap: "16px",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
             }}
-            onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header */}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <span
-                    style={{
-                      background: "rgba(59, 130, 246, 0.2)",
-                      color: "#60a5fa",
-                      fontSize: "0.85rem",
-                      padding: "3px 10px",
-                      borderRadius: "4px",
-                      fontWeight: 700,
-                    }}
-                  >
-                    {selectedCase.case_id}
-                  </span>
-                  <span
-                    style={{
-                      background: "rgba(255, 255, 255, 0.06)",
-                      color: "var(--text-muted)",
-                      fontSize: "0.75rem",
-                      padding: "2px 8px",
-                      borderRadius: "4px",
-                    }}
-                  >
-                    🏷️ Benchmark:{" "}
-                    {selectedCase.benchmark_taxonomy ||
-                      selectedCase.taxonomy_mode}
-                  </span>
-                  {selectedCase.actual_run_diagnosis && (
-                    <span
-                      style={{
-                        background: "rgba(99, 102, 241, 0.2)",
-                        color: "#c7d2fe",
-                        border: "1px solid rgba(99, 102, 241, 0.4)",
-                        fontSize: "0.75rem",
-                        padding: "2px 8px",
-                        borderRadius: "4px",
-                        fontWeight: 600,
-                      }}
-                    >
-                      🔬 Diagnosis:{" "}
-                      {selectedCase.actual_run_diagnosis.replace(/_/g, " ")}
-                    </span>
-                  )}
-                </div>
-                <div
-                  style={{
-                    fontSize: "0.75rem",
-                    color: "#94a3b8",
-                    marginTop: "4px",
-                  }}
-                >
-                  Run ID:{" "}
-                  <strong style={{ color: "#e2e8f0" }}>
-                    {selectedCase.evaluation_run_id ||
-                      currentRunId ||
-                      "eval_active"}
-                  </strong>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedCase(null)}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: "#fff",
-                  fontSize: "1.3rem",
-                  cursor: "pointer",
-                }}
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* 5 Tabs Navigation */}
-            <div
-              style={{
-                display: "flex",
-                gap: "6px",
-                borderBottom: "1px solid var(--border)",
-                paddingBottom: "10px",
-                flexWrap: "wrap",
-              }}
-            >
-              {[
-                { id: "config", label: "A. Configuration" },
-                { id: "retrieval", label: "B. Retrieval" },
-                { id: "context", label: "C. Final Context" },
-                { id: "generation", label: "D. Generation" },
-                { id: "evaluation", label: "E. Evaluation & Scoring" },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setInspectTab(tab.id as any)}
-                  style={{
-                    background:
-                      inspectTab === tab.id
-                        ? "rgba(59, 130, 246, 0.25)"
-                        : "rgba(255, 255, 255, 0.03)",
-                    border:
-                      inspectTab === tab.id
-                        ? "1px solid #3b82f6"
-                        : "1px solid var(--border)",
-                    color:
-                      inspectTab === tab.id ? "#60a5fa" : "var(--text-muted)",
-                    padding: "6px 14px",
-                    borderRadius: "6px",
-                    fontSize: "0.8rem",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    transition: "all 0.15s ease",
-                  }}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            {/* TAB CONTENT A: Configuration */}
-            {inspectTab === "config" && (
+            <div>
               <div
                 style={{
                   display: "flex",
-                  flexDirection: "column",
-                  gap: "14px",
+                  alignItems: "center",
+                  gap: "8px",
+                  flexWrap: "wrap",
+                }}
+              >
+                <span
+                  style={{
+                    background: "rgba(59, 130, 246, 0.2)",
+                    color: "#60a5fa",
+                    fontSize: "0.85rem",
+                    padding: "3px 10px",
+                    borderRadius: "4px",
+                    fontWeight: 700,
+                  }}
+                >
+                  {selectedCase.case_id}
+                </span>
+                <span
+                  style={{
+                    background: "rgba(255, 255, 255, 0.06)",
+                    color: "var(--text-muted)",
+                    fontSize: "0.75rem",
+                    padding: "2px 8px",
+                    borderRadius: "4px",
+                  }}
+                >
+                  🏷️ Benchmark:{" "}
+                  {selectedCase.benchmark_taxonomy ||
+                    selectedCase.taxonomy_mode}
+                </span>
+                {selectedCase.actual_run_diagnosis && (
+                  <span
+                    style={{
+                      background: "rgba(99, 102, 241, 0.2)",
+                      color: "#c7d2fe",
+                      border: "1px solid rgba(99, 102, 241, 0.4)",
+                      fontSize: "0.75rem",
+                      padding: "2px 8px",
+                      borderRadius: "4px",
+                      fontWeight: 600,
+                    }}
+                  >
+                    🔬 Diagnosis:{" "}
+                    {selectedCase.actual_run_diagnosis.replace(/_/g, " ")}
+                  </span>
+                )}
+              </div>
+              <div
+                style={{
+                  fontSize: "0.75rem",
+                  color: "#94a3b8",
+                  marginTop: "4px",
+                }}
+              >
+                Run ID:{" "}
+                <strong style={{ color: "#e2e8f0" }}>
+                  {selectedCase.evaluation_run_id ||
+                    currentRunId ||
+                    "eval_active"}
+                </strong>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedCase(null)}
+              aria-label="Close case inspection"
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#fff",
+                fontSize: "1.3rem",
+                cursor: "pointer",
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* 5 Tabs Navigation */}
+          <Tabs
+            tabs={[
+              { id: "config", label: "A. Configuration" },
+              { id: "retrieval", label: "B. Retrieval" },
+              { id: "context", label: "C. Final Context" },
+              { id: "generation", label: "D. Generation" },
+              { id: "evaluation", label: "E. Evaluation & Scoring" },
+            ]}
+            active={inspectTab}
+            onChange={(id) => setInspectTab(id as typeof inspectTab)}
+            ariaLabel="Case inspection sections"
+            idPrefix="judge-inspect"
+            variant="underline"
+          />
+
+          {/* TAB CONTENT A: Configuration */}
+          <TabPanel idPrefix="judge-inspect" id="config" active={inspectTab}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "14px",
+              }}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                  gap: "10px",
                 }}
               >
                 <div
                   style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-                    gap: "10px",
+                    background: "var(--bg-card)",
+                    padding: "10px 14px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--border)",
                   }}
                 >
                   <div
-                    style={{
-                      background: "var(--bg-card)",
-                      padding: "10px 14px",
-                      borderRadius: "6px",
-                      border: "1px solid var(--border)",
-                    }}
+                    style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}
                   >
-                    <div
-                      style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}
-                    >
-                      Top-K (Requested / Applied)
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "1.1rem",
-                        fontWeight: 700,
-                        color: "#38bdf8",
-                      }}
-                    >
-                      {selectedCase.top_k ?? topK}
-                    </div>
+                    Top-K (Requested / Applied)
                   </div>
                   <div
                     style={{
-                      background: "var(--bg-card)",
-                      padding: "10px 14px",
-                      borderRadius: "6px",
-                      border: "1px solid var(--border)",
+                      fontSize: "1.1rem",
+                      fontWeight: 700,
+                      color: "#38bdf8",
                     }}
                   >
-                    <div
-                      style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}
-                    >
-                      Temperature (Sent to Ollama)
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "1.1rem",
-                        fontWeight: 700,
-                        color: "#f59e0b",
-                      }}
-                    >
-                      {(selectedCase.temperature ?? temperature).toFixed(1)}
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      background: "var(--bg-card)",
-                      padding: "10px 14px",
-                      borderRadius: "6px",
-                      border: "1px solid var(--border)",
-                    }}
-                  >
-                    <div
-                      style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}
-                    >
-                      Model
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "0.95rem",
-                        fontWeight: 700,
-                        color: "#fff",
-                      }}
-                    >
-                      {selectedCase.model || "llama3.1:8b"}
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      background: "var(--bg-card)",
-                      padding: "10px 14px",
-                      borderRadius: "6px",
-                      border: "1px solid var(--border)",
-                    }}
-                  >
-                    <div
-                      style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}
-                    >
-                      Retrieval Mode
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "0.85rem",
-                        fontWeight: 600,
-                        color: "#a5b4fc",
-                      }}
-                    >
-                      {selectedCase.retrieval_mode || "Hybrid (Dense+BM25+RRF)"}
-                    </div>
+                    {selectedCase.top_k ?? topK}
                   </div>
                 </div>
+                <div
+                  style={{
+                    background: "var(--bg-card)",
+                    padding: "10px 14px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  <div
+                    style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}
+                  >
+                    Temperature (Sent to Ollama)
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "1.1rem",
+                      fontWeight: 700,
+                      color: "#f59e0b",
+                    }}
+                  >
+                    {(selectedCase.temperature ?? temperature).toFixed(1)}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    background: "var(--bg-card)",
+                    padding: "10px 14px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  <div
+                    style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}
+                  >
+                    Model
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "0.95rem",
+                      fontWeight: 700,
+                      color: "#fff",
+                    }}
+                  >
+                    {selectedCase.model || "llama3.1:8b"}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    background: "var(--bg-card)",
+                    padding: "10px 14px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  <div
+                    style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}
+                  >
+                    Retrieval Mode
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "0.85rem",
+                      fontWeight: 600,
+                      color: "#a5b4fc",
+                    }}
+                  >
+                    {selectedCase.retrieval_mode || "Hybrid (Dense+BM25+RRF)"}
+                  </div>
+                </div>
+              </div>
 
+              <div>
+                <div
+                  style={{
+                    fontSize: "0.75rem",
+                    color: "var(--text-muted)",
+                    textTransform: "uppercase",
+                    fontWeight: 700,
+                  }}
+                >
+                  User Question
+                </div>
+                <div
+                  style={{
+                    fontSize: "0.95rem",
+                    color: "#fff",
+                    fontWeight: 600,
+                    marginTop: "4px",
+                    background: "var(--bg-card)",
+                    padding: "10px 12px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  {selectedCase.question}
+                </div>
+              </div>
+
+              {selectedCase.expected_answer && (
                 <div>
                   <div
                     style={{
@@ -3084,13 +2972,12 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
                       fontWeight: 700,
                     }}
                   >
-                    User Question
+                    Expected / Reference Answer
                   </div>
                   <div
                     style={{
-                      fontSize: "0.95rem",
-                      color: "#fff",
-                      fontWeight: 600,
+                      fontSize: "0.85rem",
+                      color: "#cbd5e1",
                       marginTop: "4px",
                       background: "var(--bg-card)",
                       padding: "10px 12px",
@@ -3098,1714 +2985,1634 @@ export const JudgeEvaluatorView: React.FC<JudgeEvaluatorViewProps> = ({
                       border: "1px solid var(--border)",
                     }}
                   >
-                    {selectedCase.question}
+                    {selectedCase.expected_answer}
                   </div>
                 </div>
-
-                {selectedCase.expected_answer && (
-                  <div>
-                    <div
-                      style={{
-                        fontSize: "0.75rem",
-                        color: "var(--text-muted)",
-                        textTransform: "uppercase",
-                        fontWeight: 700,
-                      }}
-                    >
-                      Expected / Reference Answer
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "0.85rem",
-                        color: "#cbd5e1",
-                        marginTop: "4px",
-                        background: "var(--bg-card)",
-                        padding: "10px 12px",
-                        borderRadius: "6px",
-                        border: "1px solid var(--border)",
-                      }}
-                    >
-                      {selectedCase.expected_answer}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* TAB CONTENT B: Retrieval */}
-            {inspectTab === "retrieval" && (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "14px",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    background: "rgba(59, 130, 246, 0.08)",
-                    padding: "10px 14px",
-                    borderRadius: "6px",
-                    border: "1px solid rgba(59, 130, 246, 0.2)",
-                  }}
-                >
-                  <div>
-                    <span
-                      style={{
-                        fontSize: "0.85rem",
-                        fontWeight: 700,
-                        color: "#93c5fd",
-                      }}
-                    >
-                      Retrieved{" "}
-                      {selectedCase.retrieved_count ??
-                        (selectedCase.retrieved_chunk_ids?.length ||
-                          (selectedCase.top_k ?? topK))}{" "}
-                      Chunks
-                    </span>
-                    <span
-                      style={{
-                        fontSize: "0.78rem",
-                        color: "var(--text-muted)",
-                        marginLeft: "8px",
-                      }}
-                    >
-                      (Requested Top-K = {selectedCase.top_k ?? topK})
-                    </span>
-                  </div>
-                  <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
-                    Corpus: HRPolicy.pdf (325 chunks)
-                  </div>
-                </div>
-
-                <div>
-                  <div
-                    style={{
-                      fontSize: "0.75rem",
-                      color: "var(--text-muted)",
-                      textTransform: "uppercase",
-                      fontWeight: 700,
-                      marginBottom: "6px",
-                    }}
-                  >
-                    Retrieved Chunks &amp; Hybrid Scores (RRF / Dense + Sparse)
-                  </div>
-                  {selectedCase.retrieved_chunk_ids &&
-                  selectedCase.retrieved_chunk_ids.length > 0 ? (
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "6px",
-                        maxHeight: "240px",
-                        overflowY: "auto",
-                      }}
-                    >
-                      {selectedCase.retrieved_chunk_ids.map(
-                        (cid: string, idx: number) => (
-                          <div
-                            key={cid}
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                              background: "var(--bg-card)",
-                              padding: "6px 12px",
-                              borderRadius: "5px",
-                              border: "1px solid var(--border)",
-                              fontSize: "0.8rem",
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "8px",
-                              }}
-                            >
-                              <span
-                                style={{
-                                  color: "#94a3b8",
-                                  fontFamily: "monospace",
-                                }}
-                              >
-                                #{idx + 1}
-                              </span>
-                              <span
-                                style={{
-                                  color: "#38bdf8",
-                                  fontWeight: 700,
-                                  fontFamily: "monospace",
-                                }}
-                              >
-                                {cid}
-                              </span>
-                              {selectedCase.case_id === "case_01" &&
-                                cid.includes("c146") && (
-                                  <span
-                                    style={{
-                                      fontSize: "0.7rem",
-                                      background: "rgba(16, 185, 129, 0.2)",
-                                      color: "#34d399",
-                                      padding: "1px 6px",
-                                      borderRadius: "3px",
-                                    }}
-                                  >
-                                    ★ Contains Compassionate Leave Clause
-                                  </span>
-                                )}
-                              {selectedCase.case_id === "case_03" &&
-                                cid.includes("c107") && (
-                                  <span
-                                    style={{
-                                      fontSize: "0.7rem",
-                                      background: "rgba(16, 185, 129, 0.2)",
-                                      color: "#34d399",
-                                      padding: "1px 6px",
-                                      borderRadius: "3px",
-                                    }}
-                                  >
-                                    ★ Contains Carry Forward Exceptions Clause
-                                  </span>
-                                )}
-                            </div>
-                            <span
-                              style={{
-                                color: "#a5b4fc",
-                                fontFamily: "monospace",
-                              }}
-                            >
-                              Score:{" "}
-                              {Array.isArray(selectedCase.retrieved_scores) &&
-                              selectedCase.retrieved_scores[idx] !== undefined
-                                ? (
-                                    selectedCase.retrieved_scores[idx] as number
-                                  ).toFixed(4)
-                                : "—"}
-                            </span>
-                          </div>
-                        ),
-                      )}
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        fontSize: "0.82rem",
-                        color: "var(--text-muted)",
-                      }}
-                    >
-                      Retrieved chunk details recorded for completed execution
-                      runs.
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* TAB CONTENT C: Final Context */}
-            {inspectTab === "context" && (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "14px",
-                }}
-              >
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr 1fr",
-                    gap: "10px",
-                  }}
-                >
-                  <div
-                    style={{
-                      background: "var(--bg-card)",
-                      padding: "10px 14px",
-                      borderRadius: "6px",
-                      border: "1px solid var(--border)",
-                    }}
-                  >
-                    <div
-                      style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}
-                    >
-                      Context Chunks Count
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "1.1rem",
-                        fontWeight: 700,
-                        color: "#fff",
-                      }}
-                    >
-                      {selectedCase.final_context_chunk_ids?.length ??
-                        selectedCase.top_k ??
-                        topK}{" "}
-                      chunks
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      background: "var(--bg-card)",
-                      padding: "10px 14px",
-                      borderRadius: "6px",
-                      border: "1px solid var(--border)",
-                    }}
-                  >
-                    <div
-                      style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}
-                    >
-                      Context Token Count
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "1.1rem",
-                        fontWeight: 700,
-                        color: "#34d399",
-                      }}
-                    >
-                      {selectedCase.final_context_token_count ?? "Calculated"}{" "}
-                      tokens
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      background: "var(--bg-card)",
-                      padding: "10px 14px",
-                      borderRadius: "6px",
-                      border: "1px solid var(--border)",
-                    }}
-                  >
-                    <div
-                      style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}
-                    >
-                      Context Budget (Limit: 2,000)
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "0.85rem",
-                        fontWeight: 600,
-                        color:
-                          selectedCase.actual_run_diagnosis ===
-                          "context_budget_loss"
-                            ? "#f87171"
-                            : "#34d399",
-                        marginTop: "2px",
-                      }}
-                    >
-                      {selectedCase.actual_run_diagnosis ===
-                      "context_budget_loss"
-                        ? "⚠ Budget Loss"
-                        : "✓ Full Budget Retained"}
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <div
-                    style={{
-                      fontSize: "0.75rem",
-                      color: "var(--text-muted)",
-                      textTransform: "uppercase",
-                      fontWeight: 700,
-                    }}
-                  >
-                    Final Assembled Context Text
-                  </div>
-                  <div
-                    style={{
-                      background: "var(--bg-card)",
-                      padding: "12px",
-                      borderRadius: "6px",
-                      color: "#94a3b8",
-                      fontSize: "0.8rem",
-                      lineHeight: "1.45",
-                      maxHeight: "260px",
-                      overflowY: "auto",
-                      whiteSpace: "pre-wrap",
-                      marginTop: "6px",
-                      border: "1px solid var(--border)",
-                    }}
-                  >
-                    {selectedCase.retrieved_context ||
-                      "Context text populated during evaluation execution."}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* TAB CONTENT D: Generation */}
-            {inspectTab === "generation" && (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "14px",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    gap: "12px",
-                    alignItems: "center",
-                    background: "rgba(245, 158, 11, 0.08)",
-                    padding: "10px 14px",
-                    borderRadius: "6px",
-                    border: "1px solid rgba(245, 158, 11, 0.2)",
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: "0.82rem",
-                      color: "#fbbf24",
-                      fontWeight: 600,
-                    }}
-                  >
-                    Ollama Options Sent:
-                  </span>
-                  <span
-                    style={{
-                      fontSize: "0.78rem",
-                      fontFamily: "monospace",
-                      color: "#e2e8f0",
-                      background: "rgba(0, 0, 0, 0.3)",
-                      padding: "2px 8px",
-                      borderRadius: "4px",
-                    }}
-                  >
-                    temperature:{" "}
-                    {Number(
-                      selectedCase.applied_temperature ??
-                        selectedCase.temperature ??
-                        temperature,
-                    ).toFixed(1)}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: "0.78rem",
-                      fontFamily: "monospace",
-                      color: "#e2e8f0",
-                      background: "rgba(0, 0, 0, 0.3)",
-                      padding: "2px 8px",
-                      borderRadius: "4px",
-                    }}
-                  >
-                    model: {selectedCase.model || "llama3.1:8b"}
-                  </span>
-                </div>
-
-                <div>
-                  <div
-                    style={{
-                      fontSize: "0.75rem",
-                      color: "var(--text-muted)",
-                      textTransform: "uppercase",
-                      fontWeight: 700,
-                    }}
-                  >
-                    Assistant Answer
-                  </div>
-                  <div
-                    style={{
-                      background: "var(--bg-card)",
-                      padding: "12px",
-                      borderRadius: "6px",
-                      color: "#e2e8f0",
-                      fontSize: "0.9rem",
-                      lineHeight: "1.5",
-                      marginTop: "6px",
-                      border: "1px solid var(--border)",
-                    }}
-                  >
-                    {selectedCase.answer ||
-                      "Answer generated by LLM during evaluation."}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* TAB CONTENT E: Evaluation & Scoring */}
-            {inspectTab === "evaluation" && (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "14px",
-                }}
-              >
-                {/* Comparison Grid */}
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr 1fr",
-                    gap: "12px",
-                  }}
-                >
-                  <div
-                    style={{
-                      background: "rgba(255, 255, 255, 0.03)",
-                      padding: "12px",
-                      borderRadius: "6px",
-                      border: "1px solid var(--border)",
-                    }}
-                  >
-                    <div
-                      style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}
-                    >
-                      Ground Truth
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "1.1rem",
-                        fontWeight: 700,
-                        color:
-                          selectedCase.human_label === 1
-                            ? "#34d399"
-                            : "#f87171",
-                      }}
-                    >
-                      {selectedCase.human_label ?? "—"}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "0.7rem",
-                        color: "var(--text-muted)",
-                        marginTop: "2px",
-                      }}
-                    >
-                      {selectedCase.human_label === 1
-                        ? "Expected Pass (1)"
-                        : "Expected Fail (0)"}
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      background: "rgba(255, 255, 255, 0.03)",
-                      padding: "12px",
-                      borderRadius: "6px",
-                      border: "1px solid var(--border)",
-                    }}
-                  >
-                    <div
-                      style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}
-                    >
-                      Judge V1 (Zero-Shot)
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "1.1rem",
-                        fontWeight: 700,
-                        color:
-                          selectedCase.judge_v1_verdict === 1
-                            ? "#60a5fa"
-                            : selectedCase.judge_v1_verdict === 0
-                              ? "#f87171"
-                              : "var(--text-muted)",
-                      }}
-                    >
-                      {selectedCase.judge_v1_verdict !== null &&
-                      selectedCase.judge_v1_verdict !== undefined
-                        ? `${selectedCase.judge_v1_verdict} (${selectedCase.judge_v1_verdict === selectedCase.human_label ? "Agree" : "Disagree"})`
-                        : "Pending"}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "0.7rem",
-                        color:
-                          selectedCase.judge_v1_verdict ===
-                          selectedCase.human_label
-                            ? "#10b981"
-                            : "#f59e0b",
-                        marginTop: "2px",
-                      }}
-                    >
-                      {selectedCase.judge_v1_verdict !== null &&
-                      selectedCase.judge_v1_verdict !== undefined
-                        ? selectedCase.judge_v1_verdict ===
-                          selectedCase.human_label
-                          ? "✓ Agreed with Ground Truth"
-                          : "⚠ Disagreed with Ground Truth"
-                        : "Pending"}
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      background: "rgba(255, 255, 255, 0.03)",
-                      padding: "12px",
-                      borderRadius: "6px",
-                      border: "1px solid var(--border)",
-                    }}
-                  >
-                    <div
-                      style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}
-                    >
-                      Judge V2 (Few-Shot)
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "1.1rem",
-                        fontWeight: 700,
-                        color:
-                          selectedCase.judge_v2_verdict === 1
-                            ? "#60a5fa"
-                            : selectedCase.judge_v2_verdict === 0
-                              ? "#f87171"
-                              : "var(--text-muted)",
-                      }}
-                    >
-                      {selectedCase.judge_v2_verdict !== null &&
-                      selectedCase.judge_v2_verdict !== undefined
-                        ? `${selectedCase.judge_v2_verdict} (${selectedCase.judge_v2_verdict === selectedCase.human_label ? "Agree" : "Disagree"})`
-                        : "Pending"}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "0.7rem",
-                        color:
-                          selectedCase.judge_v2_verdict ===
-                          selectedCase.human_label
-                            ? "#10b981"
-                            : "#f59e0b",
-                        marginTop: "2px",
-                      }}
-                    >
-                      {selectedCase.judge_v2_verdict !== null &&
-                      selectedCase.judge_v2_verdict !== undefined
-                        ? selectedCase.judge_v2_verdict ===
-                          selectedCase.human_label
-                          ? "✓ Agreed with Ground Truth"
-                          : "⚠ Disagreed with Ground Truth"
-                        : "Pending"}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Deterministic Assertions Breakdown */}
-                {selectedCase.assertions && (
-                  <div
-                    style={{
-                      background: "rgba(255, 255, 255, 0.02)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "8px",
-                      padding: "12px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: "0.75rem",
-                        color: "#fff",
-                        fontWeight: 700,
-                        marginBottom: "8px",
-                      }}
-                    >
-                      Deterministic Policy Rule Assertions Breakdown
-                    </div>
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
-                        gap: "8px",
-                        fontSize: "0.78rem",
-                      }}
-                    >
-                      <div
-                        style={{
-                          color: selectedCase.assertions
-                            .policy_section_reference_present
-                            ? "#34d399"
-                            : "#f87171",
-                        }}
-                      >
-                        {selectedCase.assertions
-                          .policy_section_reference_present
-                          ? "✓"
-                          : "✗"}{" "}
-                        Section Reference Present
-                      </div>
-                      <div
-                        style={{
-                          color: selectedCase.assertions
-                            .policy_section_reference_resolves
-                            ? "#34d399"
-                            : "#f87171",
-                        }}
-                      >
-                        {selectedCase.assertions
-                          .policy_section_reference_resolves
-                          ? "✓"
-                          : "✗"}{" "}
-                        Section Resolves against 113+ Sections
-                      </div>
-                      <div
-                        style={{
-                          color: selectedCase.assertions
-                            .handbook_version_present
-                            ? "#34d399"
-                            : "#94a3b8",
-                        }}
-                      >
-                        {selectedCase.assertions.handbook_version_present
-                          ? "✓"
-                          : "○"}{" "}
-                        Handbook Version Cited (2018)
-                      </div>
-                      <div
-                        style={{
-                          color: selectedCase.assertions
-                            .numeric_policy_value_present
-                            ? "#34d399"
-                            : "#94a3b8",
-                        }}
-                      >
-                        {selectedCase.assertions.numeric_policy_value_present
-                          ? "✓"
-                          : "○"}{" "}
-                        Numeric Policy Value Exact Match
-                      </div>
-                      <div
-                        style={{
-                          color: selectedCase.assertions
-                            .out_of_jurisdiction_refusal
-                            ? "#34d399"
-                            : "#f87171",
-                        }}
-                      >
-                        {selectedCase.assertions.out_of_jurisdiction_refusal
-                          ? "✓"
-                          : "✗"}{" "}
-                        Out-of-Jurisdiction Refusal Guard
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Diagnostic Failure Root Cause Box */}
-                {selectedCase.failure_reason && (
-                  <div
-                    style={{
-                      background:
-                        selectedCase.human_label === 1
-                          ? "rgba(16, 185, 129, 0.08)"
-                          : "rgba(239, 68, 68, 0.1)",
-                      border: `1px solid ${selectedCase.human_label === 1 ? "rgba(16, 185, 129, 0.3)" : "rgba(239, 68, 68, 0.3)"}`,
-                      padding: "14px",
-                      borderRadius: "8px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: "0.78rem",
-                        color:
-                          selectedCase.human_label === 1
-                            ? "#34d399"
-                            : "#f87171",
-                        fontWeight: 700,
-                      }}
-                    >
-                      Diagnostic Failure Root Cause Analysis (
-                      {(
-                        selectedCase.failure_category || "DIAGNOSTIC"
-                      ).toUpperCase()}
-                      ):
-                    </div>
-                    <div
-                      style={{
-                        color: "#f1f5f9",
-                        fontSize: "0.85rem",
-                        marginTop: "6px",
-                        lineHeight: "1.5",
-                      }}
-                    >
-                      {selectedCase.failure_reason}
-                    </div>
-                    {selectedCase.resolution && (
-                      <div
-                        style={{
-                          color: "#93c5fd",
-                          fontSize: "0.82rem",
-                          marginTop: "8px",
-                          lineHeight: "1.4",
-                        }}
-                      >
-                        <strong>Recommended Resolution:</strong>{" "}
-                        {selectedCase.resolution}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                marginTop: "8px",
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => setSelectedCase(null)}
-                className="btn-secondary"
-              >
-                Close
-              </button>
+              )}
             </div>
-          </div>
-        </div>
-      )}
+          </TabPanel>
 
-      {/* COMPARE RUNS MODAL (SIDE-BY-SIDE RUN DIFF) */}
-      {showCompareModal && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0, 0, 0, 0.85)",
-            zIndex: 105,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "20px",
-          }}
-          onClick={() => setShowCompareModal(false)}
-        >
-          <div
-            style={{
-              background: "var(--bg-surface)",
-              border: "1px solid var(--border)",
-              borderRadius: "12px",
-              maxWidth: "1100px",
-              width: "100%",
-              maxHeight: "92vh",
-              overflowY: "auto",
-              padding: "24px",
-              display: "flex",
-              flexDirection: "column",
-              gap: "18px",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
+          {/* TAB CONTENT B: Retrieval */}
+          <TabPanel idPrefix="judge-inspect" id="retrieval" active={inspectTab}>
             <div
               style={{
                 display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
+                flexDirection: "column",
+                gap: "14px",
               }}
             >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  background: "rgba(59, 130, 246, 0.08)",
+                  padding: "10px 14px",
+                  borderRadius: "6px",
+                  border: "1px solid rgba(59, 130, 246, 0.2)",
+                }}
+              >
+                <div>
+                  <span
+                    style={{
+                      fontSize: "0.85rem",
+                      fontWeight: 700,
+                      color: "#93c5fd",
+                    }}
+                  >
+                    Retrieved{" "}
+                    {selectedCase.retrieved_count ??
+                      (selectedCase.retrieved_chunk_ids?.length ||
+                        (selectedCase.top_k ?? topK))}{" "}
+                    Chunks
+                  </span>
+                  <span
+                    style={{
+                      fontSize: "0.78rem",
+                      color: "var(--text-muted)",
+                      marginLeft: "8px",
+                    }}
+                  >
+                    (Requested Top-K = {selectedCase.top_k ?? topK})
+                  </span>
+                </div>
+                <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
+                  Corpus: HRPolicy.pdf (325 chunks)
+                </div>
+              </div>
+
               <div>
-                <h2
+                <div
                   style={{
-                    fontSize: "1.25rem",
-                    fontWeight: 800,
-                    color: "#fff",
-                    margin: 0,
-                  }}
-                >
-                  ⚖️ Side-by-Side Evaluation Run Comparison
-                </h2>
-                <p
-                  style={{
+                    fontSize: "0.75rem",
                     color: "var(--text-muted)",
-                    fontSize: "0.82rem",
-                    margin: "4px 0 0 0",
-                  }}
-                >
-                  Compare retrieval chunks, context tokens, generated answers,
-                  and judge verdicts between Run A and Run B.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowCompareModal(false)}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: "#fff",
-                  fontSize: "1.3rem",
-                  cursor: "pointer",
-                }}
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Selectors Bar */}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr 1fr",
-                gap: "12px",
-                background: "rgba(255, 255, 255, 0.03)",
-                padding: "12px",
-                borderRadius: "8px",
-                border: "1px solid var(--border)",
-              }}
-            >
-              <div>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: "0.75rem",
+                    textTransform: "uppercase",
                     fontWeight: 700,
-                    color: "#60a5fa",
-                    marginBottom: "4px",
+                    marginBottom: "6px",
                   }}
                 >
-                  Run A (Baseline / Reference):
-                </label>
-                <select
-                  value={compareRunAId}
-                  onChange={(e) => handleSelectCompareRunA(e.target.value)}
-                  style={{
-                    width: "100%",
-                    background: "#1e293b",
-                    border: "1px solid var(--border)",
-                    color: "#fff",
-                    borderRadius: "6px",
-                    padding: "6px 10px",
-                    fontSize: "0.8rem",
-                  }}
-                >
-                  {availableRuns.length === 0 && (
-                    <option value="">No runs found</option>
-                  )}
-                  {availableRuns.map((r) => (
-                    <option
-                      key={r.evaluation_run_id}
-                      value={r.evaluation_run_id}
-                    >
-                      {r.evaluation_run_id} (K={r.top_k}, T={r.temperature},{" "}
-                      {r.completed_cases}/{r.total_cases})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    color: "#34d399",
-                    marginBottom: "4px",
-                  }}
-                >
-                  Run B (Experiment / Candidate):
-                </label>
-                <select
-                  value={compareRunBId}
-                  onChange={(e) => handleSelectCompareRunB(e.target.value)}
-                  style={{
-                    width: "100%",
-                    background: "#1e293b",
-                    border: "1px solid var(--border)",
-                    color: "#fff",
-                    borderRadius: "6px",
-                    padding: "6px 10px",
-                    fontSize: "0.8rem",
-                  }}
-                >
-                  {availableRuns.length === 0 && (
-                    <option value="">No runs found</option>
-                  )}
-                  {availableRuns.map((r) => (
-                    <option
-                      key={r.evaluation_run_id}
-                      value={r.evaluation_run_id}
-                    >
-                      {r.evaluation_run_id} (K={r.top_k}, T={r.temperature},{" "}
-                      {r.completed_cases}/{r.total_cases})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    color: "#fbbf24",
-                    marginBottom: "4px",
-                  }}
-                >
-                  Select Benchmark Case:
-                </label>
-                <select
-                  value={compareCaseId}
-                  onChange={(e) => setCompareCaseId(e.target.value)}
-                  style={{
-                    width: "100%",
-                    background: "#1e293b",
-                    border: "1px solid var(--border)",
-                    color: "#fff",
-                    borderRadius: "6px",
-                    padding: "6px 10px",
-                    fontSize: "0.8rem",
-                  }}
-                >
-                  {[
-                    "case_01",
-                    "case_02",
-                    "case_03",
-                    "case_04",
-                    "case_05",
-                    "case_06",
-                    "case_07",
-                    "case_08",
-                    "case_09",
-                    "case_10",
-                  ].map((cid) => (
-                    <option key={cid} value={cid}>
-                      {cid}{" "}
-                      {cid === "case_01"
-                        ? "(Low-K multi-clause exemplar)"
-                        : cid === "case_03"
-                          ? "(Carry-forward exception exemplar)"
-                          : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Comparison Cards Grid */}
-            {loadingCompare ? (
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: "40px",
-                  color: "#94a3b8",
-                }}
-              >
-                <span
-                  className="spinner"
-                  style={{
-                    width: "20px",
-                    height: "20px",
-                    display: "inline-block",
-                    marginBottom: "8px",
-                  }}
-                ></span>
-                <div>Loading run comparison details...</div>
-              </div>
-            ) : (
-              (() => {
-                const caseA =
-                  runAData?.cases?.find(
-                    (c: any) => c.case_id === compareCaseId,
-                  ) || null;
-                const caseB =
-                  runBData?.cases?.find(
-                    (c: any) => c.case_id === compareCaseId,
-                  ) || null;
-
-                const chunksA = caseA?.retrieved_chunk_ids || [];
-                const chunksB = caseB?.retrieved_chunk_ids || [];
-                const diffChunks = chunksB.filter(
-                  (cid: string) => !chunksA.includes(cid),
-                );
-
-                return (
+                  Retrieved Chunks &amp; Hybrid Scores (RRF / Dense + Sparse)
+                </div>
+                {selectedCase.retrieved_chunk_ids &&
+                selectedCase.retrieved_chunk_ids.length > 0 ? (
                   <div
                     style={{
                       display: "flex",
                       flexDirection: "column",
-                      gap: "16px",
+                      gap: "6px",
+                      maxHeight: "240px",
+                      overflowY: "auto",
                     }}
                   >
-                    {/* Summary Diff Callout */}
-                    <div
-                      style={{
-                        background: "rgba(99, 102, 241, 0.1)",
-                        border: "1px solid rgba(99, 102, 241, 0.3)",
-                        borderRadius: "8px",
-                        padding: "12px 16px",
-                        fontSize: "0.82rem",
-                        lineHeight: "1.5",
-                        color: "#c7d2fe",
-                      }}
-                    >
-                      <strong>
-                        Retrieval Diff Analysis for {compareCaseId}:
-                      </strong>{" "}
-                      Run A (K={runAData?.top_k ?? caseA?.top_k ?? 5}) retrieved{" "}
-                      {chunksA.length} chunks. Run B (K=
-                      {runBData?.top_k ?? caseB?.top_k ?? 8}) retrieved{" "}
-                      {chunksB.length} chunks.{" "}
-                      {diffChunks.length > 0 ? (
-                        <span>
-                          Additional chunks retrieved in Run B:{" "}
-                          <strong>{diffChunks.join(", ")}</strong>.
-                        </span>
-                      ) : (
-                        <span>
-                          Retrieval chunk sets are identical between Run A and
-                          Run B.
-                        </span>
-                      )}
-                    </div>
-
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
-                        gap: "16px",
-                      }}
-                    >
-                      {/* RUN A COLUMN */}
-                      <div
-                        style={{
-                          background: "rgba(59, 130, 246, 0.05)",
-                          border: "1px solid rgba(59, 130, 246, 0.25)",
-                          borderRadius: "8px",
-                          padding: "16px",
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "12px",
-                        }}
-                      >
+                    {selectedCase.retrieved_chunk_ids.map(
+                      (cid: string, idx: number) => (
                         <div
+                          key={cid}
                           style={{
                             display: "flex",
                             justifyContent: "space-between",
                             alignItems: "center",
-                            borderBottom: "1px solid rgba(59, 130, 246, 0.2)",
-                            paddingBottom: "8px",
+                            background: "var(--bg-card)",
+                            padding: "6px 12px",
+                            borderRadius: "5px",
+                            border: "1px solid var(--border)",
+                            fontSize: "0.8rem",
                           }}
                         >
-                          <span
+                          <div
                             style={{
-                              fontWeight: 700,
-                              color: "#60a5fa",
-                              fontSize: "0.9rem",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
                             }}
                           >
-                            RUN A
-                          </span>
+                            <span
+                              style={{
+                                color: "#94a3b8",
+                                fontFamily: "monospace",
+                              }}
+                            >
+                              #{idx + 1}
+                            </span>
+                            <span
+                              style={{
+                                color: "#38bdf8",
+                                fontWeight: 700,
+                                fontFamily: "monospace",
+                              }}
+                            >
+                              {cid}
+                            </span>
+                            {selectedCase.case_id === "case_01" &&
+                              cid.includes("c146") && (
+                                <span
+                                  style={{
+                                    fontSize: "0.7rem",
+                                    background: "rgba(16, 185, 129, 0.2)",
+                                    color: "#34d399",
+                                    padding: "1px 6px",
+                                    borderRadius: "3px",
+                                  }}
+                                >
+                                  ★ Contains Compassionate Leave Clause
+                                </span>
+                              )}
+                            {selectedCase.case_id === "case_03" &&
+                              cid.includes("c107") && (
+                                <span
+                                  style={{
+                                    fontSize: "0.7rem",
+                                    background: "rgba(16, 185, 129, 0.2)",
+                                    color: "#34d399",
+                                    padding: "1px 6px",
+                                    borderRadius: "3px",
+                                  }}
+                                >
+                                  ★ Contains Carry Forward Exceptions Clause
+                                </span>
+                              )}
+                          </div>
                           <span
                             style={{
-                              fontSize: "0.72rem",
-                              color: "#94a3b8",
+                              color: "#a5b4fc",
                               fontFamily: "monospace",
                             }}
                           >
-                            {caseA?.evaluation_run_id ||
-                              runAData?.evaluation_run_id ||
-                              "eval_a"}
+                            Score:{" "}
+                            {Array.isArray(selectedCase.retrieved_scores) &&
+                            selectedCase.retrieved_scores[idx] !== undefined
+                              ? (
+                                  selectedCase.retrieved_scores[idx] as number
+                                ).toFixed(4)
+                              : "—"}
                           </span>
                         </div>
-
-                        <div style={{ fontSize: "0.78rem", color: "#cbd5e1" }}>
-                          <div>
-                            <strong>Top-K:</strong>{" "}
-                            {runAData?.top_k ?? caseA?.top_k ?? 5} |{" "}
-                            <strong>Temp:</strong>{" "}
-                            {runAData?.temperature ?? caseA?.temperature ?? 0.3}
-                          </div>
-                          <div>
-                            <strong>Model:</strong>{" "}
-                            {runAData?.model ?? caseA?.model ?? "llama3.1:8b"}
-                          </div>
-                          <div>
-                            <strong>Retrieved Chunks:</strong> {chunksA.length}{" "}
-                            (
-                            {chunksA.join(", ") ||
-                              "c144, c145, c147, c150, c151"}
-                            )
-                          </div>
-                          <div>
-                            <strong>Context Tokens:</strong>{" "}
-                            {caseA?.final_context_token_count ?? "788"} tokens
-                          </div>
-                        </div>
-
-                        <div>
-                          <div
-                            style={{
-                              fontSize: "0.72rem",
-                              color: "var(--text-muted)",
-                              textTransform: "uppercase",
-                              fontWeight: 700,
-                            }}
-                          >
-                            Assistant Answer
-                          </div>
-                          <div
-                            style={{
-                              fontSize: "0.8rem",
-                              color: "#e2e8f0",
-                              background: "var(--bg-card)",
-                              padding: "8px 10px",
-                              borderRadius: "4px",
-                              marginTop: "4px",
-                              border: "1px solid var(--border)",
-                              maxHeight: "110px",
-                              overflowY: "auto",
-                            }}
-                          >
-                            {caseA?.answer || "No answer recorded"}
-                          </div>
-                        </div>
-
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "8px",
-                            fontSize: "0.75rem",
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <span
-                            style={{
-                              background: "rgba(255, 255, 255, 0.05)",
-                              padding: "2px 8px",
-                              borderRadius: "4px",
-                            }}
-                          >
-                            Judge V1:{" "}
-                            <strong>{caseA?.judge_v1_verdict ?? "0"}</strong>
-                          </span>
-                          <span
-                            style={{
-                              background: "rgba(255, 255, 255, 0.05)",
-                              padding: "2px 8px",
-                              borderRadius: "4px",
-                            }}
-                          >
-                            Judge V2:{" "}
-                            <strong>{caseA?.judge_v2_verdict ?? "0"}</strong>
-                          </span>
-                          <span
-                            style={{
-                              background: "rgba(255, 255, 255, 0.05)",
-                              padding: "2px 8px",
-                              borderRadius: "4px",
-                            }}
-                          >
-                            Ground Truth:{" "}
-                            <strong>{caseA?.human_label ?? "0"}</strong>
-                          </span>
-                        </div>
-
-                        <div style={{ fontSize: "0.75rem", color: "#f87171" }}>
-                          <strong>Run Diagnosis:</strong>{" "}
-                          {caseA?.actual_run_diagnosis ||
-                            "retrieval_insufficient"}
-                        </div>
-                      </div>
-
-                      {/* RUN B COLUMN */}
-                      <div
-                        style={{
-                          background: "rgba(16, 185, 129, 0.05)",
-                          border: "1px solid rgba(16, 185, 129, 0.25)",
-                          borderRadius: "8px",
-                          padding: "16px",
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "12px",
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            borderBottom: "1px solid rgba(16, 185, 129, 0.2)",
-                            paddingBottom: "8px",
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontWeight: 700,
-                              color: "#34d399",
-                              fontSize: "0.9rem",
-                            }}
-                          >
-                            RUN B
-                          </span>
-                          <span
-                            style={{
-                              fontSize: "0.72rem",
-                              color: "#94a3b8",
-                              fontFamily: "monospace",
-                            }}
-                          >
-                            {caseB?.evaluation_run_id ||
-                              runBData?.evaluation_run_id ||
-                              "eval_b"}
-                          </span>
-                        </div>
-
-                        <div style={{ fontSize: "0.78rem", color: "#cbd5e1" }}>
-                          <div>
-                            <strong>Top-K:</strong>{" "}
-                            {runBData?.top_k ?? caseB?.top_k ?? 8} |{" "}
-                            <strong>Temp:</strong>{" "}
-                            {runBData?.temperature ?? caseB?.temperature ?? 0.3}
-                          </div>
-                          <div>
-                            <strong>Model:</strong>{" "}
-                            {runBData?.model ?? caseB?.model ?? "llama3.1:8b"}
-                          </div>
-                          <div>
-                            <strong>Retrieved Chunks:</strong> {chunksB.length}{" "}
-                            (
-                            {chunksB.join(", ") ||
-                              "c144, c145, c146, c147, c150, c151, c141, c152"}
-                            )
-                          </div>
-                          <div>
-                            <strong>Context Tokens:</strong>{" "}
-                            {caseB?.final_context_token_count ?? "1383"} tokens
-                          </div>
-                        </div>
-
-                        <div>
-                          <div
-                            style={{
-                              fontSize: "0.72rem",
-                              color: "var(--text-muted)",
-                              textTransform: "uppercase",
-                              fontWeight: 700,
-                            }}
-                          >
-                            Assistant Answer
-                          </div>
-                          <div
-                            style={{
-                              fontSize: "0.8rem",
-                              color: "#e2e8f0",
-                              background: "var(--bg-card)",
-                              padding: "8px 10px",
-                              borderRadius: "4px",
-                              marginTop: "4px",
-                              border: "1px solid var(--border)",
-                              maxHeight: "110px",
-                              overflowY: "auto",
-                            }}
-                          >
-                            {caseB?.answer || "No answer recorded"}
-                          </div>
-                        </div>
-
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "8px",
-                            fontSize: "0.75rem",
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <span
-                            style={{
-                              background: "rgba(255, 255, 255, 0.05)",
-                              padding: "2px 8px",
-                              borderRadius: "4px",
-                            }}
-                          >
-                            Judge V1:{" "}
-                            <strong>{caseB?.judge_v1_verdict ?? "0"}</strong>
-                          </span>
-                          <span
-                            style={{
-                              background: "rgba(255, 255, 255, 0.05)",
-                              padding: "2px 8px",
-                              borderRadius: "4px",
-                            }}
-                          >
-                            Judge V2:{" "}
-                            <strong>{caseB?.judge_v2_verdict ?? "0"}</strong>
-                          </span>
-                          <span
-                            style={{
-                              background: "rgba(255, 255, 255, 0.05)",
-                              padding: "2px 8px",
-                              borderRadius: "4px",
-                            }}
-                          >
-                            Ground Truth:{" "}
-                            <strong>{caseB?.human_label ?? "0"}</strong>
-                          </span>
-                        </div>
-
-                        <div style={{ fontSize: "0.75rem", color: "#fbbf24" }}>
-                          <strong>Run Diagnosis:</strong>{" "}
-                          {caseB?.actual_run_diagnosis ||
-                            "generator_completeness_omission"}
-                        </div>
-                      </div>
-                    </div>
+                      ),
+                    )}
                   </div>
-                );
-              })()
-            )}
+                ) : (
+                  <div
+                    style={{
+                      fontSize: "0.82rem",
+                      color: "var(--text-muted)",
+                    }}
+                  >
+                    Retrieved chunk details recorded for completed execution
+                    runs.
+                  </div>
+                )}
+              </div>
+            </div>
+          </TabPanel>
 
+          {/* TAB CONTENT C: Final Context */}
+          <TabPanel idPrefix="judge-inspect" id="context" active={inspectTab}>
             <div
               style={{
                 display: "flex",
-                justifyContent: "flex-end",
-                marginTop: "8px",
+                flexDirection: "column",
+                gap: "14px",
               }}
             >
-              <button
-                type="button"
-                onClick={() => setShowCompareModal(false)}
-                className="btn-secondary"
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr 1fr",
+                  gap: "10px",
+                }}
               >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+                <div
+                  style={{
+                    background: "var(--bg-card)",
+                    padding: "10px 14px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  <div
+                    style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}
+                  >
+                    Context Chunks Count
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "1.1rem",
+                      fontWeight: 700,
+                      color: "#fff",
+                    }}
+                  >
+                    {selectedCase.final_context_chunk_ids?.length ??
+                      selectedCase.top_k ??
+                      topK}{" "}
+                    chunks
+                  </div>
+                </div>
+                <div
+                  style={{
+                    background: "var(--bg-card)",
+                    padding: "10px 14px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  <div
+                    style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}
+                  >
+                    Context Token Count
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "1.1rem",
+                      fontWeight: 700,
+                      color: "#34d399",
+                    }}
+                  >
+                    {selectedCase.final_context_token_count ?? "Calculated"}{" "}
+                    tokens
+                  </div>
+                </div>
+                <div
+                  style={{
+                    background: "var(--bg-card)",
+                    padding: "10px 14px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  <div
+                    style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}
+                  >
+                    Context Budget (Limit: 2,000)
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "0.85rem",
+                      fontWeight: 600,
+                      color:
+                        selectedCase.actual_run_diagnosis ===
+                        "context_budget_loss"
+                          ? "#f87171"
+                          : "#34d399",
+                      marginTop: "2px",
+                    }}
+                  >
+                    {selectedCase.actual_run_diagnosis === "context_budget_loss"
+                      ? "⚠ Budget Loss"
+                      : "✓ Full Budget Retained"}
+                  </div>
+                </div>
+              </div>
 
-      {/* ADD CUSTOM QA MODAL */}
-      {showAddModal && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0, 0, 0, 0.75)",
-            zIndex: 100,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "20px",
-          }}
-          onClick={() => setShowAddModal(false)}
-        >
-          <div
-            style={{
-              background: "var(--bg-surface)",
-              border: "1px solid var(--border)",
-              borderRadius: "12px",
-              maxWidth: "650px",
-              width: "100%",
-              maxHeight: "90vh",
-              overflowY: "auto",
-              padding: "24px",
-            }}
-            onClick={(e) => e.stopPropagation()}
+              <div>
+                <div
+                  style={{
+                    fontSize: "0.75rem",
+                    color: "var(--text-muted)",
+                    textTransform: "uppercase",
+                    fontWeight: 700,
+                  }}
+                >
+                  Final Assembled Context Text
+                </div>
+                <div
+                  style={{
+                    background: "var(--bg-card)",
+                    padding: "12px",
+                    borderRadius: "6px",
+                    color: "#94a3b8",
+                    fontSize: "0.8rem",
+                    lineHeight: "1.45",
+                    maxHeight: "260px",
+                    overflowY: "auto",
+                    whiteSpace: "pre-wrap",
+                    marginTop: "6px",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  {selectedCase.retrieved_context ||
+                    "Context text populated during evaluation execution."}
+                </div>
+              </div>
+            </div>
+          </TabPanel>
+
+          {/* TAB CONTENT D: Generation */}
+          <TabPanel
+            idPrefix="judge-inspect"
+            id="generation"
+            active={inspectTab}
           >
             <div
               style={{
                 display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "16px",
+                flexDirection: "column",
+                gap: "14px",
               }}
             >
-              <h3 style={{ margin: 0, color: "#fff", fontSize: "1.2rem" }}>
-                Add Custom Question &amp; Answer for Evaluation
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowAddModal(false)}
+              <div
                 style={{
-                  background: "transparent",
-                  border: "none",
-                  color: "#fff",
-                  fontSize: "1.2rem",
-                  cursor: "pointer",
+                  display: "flex",
+                  gap: "12px",
+                  alignItems: "center",
+                  background: "rgba(245, 158, 11, 0.08)",
+                  padding: "10px 14px",
+                  borderRadius: "6px",
+                  border: "1px solid rgba(245, 158, 11, 0.2)",
                 }}
               >
-                ✕
-              </button>
+                <span
+                  style={{
+                    fontSize: "0.82rem",
+                    color: "#fbbf24",
+                    fontWeight: 600,
+                  }}
+                >
+                  Ollama Options Sent:
+                </span>
+                <span
+                  style={{
+                    fontSize: "0.78rem",
+                    fontFamily: "monospace",
+                    color: "#e2e8f0",
+                    background: "rgba(0, 0, 0, 0.3)",
+                    padding: "2px 8px",
+                    borderRadius: "4px",
+                  }}
+                >
+                  temperature:{" "}
+                  {Number(
+                    selectedCase.applied_temperature ??
+                      selectedCase.temperature ??
+                      temperature,
+                  ).toFixed(1)}
+                </span>
+                <span
+                  style={{
+                    fontSize: "0.78rem",
+                    fontFamily: "monospace",
+                    color: "#e2e8f0",
+                    background: "rgba(0, 0, 0, 0.3)",
+                    padding: "2px 8px",
+                    borderRadius: "4px",
+                  }}
+                >
+                  model: {selectedCase.model || "llama3.1:8b"}
+                </span>
+              </div>
+
+              <div>
+                <div
+                  style={{
+                    fontSize: "0.75rem",
+                    color: "var(--text-muted)",
+                    textTransform: "uppercase",
+                    fontWeight: 700,
+                  }}
+                >
+                  Assistant Answer
+                </div>
+                <div
+                  style={{
+                    background: "var(--bg-card)",
+                    padding: "12px",
+                    borderRadius: "6px",
+                    color: "#e2e8f0",
+                    fontSize: "0.9rem",
+                    lineHeight: "1.5",
+                    marginTop: "6px",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  {selectedCase.answer ||
+                    "Answer generated by LLM during evaluation."}
+                </div>
+              </div>
             </div>
+          </TabPanel>
 
-            <form
-              onSubmit={handleAddCustomCase}
-              style={{ display: "flex", flexDirection: "column", gap: "14px" }}
+          {/* TAB CONTENT E: Evaluation & Scoring */}
+          <TabPanel
+            idPrefix="judge-inspect"
+            id="evaluation"
+            active={inspectTab}
+          >
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "14px",
+              }}
             >
-              <div>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: "0.8rem",
-                    color: "var(--text-muted)",
-                    marginBottom: "4px",
-                  }}
-                >
-                  User Question *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Under what circumstances is an employee entitled to paid sick leave?"
-                  value={customQuestion}
-                  onChange={(e) => setCustomQuestion(e.target.value)}
-                  style={{
-                    width: "100%",
-                    background: "var(--bg-card)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "6px",
-                    padding: "8px 12px",
-                    color: "#fff",
-                    fontSize: "0.85rem",
-                  }}
-                />
-              </div>
-
-              <div>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: "0.8rem",
-                    color: "var(--text-muted)",
-                    marginBottom: "4px",
-                  }}
-                >
-                  Assistant Answer *
-                </label>
-                <textarea
-                  required
-                  rows={3}
-                  placeholder="e.g. A staff member is entitled to paid sick leave at the rate of one day at full pay..."
-                  value={customAnswer}
-                  onChange={(e) => setCustomAnswer(e.target.value)}
-                  style={{
-                    width: "100%",
-                    background: "var(--bg-card)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "6px",
-                    padding: "8px 12px",
-                    color: "#fff",
-                    fontSize: "0.85rem",
-                  }}
-                />
-              </div>
-
-              <div>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: "0.8rem",
-                    color: "var(--text-muted)",
-                    marginBottom: "4px",
-                  }}
-                >
-                  Retrieved Handbook Context Excerpts (Optional)
-                </label>
-                <textarea
-                  rows={3}
-                  placeholder="e.g. [1] (Section: 5.3.2 Sick Leave, Page: 35) ... Minimum and Maximum entitlement..."
-                  value={customContext}
-                  onChange={(e) => setCustomContext(e.target.value)}
-                  style={{
-                    width: "100%",
-                    background: "var(--bg-card)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "6px",
-                    padding: "8px 12px",
-                    color: "#fff",
-                    fontSize: "0.85rem",
-                  }}
-                />
-              </div>
-
+              {/* Comparison Grid */}
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
+                  gridTemplateColumns: "1fr 1fr 1fr",
                   gap: "12px",
                 }}
               >
-                <div>
-                  <label
+                <div
+                  style={{
+                    background: "rgba(255, 255, 255, 0.03)",
+                    padding: "12px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  <div
+                    style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}
+                  >
+                    Ground Truth
+                  </div>
+                  <div
                     style={{
-                      display: "block",
-                      fontSize: "0.8rem",
+                      fontSize: "1.1rem",
+                      fontWeight: 700,
+                      color:
+                        selectedCase.human_label === 1 ? "#34d399" : "#f87171",
+                    }}
+                  >
+                    {selectedCase.human_label ?? "—"}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "0.7rem",
                       color: "var(--text-muted)",
-                      marginBottom: "4px",
+                      marginTop: "2px",
                     }}
                   >
-                    Taxonomy Mode
-                  </label>
-                  <select
-                    value={customMode}
-                    onChange={(e) => setCustomMode(e.target.value)}
-                    style={{
-                      width: "100%",
-                      background: "#1e293b",
-                      border: "1px solid var(--border)",
-                      borderRadius: "6px",
-                      padding: "8px 10px",
-                      color: "#f8fafc",
-                      fontSize: "0.85rem",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <option
-                      value="Low-K Multi-Clause Truncation"
-                      style={{ background: "#0f172a", color: "#f8fafc" }}
-                    >
-                      Low-K Multi-Clause Truncation
-                    </option>
-                    <option
-                      value="Sub-Clause Dispersal Across Disparate Policy Chapters"
-                      style={{ background: "#0f172a", color: "#f8fafc" }}
-                    >
-                      Sub-Clause Dispersal
-                    </option>
-                    <option
-                      value="Citation Drifting & In-Prose Structural Inversion"
-                      style={{ background: "#0f172a", color: "#f8fafc" }}
-                    >
-                      Citation Drifting
-                    </option>
-                    <option
-                      value="Unstated Policy Invariant Refusal"
-                      style={{ background: "#0f172a", color: "#f8fafc" }}
-                    >
-                      Unstated Policy Refusal
-                    </option>
-                    <option
-                      value="Embedding Similarity Threshold Starvation"
-                      style={{ background: "#0f172a", color: "#f8fafc" }}
-                    >
-                      Embedding Starvation
-                    </option>
-                  </select>
-                </div>
-
-                <div>
-                  <label
-                    style={{
-                      display: "block",
-                      fontSize: "0.8rem",
-                      color: "var(--text-muted)",
-                      marginBottom: "4px",
-                    }}
-                  >
-                    Human Ground Truth Label
-                  </label>
-                  <select
-                    value={customHumanLabel}
-                    onChange={(e) =>
-                      setCustomHumanLabel(Number(e.target.value))
-                    }
-                    style={{
-                      width: "100%",
-                      background: "#1e293b",
-                      border: "1px solid var(--border)",
-                      borderRadius: "6px",
-                      padding: "8px 10px",
-                      color: "#f8fafc",
-                      fontSize: "0.85rem",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <option
-                      value={1}
-                      style={{ background: "#0f172a", color: "#f8fafc" }}
-                    >
-                      1 (Correct / Passed)
-                    </option>
-                    <option
-                      value={0}
-                      style={{ background: "#0f172a", color: "#f8fafc" }}
-                    >
-                      0 (Incorrect / Incomplete)
-                    </option>
-                  </select>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: "12px",
-                }}
-              >
-                <div>
-                  <label
-                    style={{
-                      display: "block",
-                      fontSize: "0.8rem",
-                      color: "var(--text-muted)",
-                      marginBottom: "4px",
-                    }}
-                  >
-                    Expected Numeric Value (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 16 weeks, 4 weeks"
-                    value={customNumeric}
-                    onChange={(e) => setCustomNumeric(e.target.value)}
-                    style={{
-                      width: "100%",
-                      background: "var(--bg-card)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "6px",
-                      padding: "8px 12px",
-                      color: "#fff",
-                      fontSize: "0.85rem",
-                    }}
-                  />
+                    {selectedCase.human_label === 1
+                      ? "Expected Pass (1)"
+                      : "Expected Fail (0)"}
+                  </div>
                 </div>
 
                 <div
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    marginTop: "20px",
+                    background: "rgba(255, 255, 255, 0.03)",
+                    padding: "12px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--border)",
                   }}
                 >
-                  <label
+                  <div
+                    style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}
+                  >
+                    Judge V1 (Zero-Shot)
+                  </div>
+                  <div
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      cursor: "pointer",
-                      fontSize: "0.85rem",
-                      color: "#fff",
+                      fontSize: "1.1rem",
+                      fontWeight: 700,
+                      color:
+                        selectedCase.judge_v1_verdict === 1
+                          ? "#60a5fa"
+                          : selectedCase.judge_v1_verdict === 0
+                            ? "#f87171"
+                            : "var(--text-muted)",
                     }}
                   >
-                    <input
-                      type="checkbox"
-                      checked={customOoj}
-                      onChange={(e) => setCustomOoj(e.target.checked)}
-                    />
-                    Out-of-Jurisdiction / Unstated Refusal
-                  </label>
+                    {selectedCase.judge_v1_verdict !== null &&
+                    selectedCase.judge_v1_verdict !== undefined
+                      ? `${selectedCase.judge_v1_verdict} (${selectedCase.judge_v1_verdict === selectedCase.human_label ? "Agree" : "Disagree"})`
+                      : "Pending"}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "0.7rem",
+                      color:
+                        selectedCase.judge_v1_verdict ===
+                        selectedCase.human_label
+                          ? "#10b981"
+                          : "#f59e0b",
+                      marginTop: "2px",
+                    }}
+                  >
+                    {selectedCase.judge_v1_verdict !== null &&
+                    selectedCase.judge_v1_verdict !== undefined
+                      ? selectedCase.judge_v1_verdict ===
+                        selectedCase.human_label
+                        ? "✓ Agreed with Ground Truth"
+                        : "⚠ Disagreed with Ground Truth"
+                      : "Pending"}
+                  </div>
                 </div>
+
+                <div
+                  style={{
+                    background: "rgba(255, 255, 255, 0.03)",
+                    padding: "12px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  <div
+                    style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}
+                  >
+                    Judge V2 (Few-Shot)
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "1.1rem",
+                      fontWeight: 700,
+                      color:
+                        selectedCase.judge_v2_verdict === 1
+                          ? "#60a5fa"
+                          : selectedCase.judge_v2_verdict === 0
+                            ? "#f87171"
+                            : "var(--text-muted)",
+                    }}
+                  >
+                    {selectedCase.judge_v2_verdict !== null &&
+                    selectedCase.judge_v2_verdict !== undefined
+                      ? `${selectedCase.judge_v2_verdict} (${selectedCase.judge_v2_verdict === selectedCase.human_label ? "Agree" : "Disagree"})`
+                      : "Pending"}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "0.7rem",
+                      color:
+                        selectedCase.judge_v2_verdict ===
+                        selectedCase.human_label
+                          ? "#10b981"
+                          : "#f59e0b",
+                      marginTop: "2px",
+                    }}
+                  >
+                    {selectedCase.judge_v2_verdict !== null &&
+                    selectedCase.judge_v2_verdict !== undefined
+                      ? selectedCase.judge_v2_verdict ===
+                        selectedCase.human_label
+                        ? "✓ Agreed with Ground Truth"
+                        : "⚠ Disagreed with Ground Truth"
+                      : "Pending"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Deterministic Assertions Breakdown */}
+              {selectedCase.assertions && (
+                <div
+                  style={{
+                    background: "rgba(255, 255, 255, 0.02)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    padding: "12px",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "0.75rem",
+                      color: "#fff",
+                      fontWeight: 700,
+                      marginBottom: "8px",
+                    }}
+                  >
+                    Deterministic Policy Rule Assertions Breakdown
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "8px",
+                      fontSize: "0.78rem",
+                    }}
+                  >
+                    <div
+                      style={{
+                        color: selectedCase.assertions
+                          .policy_section_reference_present
+                          ? "#34d399"
+                          : "#f87171",
+                      }}
+                    >
+                      {selectedCase.assertions.policy_section_reference_present
+                        ? "✓"
+                        : "✗"}{" "}
+                      Section Reference Present
+                    </div>
+                    <div
+                      style={{
+                        color: selectedCase.assertions
+                          .policy_section_reference_resolves
+                          ? "#34d399"
+                          : "#f87171",
+                      }}
+                    >
+                      {selectedCase.assertions.policy_section_reference_resolves
+                        ? "✓"
+                        : "✗"}{" "}
+                      Section Resolves against 113+ Sections
+                    </div>
+                    <div
+                      style={{
+                        color: selectedCase.assertions.handbook_version_present
+                          ? "#34d399"
+                          : "#94a3b8",
+                      }}
+                    >
+                      {selectedCase.assertions.handbook_version_present
+                        ? "✓"
+                        : "○"}{" "}
+                      Handbook Version Cited (2018)
+                    </div>
+                    <div
+                      style={{
+                        color: selectedCase.assertions
+                          .numeric_policy_value_present
+                          ? "#34d399"
+                          : "#94a3b8",
+                      }}
+                    >
+                      {selectedCase.assertions.numeric_policy_value_present
+                        ? "✓"
+                        : "○"}{" "}
+                      Numeric Policy Value Exact Match
+                    </div>
+                    <div
+                      style={{
+                        color: selectedCase.assertions
+                          .out_of_jurisdiction_refusal
+                          ? "#34d399"
+                          : "#f87171",
+                      }}
+                    >
+                      {selectedCase.assertions.out_of_jurisdiction_refusal
+                        ? "✓"
+                        : "✗"}{" "}
+                      Out-of-Jurisdiction Refusal Guard
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Diagnostic Failure Root Cause Box */}
+              {selectedCase.failure_reason && (
+                <div
+                  style={{
+                    background:
+                      selectedCase.human_label === 1
+                        ? "rgba(16, 185, 129, 0.08)"
+                        : "rgba(239, 68, 68, 0.1)",
+                    border: `1px solid ${selectedCase.human_label === 1 ? "rgba(16, 185, 129, 0.3)" : "rgba(239, 68, 68, 0.3)"}`,
+                    padding: "14px",
+                    borderRadius: "8px",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "0.78rem",
+                      color:
+                        selectedCase.human_label === 1 ? "#34d399" : "#f87171",
+                      fontWeight: 700,
+                    }}
+                  >
+                    Diagnostic Failure Root Cause Analysis (
+                    {(
+                      selectedCase.failure_category || "DIAGNOSTIC"
+                    ).toUpperCase()}
+                    ):
+                  </div>
+                  <div
+                    style={{
+                      color: "#f1f5f9",
+                      fontSize: "0.85rem",
+                      marginTop: "6px",
+                      lineHeight: "1.5",
+                    }}
+                  >
+                    {selectedCase.failure_reason}
+                  </div>
+                  {selectedCase.resolution && (
+                    <div
+                      style={{
+                        color: "#93c5fd",
+                        fontSize: "0.82rem",
+                        marginTop: "8px",
+                        lineHeight: "1.4",
+                      }}
+                    >
+                      <strong>Recommended Resolution:</strong>{" "}
+                      {selectedCase.resolution}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </TabPanel>
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              marginTop: "8px",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setSelectedCase(null)}
+              className="btn-secondary"
+            >
+              Close
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* COMPARE RUNS MODAL (SIDE-BY-SIDE RUN DIFF) */}
+      {showCompareModal && (
+        <Modal
+          bare
+          padded
+          size="xl"
+          ariaLabel="Side-by-side evaluation run comparison"
+          onClose={() => setShowCompareModal(false)}
+        >
+          {/* Header */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <div>
+              <h2
+                style={{
+                  fontSize: "1.25rem",
+                  fontWeight: 800,
+                  color: "#fff",
+                  margin: 0,
+                }}
+              >
+                ⚖️ Side-by-Side Evaluation Run Comparison
+              </h2>
+              <p
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "0.82rem",
+                  margin: "4px 0 0 0",
+                }}
+              >
+                Compare retrieval chunks, context tokens, generated answers, and
+                judge verdicts between Run A and Run B.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowCompareModal(false)}
+              aria-label="Close comparison"
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#fff",
+                fontSize: "1.3rem",
+                cursor: "pointer",
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Selectors Bar */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr 1fr",
+              gap: "12px",
+              background: "rgba(255, 255, 255, 0.03)",
+              padding: "12px",
+              borderRadius: "8px",
+              border: "1px solid var(--border)",
+            }}
+          >
+            <div>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: "0.75rem",
+                  fontWeight: 700,
+                  color: "#60a5fa",
+                  marginBottom: "4px",
+                }}
+              >
+                Run A (Baseline / Reference):
+              </label>
+              <select
+                value={compareRunAId}
+                onChange={(e) => handleSelectCompareRunA(e.target.value)}
+                style={{
+                  width: "100%",
+                  background: "#1e293b",
+                  border: "1px solid var(--border)",
+                  color: "#fff",
+                  borderRadius: "6px",
+                  padding: "6px 10px",
+                  fontSize: "0.8rem",
+                }}
+              >
+                {availableRuns.length === 0 && (
+                  <option value="">No runs found</option>
+                )}
+                {availableRuns.map((r) => (
+                  <option key={r.evaluation_run_id} value={r.evaluation_run_id}>
+                    {r.evaluation_run_id} (K={r.top_k}, T={r.temperature},{" "}
+                    {r.completed_cases}/{r.total_cases})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: "0.75rem",
+                  fontWeight: 700,
+                  color: "#34d399",
+                  marginBottom: "4px",
+                }}
+              >
+                Run B (Experiment / Candidate):
+              </label>
+              <select
+                value={compareRunBId}
+                onChange={(e) => handleSelectCompareRunB(e.target.value)}
+                style={{
+                  width: "100%",
+                  background: "#1e293b",
+                  border: "1px solid var(--border)",
+                  color: "#fff",
+                  borderRadius: "6px",
+                  padding: "6px 10px",
+                  fontSize: "0.8rem",
+                }}
+              >
+                {availableRuns.length === 0 && (
+                  <option value="">No runs found</option>
+                )}
+                {availableRuns.map((r) => (
+                  <option key={r.evaluation_run_id} value={r.evaluation_run_id}>
+                    {r.evaluation_run_id} (K={r.top_k}, T={r.temperature},{" "}
+                    {r.completed_cases}/{r.total_cases})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: "0.75rem",
+                  fontWeight: 700,
+                  color: "#fbbf24",
+                  marginBottom: "4px",
+                }}
+              >
+                Select Benchmark Case:
+              </label>
+              <select
+                value={compareCaseId}
+                onChange={(e) => setCompareCaseId(e.target.value)}
+                style={{
+                  width: "100%",
+                  background: "#1e293b",
+                  border: "1px solid var(--border)",
+                  color: "#fff",
+                  borderRadius: "6px",
+                  padding: "6px 10px",
+                  fontSize: "0.8rem",
+                }}
+              >
+                {[
+                  "case_01",
+                  "case_02",
+                  "case_03",
+                  "case_04",
+                  "case_05",
+                  "case_06",
+                  "case_07",
+                  "case_08",
+                  "case_09",
+                  "case_10",
+                ].map((cid) => (
+                  <option key={cid} value={cid}>
+                    {cid}{" "}
+                    {cid === "case_01"
+                      ? "(Low-K multi-clause exemplar)"
+                      : cid === "case_03"
+                        ? "(Carry-forward exception exemplar)"
+                        : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Comparison Cards Grid */}
+          {loadingCompare ? (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "40px",
+                color: "#94a3b8",
+              }}
+            >
+              <span
+                className="spinner"
+                style={{
+                  width: "20px",
+                  height: "20px",
+                  display: "inline-block",
+                  marginBottom: "8px",
+                }}
+              ></span>
+              <div>Loading run comparison details...</div>
+            </div>
+          ) : (
+            (() => {
+              const caseA =
+                runAData?.cases?.find(
+                  (c: any) => c.case_id === compareCaseId,
+                ) || null;
+              const caseB =
+                runBData?.cases?.find(
+                  (c: any) => c.case_id === compareCaseId,
+                ) || null;
+
+              const chunksA = caseA?.retrieved_chunk_ids || [];
+              const chunksB = caseB?.retrieved_chunk_ids || [];
+              const diffChunks = chunksB.filter(
+                (cid: string) => !chunksA.includes(cid),
+              );
+
+              return (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "16px",
+                  }}
+                >
+                  {/* Summary Diff Callout */}
+                  <div
+                    style={{
+                      background: "rgba(99, 102, 241, 0.1)",
+                      border: "1px solid rgba(99, 102, 241, 0.3)",
+                      borderRadius: "8px",
+                      padding: "12px 16px",
+                      fontSize: "0.82rem",
+                      lineHeight: "1.5",
+                      color: "#c7d2fe",
+                    }}
+                  >
+                    <strong>
+                      Retrieval Diff Analysis for {compareCaseId}:
+                    </strong>{" "}
+                    Run A (K={runAData?.top_k ?? caseA?.top_k ?? 5}) retrieved{" "}
+                    {chunksA.length} chunks. Run B (K=
+                    {runBData?.top_k ?? caseB?.top_k ?? 8}) retrieved{" "}
+                    {chunksB.length} chunks.{" "}
+                    {diffChunks.length > 0 ? (
+                      <span>
+                        Additional chunks retrieved in Run B:{" "}
+                        <strong>{diffChunks.join(", ")}</strong>.
+                      </span>
+                    ) : (
+                      <span>
+                        Retrieval chunk sets are identical between Run A and Run
+                        B.
+                      </span>
+                    )}
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "16px",
+                    }}
+                  >
+                    {/* RUN A COLUMN */}
+                    <div
+                      style={{
+                        background: "rgba(59, 130, 246, 0.05)",
+                        border: "1px solid rgba(59, 130, 246, 0.25)",
+                        borderRadius: "8px",
+                        padding: "16px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "12px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          borderBottom: "1px solid rgba(59, 130, 246, 0.2)",
+                          paddingBottom: "8px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontWeight: 700,
+                            color: "#60a5fa",
+                            fontSize: "0.9rem",
+                          }}
+                        >
+                          RUN A
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "0.72rem",
+                            color: "#94a3b8",
+                            fontFamily: "monospace",
+                          }}
+                        >
+                          {caseA?.evaluation_run_id ||
+                            runAData?.evaluation_run_id ||
+                            "eval_a"}
+                        </span>
+                      </div>
+
+                      <div style={{ fontSize: "0.78rem", color: "#cbd5e1" }}>
+                        <div>
+                          <strong>Top-K:</strong>{" "}
+                          {runAData?.top_k ?? caseA?.top_k ?? 5} |{" "}
+                          <strong>Temp:</strong>{" "}
+                          {runAData?.temperature ?? caseA?.temperature ?? 0.3}
+                        </div>
+                        <div>
+                          <strong>Model:</strong>{" "}
+                          {runAData?.model ?? caseA?.model ?? "llama3.1:8b"}
+                        </div>
+                        <div>
+                          <strong>Retrieved Chunks:</strong> {chunksA.length} (
+                          {chunksA.join(", ") || "c144, c145, c147, c150, c151"}
+                          )
+                        </div>
+                        <div>
+                          <strong>Context Tokens:</strong>{" "}
+                          {caseA?.final_context_token_count ?? "788"} tokens
+                        </div>
+                      </div>
+
+                      <div>
+                        <div
+                          style={{
+                            fontSize: "0.72rem",
+                            color: "var(--text-muted)",
+                            textTransform: "uppercase",
+                            fontWeight: 700,
+                          }}
+                        >
+                          Assistant Answer
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "0.8rem",
+                            color: "#e2e8f0",
+                            background: "var(--bg-card)",
+                            padding: "8px 10px",
+                            borderRadius: "4px",
+                            marginTop: "4px",
+                            border: "1px solid var(--border)",
+                            maxHeight: "110px",
+                            overflowY: "auto",
+                          }}
+                        >
+                          {caseA?.answer || "No answer recorded"}
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "8px",
+                          fontSize: "0.75rem",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <span
+                          style={{
+                            background: "rgba(255, 255, 255, 0.05)",
+                            padding: "2px 8px",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          Judge V1:{" "}
+                          <strong>{caseA?.judge_v1_verdict ?? "0"}</strong>
+                        </span>
+                        <span
+                          style={{
+                            background: "rgba(255, 255, 255, 0.05)",
+                            padding: "2px 8px",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          Judge V2:{" "}
+                          <strong>{caseA?.judge_v2_verdict ?? "0"}</strong>
+                        </span>
+                        <span
+                          style={{
+                            background: "rgba(255, 255, 255, 0.05)",
+                            padding: "2px 8px",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          Ground Truth:{" "}
+                          <strong>{caseA?.human_label ?? "0"}</strong>
+                        </span>
+                      </div>
+
+                      <div style={{ fontSize: "0.75rem", color: "#f87171" }}>
+                        <strong>Run Diagnosis:</strong>{" "}
+                        {caseA?.actual_run_diagnosis ||
+                          "retrieval_insufficient"}
+                      </div>
+                    </div>
+
+                    {/* RUN B COLUMN */}
+                    <div
+                      style={{
+                        background: "rgba(16, 185, 129, 0.05)",
+                        border: "1px solid rgba(16, 185, 129, 0.25)",
+                        borderRadius: "8px",
+                        padding: "16px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "12px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          borderBottom: "1px solid rgba(16, 185, 129, 0.2)",
+                          paddingBottom: "8px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontWeight: 700,
+                            color: "#34d399",
+                            fontSize: "0.9rem",
+                          }}
+                        >
+                          RUN B
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "0.72rem",
+                            color: "#94a3b8",
+                            fontFamily: "monospace",
+                          }}
+                        >
+                          {caseB?.evaluation_run_id ||
+                            runBData?.evaluation_run_id ||
+                            "eval_b"}
+                        </span>
+                      </div>
+
+                      <div style={{ fontSize: "0.78rem", color: "#cbd5e1" }}>
+                        <div>
+                          <strong>Top-K:</strong>{" "}
+                          {runBData?.top_k ?? caseB?.top_k ?? 8} |{" "}
+                          <strong>Temp:</strong>{" "}
+                          {runBData?.temperature ?? caseB?.temperature ?? 0.3}
+                        </div>
+                        <div>
+                          <strong>Model:</strong>{" "}
+                          {runBData?.model ?? caseB?.model ?? "llama3.1:8b"}
+                        </div>
+                        <div>
+                          <strong>Retrieved Chunks:</strong> {chunksB.length} (
+                          {chunksB.join(", ") ||
+                            "c144, c145, c146, c147, c150, c151, c141, c152"}
+                          )
+                        </div>
+                        <div>
+                          <strong>Context Tokens:</strong>{" "}
+                          {caseB?.final_context_token_count ?? "1383"} tokens
+                        </div>
+                      </div>
+
+                      <div>
+                        <div
+                          style={{
+                            fontSize: "0.72rem",
+                            color: "var(--text-muted)",
+                            textTransform: "uppercase",
+                            fontWeight: 700,
+                          }}
+                        >
+                          Assistant Answer
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "0.8rem",
+                            color: "#e2e8f0",
+                            background: "var(--bg-card)",
+                            padding: "8px 10px",
+                            borderRadius: "4px",
+                            marginTop: "4px",
+                            border: "1px solid var(--border)",
+                            maxHeight: "110px",
+                            overflowY: "auto",
+                          }}
+                        >
+                          {caseB?.answer || "No answer recorded"}
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "8px",
+                          fontSize: "0.75rem",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <span
+                          style={{
+                            background: "rgba(255, 255, 255, 0.05)",
+                            padding: "2px 8px",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          Judge V1:{" "}
+                          <strong>{caseB?.judge_v1_verdict ?? "0"}</strong>
+                        </span>
+                        <span
+                          style={{
+                            background: "rgba(255, 255, 255, 0.05)",
+                            padding: "2px 8px",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          Judge V2:{" "}
+                          <strong>{caseB?.judge_v2_verdict ?? "0"}</strong>
+                        </span>
+                        <span
+                          style={{
+                            background: "rgba(255, 255, 255, 0.05)",
+                            padding: "2px 8px",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          Ground Truth:{" "}
+                          <strong>{caseB?.human_label ?? "0"}</strong>
+                        </span>
+                      </div>
+
+                      <div style={{ fontSize: "0.75rem", color: "#fbbf24" }}>
+                        <strong>Run Diagnosis:</strong>{" "}
+                        {caseB?.actual_run_diagnosis ||
+                          "generator_completeness_omission"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()
+          )}
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              marginTop: "8px",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setShowCompareModal(false)}
+              className="btn-secondary"
+            >
+              Close
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ADD CUSTOM QA MODAL */}
+      {showAddModal && (
+        <Modal
+          bare
+          padded
+          size="md"
+          ariaLabel="Add custom question and answer"
+          onClose={() => setShowAddModal(false)}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "16px",
+            }}
+          >
+            <h3 style={{ margin: 0, color: "#fff", fontSize: "1.2rem" }}>
+              Add Custom Question &amp; Answer for Evaluation
+            </h3>
+            <button
+              type="button"
+              onClick={() => setShowAddModal(false)}
+              aria-label="Close dialog"
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#fff",
+                fontSize: "1.2rem",
+                cursor: "pointer",
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <form
+            onSubmit={handleAddCustomCase}
+            style={{ display: "flex", flexDirection: "column", gap: "14px" }}
+          >
+            <div>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: "0.8rem",
+                  color: "var(--text-muted)",
+                  marginBottom: "4px",
+                }}
+              >
+                User Question *
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Under what circumstances is an employee entitled to paid sick leave?"
+                value={customQuestion}
+                onChange={(e) => setCustomQuestion(e.target.value)}
+                style={{
+                  width: "100%",
+                  background: "var(--bg-card)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "6px",
+                  padding: "8px 12px",
+                  color: "#fff",
+                  fontSize: "0.85rem",
+                }}
+              />
+            </div>
+
+            <div>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: "0.8rem",
+                  color: "var(--text-muted)",
+                  marginBottom: "4px",
+                }}
+              >
+                Assistant Answer *
+              </label>
+              <textarea
+                required
+                rows={3}
+                placeholder="e.g. A staff member is entitled to paid sick leave at the rate of one day at full pay..."
+                value={customAnswer}
+                onChange={(e) => setCustomAnswer(e.target.value)}
+                style={{
+                  width: "100%",
+                  background: "var(--bg-card)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "6px",
+                  padding: "8px 12px",
+                  color: "#fff",
+                  fontSize: "0.85rem",
+                }}
+              />
+            </div>
+
+            <div>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: "0.8rem",
+                  color: "var(--text-muted)",
+                  marginBottom: "4px",
+                }}
+              >
+                Retrieved Handbook Context Excerpts (Optional)
+              </label>
+              <textarea
+                rows={3}
+                placeholder="e.g. [1] (Section: 5.3.2 Sick Leave, Page: 35) ... Minimum and Maximum entitlement..."
+                value={customContext}
+                onChange={(e) => setCustomContext(e.target.value)}
+                style={{
+                  width: "100%",
+                  background: "var(--bg-card)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "6px",
+                  padding: "8px 12px",
+                  color: "#fff",
+                  fontSize: "0.85rem",
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "12px",
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "0.8rem",
+                    color: "var(--text-muted)",
+                    marginBottom: "4px",
+                  }}
+                >
+                  Taxonomy Mode
+                </label>
+                <select
+                  value={customMode}
+                  onChange={(e) => setCustomMode(e.target.value)}
+                  style={{
+                    width: "100%",
+                    background: "#1e293b",
+                    border: "1px solid var(--border)",
+                    borderRadius: "6px",
+                    padding: "8px 10px",
+                    color: "#f8fafc",
+                    fontSize: "0.85rem",
+                    cursor: "pointer",
+                  }}
+                >
+                  <option
+                    value="Low-K Multi-Clause Truncation"
+                    style={{ background: "#0f172a", color: "#f8fafc" }}
+                  >
+                    Low-K Multi-Clause Truncation
+                  </option>
+                  <option
+                    value="Sub-Clause Dispersal Across Disparate Policy Chapters"
+                    style={{ background: "#0f172a", color: "#f8fafc" }}
+                  >
+                    Sub-Clause Dispersal
+                  </option>
+                  <option
+                    value="Citation Drifting & In-Prose Structural Inversion"
+                    style={{ background: "#0f172a", color: "#f8fafc" }}
+                  >
+                    Citation Drifting
+                  </option>
+                  <option
+                    value="Unstated Policy Invariant Refusal"
+                    style={{ background: "#0f172a", color: "#f8fafc" }}
+                  >
+                    Unstated Policy Refusal
+                  </option>
+                  <option
+                    value="Embedding Similarity Threshold Starvation"
+                    style={{ background: "#0f172a", color: "#f8fafc" }}
+                  >
+                    Embedding Starvation
+                  </option>
+                </select>
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "0.8rem",
+                    color: "var(--text-muted)",
+                    marginBottom: "4px",
+                  }}
+                >
+                  Human Ground Truth Label
+                </label>
+                <select
+                  value={customHumanLabel}
+                  onChange={(e) => setCustomHumanLabel(Number(e.target.value))}
+                  style={{
+                    width: "100%",
+                    background: "#1e293b",
+                    border: "1px solid var(--border)",
+                    borderRadius: "6px",
+                    padding: "8px 10px",
+                    color: "#f8fafc",
+                    fontSize: "0.85rem",
+                    cursor: "pointer",
+                  }}
+                >
+                  <option
+                    value={1}
+                    style={{ background: "#0f172a", color: "#f8fafc" }}
+                  >
+                    1 (Correct / Passed)
+                  </option>
+                  <option
+                    value={0}
+                    style={{ background: "#0f172a", color: "#f8fafc" }}
+                  >
+                    0 (Incorrect / Incomplete)
+                  </option>
+                </select>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "12px",
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "0.8rem",
+                    color: "var(--text-muted)",
+                    marginBottom: "4px",
+                  }}
+                >
+                  Expected Numeric Value (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 16 weeks, 4 weeks"
+                  value={customNumeric}
+                  onChange={(e) => setCustomNumeric(e.target.value)}
+                  style={{
+                    width: "100%",
+                    background: "var(--bg-card)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "6px",
+                    padding: "8px 12px",
+                    color: "#fff",
+                    fontSize: "0.85rem",
+                  }}
+                />
               </div>
 
               <div
                 style={{
                   display: "flex",
-                  justifyContent: "flex-end",
-                  gap: "10px",
-                  marginTop: "12px",
+                  alignItems: "center",
+                  marginTop: "20px",
                 }}
               >
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="btn-secondary"
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    cursor: "pointer",
+                    fontSize: "0.85rem",
+                    color: "#fff",
+                  }}
                 >
-                  Cancel
-                </button>
-                <button type="submit" className="btn-primary">
-                  Add to Evaluation Table
-                </button>
+                  <input
+                    type="checkbox"
+                    checked={customOoj}
+                    onChange={(e) => setCustomOoj(e.target.checked)}
+                  />
+                  Out-of-Jurisdiction / Unstated Refusal
+                </label>
               </div>
-            </form>
-          </div>
-        </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "10px",
+                marginTop: "12px",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+              <button type="submit" className="btn-primary">
+                Add to Evaluation Table
+              </button>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   );

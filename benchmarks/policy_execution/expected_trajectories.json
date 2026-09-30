@@ -1,0 +1,265 @@
+{
+  "version": 1,
+  "cases": {
+    "case_01": {
+      "paths": [
+        [
+          "get_employee_record",
+          "search_handbook"
+        ],
+        [
+          "search_handbook",
+          "get_employee_record"
+        ]
+      ],
+      "steps_needed": 2,
+      "notes": "Employee record and policy passage are independent reads: either order is correct.",
+      "allowed_extra_tools": []
+    },
+    "case_02": {
+      "paths": [
+        [
+          "get_employee_record",
+          "search_handbook"
+        ],
+        [
+          "search_handbook",
+          "get_employee_record"
+        ]
+      ],
+      "steps_needed": 2,
+      "notes": "Employee record and policy passage are independent reads: either order is correct.",
+      "allowed_extra_tools": []
+    },
+    "case_03": {
+      "paths": [
+        [
+          "get_employee_record",
+          "search_handbook"
+        ],
+        [
+          "search_handbook",
+          "get_employee_record"
+        ]
+      ],
+      "steps_needed": 2,
+      "notes": "Employee record and policy passage are independent reads: either order is correct.",
+      "allowed_extra_tools": []
+    },
+    "case_04": {
+      "paths": [
+        [
+          "get_employee_record",
+          "search_handbook"
+        ],
+        [
+          "search_handbook",
+          "get_employee_record"
+        ]
+      ],
+      "steps_needed": 2,
+      "notes": "Employee record and policy passage are independent reads: either order is correct.",
+      "allowed_extra_tools": []
+    },
+    "case_05": {
+      "paths": [
+        [
+          "get_employee_record",
+          "search_handbook"
+        ],
+        [
+          "search_handbook",
+          "get_employee_record"
+        ]
+      ],
+      "steps_needed": 2,
+      "notes": "Employee record and policy passage are independent reads: either order is correct.",
+      "allowed_extra_tools": []
+    },
+    "case_06": {
+      "paths": [
+        [
+          "get_employee_record",
+          "search_handbook"
+        ],
+        [
+          "search_handbook",
+          "get_employee_record"
+        ]
+      ],
+      "steps_needed": 2,
+      "notes": "Employee record and policy passage are independent reads: either order is correct.",
+      "allowed_extra_tools": []
+    },
+    "case_07": {
+      "paths": [
+        [
+          "get_employee_record",
+          "search_handbook"
+        ],
+        [
+          "search_handbook",
+          "get_employee_record"
+        ]
+      ],
+      "steps_needed": 2,
+      "notes": "Employee record and policy passage are independent reads: either order is correct.",
+      "allowed_extra_tools": []
+    },
+    "case_08": {
+      "paths": [
+        [
+          "get_employee_record",
+          "search_handbook"
+        ],
+        [
+          "search_handbook",
+          "get_employee_record"
+        ]
+      ],
+      "steps_needed": 2,
+      "notes": "Employee record and policy passage are independent reads: either order is correct.",
+      "allowed_extra_tools": []
+    },
+    "case_09": {
+      "paths": [
+        [
+          "get_employee_record",
+          "search_handbook"
+        ],
+        [
+          "search_handbook",
+          "get_employee_record"
+        ]
+      ],
+      "steps_needed": 2,
+      "notes": "Employee record and policy passage are independent reads: either order is correct.",
+      "allowed_extra_tools": []
+    },
+    "case_10": {
+      "paths": [
+        [
+          "get_employee_record",
+          "search_handbook"
+        ],
+        [
+          "search_handbook",
+          "get_employee_record"
+        ]
+      ],
+      "steps_needed": 2,
+      "notes": "Employee record and policy passage are independent reads: either order is correct.",
+      "allowed_extra_tools": []
+    },
+    "branch_01": {
+      "paths": [
+        [
+          "get_employee_record",
+          "get_jurisdiction_rules"
+        ],
+        [
+          "get_employee_record",
+          "get_jurisdiction_rules",
+          "search_handbook"
+        ],
+        [
+          "get_employee_record",
+          "search_handbook",
+          "get_jurisdiction_rules"
+        ]
+      ],
+      "steps_needed": 2,
+      "notes": "The jurisdiction argument depends on the employee record, so the record comes first; a supporting policy search is acceptable.",
+      "allowed_extra_tools": []
+    },
+    "branch_02": {
+      "paths": [
+        [
+          "get_employee_record",
+          "get_jurisdiction_rules",
+          "search_handbook"
+        ],
+        [
+          "get_employee_record",
+          "search_handbook",
+          "get_jurisdiction_rules"
+        ]
+      ],
+      "steps_needed": 3,
+      "notes": "Jurisdiction depends on the record (record first); the policy search may come before or after the local-rules lookup.",
+      "allowed_extra_tools": []
+    },
+    "branch_03": {
+      "paths": [
+        [
+          "get_employee_record",
+          "get_jurisdiction_rules",
+          "search_handbook"
+        ],
+        [
+          "get_employee_record",
+          "search_handbook",
+          "get_jurisdiction_rules"
+        ]
+      ],
+      "steps_needed": 3,
+      "notes": "Jurisdiction depends on the record (record first); the policy search may come before or after the local-rules lookup.",
+      "allowed_extra_tools": []
+    },
+    "branch_04": {
+      "paths": [
+        [
+          "get_employee_record",
+          "get_jurisdiction_rules"
+        ],
+        [
+          "get_employee_record",
+          "get_jurisdiction_rules",
+          "search_handbook"
+        ],
+        [
+          "get_employee_record",
+          "search_handbook",
+          "get_jurisdiction_rules"
+        ]
+      ],
+      "steps_needed": 2,
+      "notes": "Record first (it supplies the jurisdiction); a supporting policy search is acceptable.",
+      "allowed_extra_tools": []
+    },
+    "branch_05": {
+      "paths": [
+        [
+          "get_grade_band",
+          "get_leave_balance"
+        ],
+        [
+          "get_leave_balance",
+          "get_grade_band"
+        ]
+      ],
+      "steps_needed": 2,
+      "notes": "Both are independent HRIS reads and confirm the employee; no handbook search is needed.",
+      "allowed_extra_tools": [
+        "get_employee_record"
+      ]
+    },
+    "branch_06": {
+      "paths": [
+        [
+          "get_leave_balance",
+          "search_handbook"
+        ],
+        [
+          "search_handbook",
+          "get_leave_balance"
+        ]
+      ],
+      "steps_needed": 2,
+      "notes": "HRIS balance and handbook entitlement are independent reads.",
+      "allowed_extra_tools": [
+        "get_employee_record"
+      ]
+    }
+  }
+}

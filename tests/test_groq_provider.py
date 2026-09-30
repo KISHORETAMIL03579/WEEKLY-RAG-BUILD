@@ -151,3 +151,35 @@ def test_week6_judge_uses_configured_groq_without_falling_back_to_ollama():
     ollama_health.assert_not_called()
     assert groq_call.call_args.kwargs["model"] == "openai/gpt-oss-20b"
     assert groq_call.call_args.kwargs["max_tokens"] == 128
+
+
+def test_groq_400_error_body_is_captured_and_not_retried():
+    bad_request = MagicMock()
+    bad_request.status_code = 400
+    bad_request.headers = {}
+    bad_request.json.return_value = {"error": {"code": "tool_use_failed", "message": "Failed to call a function."}}
+    bad_request.raise_for_status.side_effect = httpx.HTTPStatusError("bad", request=MagicMock(), response=bad_request)
+    client = MagicMock()
+    client.__enter__.return_value.post.return_value = bad_request
+    attempts = []
+    with patch.object(llm, "GROQ_API_KEY", "k"), patch.object(llm.httpx, "Client", return_value=client):
+        with pytest.raises(llm.ChatProviderError) as caught:
+            llm.groq_chat_completion([{"role": "user", "content": "x"}], max_retries=3, attempt_log=attempts)
+    error = caught.value
+    assert (error.status_code, error.code, error.detail) == (400, "tool_use_failed", "Failed to call a function.")
+    assert client.__enter__.return_value.post.call_count == 1  # a 400 is never retried
+    assert attempts == [{"attempt": 1, "outcome": "failed", "status_code": 400, "code": "tool_use_failed", "detail": "Failed to call a function."}]
+
+
+def test_groq_error_body_that_is_not_json_does_not_hide_the_status():
+    bad_gateway = MagicMock()
+    bad_gateway.status_code = 400
+    bad_gateway.headers = {}
+    bad_gateway.json.side_effect = ValueError("not json")
+    bad_gateway.raise_for_status.side_effect = httpx.HTTPStatusError("bad", request=MagicMock(), response=bad_gateway)
+    client = MagicMock()
+    client.__enter__.return_value.post.return_value = bad_gateway
+    with patch.object(llm, "GROQ_API_KEY", "k"), patch.object(llm.httpx, "Client", return_value=client):
+        with pytest.raises(llm.ChatProviderError) as caught:
+            llm.groq_chat_completion([{"role": "user", "content": "x"}], max_retries=1)
+    assert caught.value.status_code == 400 and caught.value.code is None and caught.value.detail is None

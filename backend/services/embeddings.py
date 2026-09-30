@@ -4,7 +4,7 @@ import time
 import json
 import urllib.request
 import urllib.error
-from typing import List
+from typing import List, Optional
 
 from backend.config import (
     EMBED_BACKEND,
@@ -18,7 +18,7 @@ from backend.config import (
 )
 
 
-def _gemini_embed_batch(texts: List[str]) -> List[List[float]]:
+def _gemini_embed_batch(texts: List[str], timeout: float = 90) -> List[List[float]]:
     """Embed a batch of texts using Gemini's batchEmbedContents endpoint."""
     url = f"{GEMINI_URL}/models/{EMBED_MODEL}:batchEmbedContents?key={GEMINI_API_KEY}"
     model_name = f"models/{EMBED_MODEL}"
@@ -43,7 +43,7 @@ def _gemini_embed_batch(texts: List[str]) -> List[List[float]]:
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=90) as resp:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
             elapsed = time.time() - t0
             vectors = [e["values"] for e in data["embeddings"]]
@@ -75,7 +75,7 @@ def _gemini_embed_batch(texts: List[str]) -> List[List[float]]:
             raise
 
 
-def _ollama_embed_batch(texts: List[str]) -> List[List[float]]:
+def _ollama_embed_batch(texts: List[str], timeout: float = 120) -> List[List[float]]:
     """Embed a batch of texts via a locally-running Ollama server."""
     url = f"{OLLAMA_URL}/api/embed"
     payload = {"model": OLLAMA_EMBED_MODEL, "input": texts}
@@ -87,7 +87,7 @@ def _ollama_embed_batch(texts: List[str]) -> List[List[float]]:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=120) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         elapsed = time.time() - t0
         vectors = data.get("embeddings", [])
@@ -112,10 +112,24 @@ def _ollama_embed_batch(texts: List[str]) -> List[List[float]]:
         raise
 
 
-def embed_texts(texts: List[str]) -> List[List[float]]:
+LEXICAL_ONLY = EMBED_BACKEND == "none"
+
+
+def lexical_placeholder_vectors(count: int) -> List[List[float]]:
+    """Constant 1-d vectors so chunks can live in Qdrant without an embedding provider.
+
+    Only used when EMBED_BACKEND=none. They carry no meaning: retrieval in that mode is
+    BM25 over the stored chunk text and never queries by vector.
+    """
+    return [[1.0] for _ in range(count)]
+
+
+def embed_texts(texts: List[str], timeout: Optional[float] = None) -> List[List[float]]:
     """Batch-embed texts via whichever backend EMBED_BACKEND selects."""
     if not texts:
         return []
+    if LEXICAL_ONLY:
+        raise RuntimeError("EMBED_BACKEND=none: no embedding provider is configured")
     out: List[List[float]] = []
     total_batches = math.ceil(len(texts) / EMBED_BATCH)
     backend_label = "Ollama (local)" if EMBED_BACKEND == "ollama" else "Gemini"
@@ -126,6 +140,7 @@ def embed_texts(texts: List[str]) -> List[List[float]]:
         EMBED_BATCH,
         backend_label,
     )
+    kwargs = {} if timeout is None else {"timeout": timeout}
     for idx, i in enumerate(range(0, len(texts), EMBED_BATCH), start=1):
         batch = texts[i : i + EMBED_BATCH]
         logger.info(
@@ -135,21 +150,23 @@ def embed_texts(texts: List[str]) -> List[List[float]]:
             len(batch),
         )
         vectors = (
-            _ollama_embed_batch(batch)
+            _ollama_embed_batch(batch, **kwargs)
             if EMBED_BACKEND == "ollama"
-            else _gemini_embed_batch(batch)
+            else _gemini_embed_batch(batch, **kwargs)
         )
         out.extend(vectors)
     return out
 
 
-def embed_text(text: str) -> List[float]:
+def embed_text(text: str, timeout: Optional[float] = None) -> List[float]:
     """Generate embedding vector for a single string."""
-    return embed_texts([text])[0]
+    return embed_texts([text], timeout=timeout)[0]
 
 
 def embeddings_configured() -> bool:
-    """True if the selected embeddings backend is usable."""
+    """True if a semantic embedding provider is usable (False in lexical-only mode)."""
+    if EMBED_BACKEND == "none":
+        return False
     if EMBED_BACKEND == "ollama":
         return True
     return bool(GEMINI_API_KEY)

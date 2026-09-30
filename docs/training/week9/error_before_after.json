@@ -1,0 +1,129 @@
+{
+  "call": "get_jurisdiction_rules(jurisdiction='Ireland', policy_category='leave')",
+  "runs": {
+    "opaque": {
+      "tool_result": {
+        "observation": {
+          "error": {
+            "code": "ERROR",
+            "message": "Error: not found",
+            "retryable": false
+          }
+        },
+        "is_error": true,
+        "attempts": 1
+      },
+      "model": {
+        "termination_reason": "SUCCESS",
+        "tools": [
+          {
+            "step": 1,
+            "tool": "get_employee_record",
+            "arguments": {
+              "employee_id": "EMP002"
+            },
+            "is_error": false,
+            "error": null,
+            "why": "Need employee record to get jurisdiction."
+          },
+          {
+            "step": 2,
+            "tool": "get_jurisdiction_rules",
+            "arguments": {
+              "jurisdiction": "Ireland",
+              "policy_category": "leave"
+            },
+            "is_error": true,
+            "error": {
+              "code": "ERROR",
+              "message": "Error: not found",
+              "retryable": false
+            },
+            "why": "Now need jurisdiction rules for Ireland, policy_category leave."
+          },
+          {
+            "step": 3,
+            "tool": "search_handbook",
+            "arguments": {
+              "query": "Irish statutory annual leave",
+              "top_k": 5
+            },
+            "is_error": false,
+            "error": null,
+            "why": "No jurisdiction specific. Use search_handbook for Irish statutory annual leave."
+          }
+        ],
+        "answer": {
+          "entitlement_value": "The handbook specifies a standard entitlement of 24 days per annum for full‑time staff (section 5.2.1 Annual leave entitlement). No statutory Irish annual leave rule is cited in the uploaded documents. Therefore, the employee’s entitlement is governed solely by the handbook provision above.",
+          "explanation": "The search for Irish statutory annual leave returned only the handbook passage stating the 24‑day entitlement. No jurisdiction‑specific statutory rule was found in the provided documents, so the handbook rule applies."
+        },
+        "total_tokens": 6301,
+        "model_call_retries": 0,
+        "model_calls": 4
+      }
+    },
+    "recoverable": {
+      "tool_result": {
+        "observation": {
+          "error": {
+            "code": "NO_EVIDENCE",
+            "message": "No passage in the uploaded documents mentions Ireland.",
+            "retryable": false,
+            "hint": "Documents searched: HRPolicy.pdf, employee_records.md. Answer from search_handbook results instead, or state that no Ireland-specific rule was provided."
+          }
+        },
+        "is_error": true,
+        "attempts": 1
+      },
+      "model": {
+        "termination_reason": "SUCCESS",
+        "tools": [
+          {
+            "step": 1,
+            "tool": "get_employee_record",
+            "arguments": {
+              "employee_id": "EMP002"
+            },
+            "is_error": false,
+            "error": null,
+            "why": "Need get_employee_record for EMP002. Then get_jurisdiction_rules for Ireland, policy_category leave. Then search_handbook for 'statutory annual leave Ireland'."
+          },
+          {
+            "step": 2,
+            "tool": "get_jurisdiction_rules",
+            "arguments": {
+              "jurisdiction": "Ireland",
+              "policy_category": "leave"
+            },
+            "is_error": true,
+            "error": {
+              "code": "NO_EVIDENCE",
+              "message": "No passage in the uploaded documents mentions Ireland.",
+              "retryable": false,
+              "hint": "Documents searched: HRPolicy.pdf, employee_records.md. Answer from search_handbook results instead, or state that no Ireland-specific rule was provided."
+            },
+            "why": "Now get_jurisdiction_rules."
+          },
+          {
+            "step": 3,
+            "tool": "search_handbook",
+            "arguments": {
+              "query": "statutory annual leave Ireland",
+              "top_k": 5
+            },
+            "is_error": false,
+            "error": null,
+            "why": "So no jurisdiction rules. Use search_handbook for statutory annual leave Ireland."
+          }
+        ],
+        "answer": {
+          "entitlement_value": "The uploaded documents do not contain any statutory annual leave rules for Ireland. The handbook only specifies the company’s own entitlement (24 days per annum for full‑time staff, accruing at 2 days per month for less than a year – see section 5.2.1 of HRPolicy.pdf). Since no Ireland‑specific statutory rule is present in the documents, we cannot compare it to the handbook entitlement.",
+          "explanation": "The employee’s jurisdiction is Ireland (from the employee record), but the get_jurisdiction_rules tool returned NO_EVIDENCE, indicating no jurisdiction‑specific rules were found. The search_handbook results show only the company’s entitlement, not statutory provisions. Therefore the documents do not cover Irish statutory annual leave rules, and the handbook entitlement remains the only applicable rule."
+        },
+        "total_tokens": 6563,
+        "model_call_retries": 3,
+        "model_calls": 4
+      }
+    }
+  }
+}

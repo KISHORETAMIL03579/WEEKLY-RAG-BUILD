@@ -1,0 +1,15 @@
+Agent/host modules compared before and after adding server two (the swap = config only):
+  backend/services/policy_agent.py  sha256=3e705948f109c092...  unchanged=True
+  backend/services/policy_run.py  sha256=cff078daf8081d50...  unchanged=True
+  backend/mcp/client.py  sha256=6475b6ffd8db9d55...  unchanged=True
+  backend/mcp/registry.py  sha256=9d8bc5d77b7ef883...  unchanged=True
+  backend/mcp/schema.py  sha256=92495e3cbeffff8f...  unchanged=True
+  backend/mcp/protocol.py  sha256=c7480043962faaa3...  unchanged=True
+
+
+
+
+
+
+
+CHANGED LINES: 0

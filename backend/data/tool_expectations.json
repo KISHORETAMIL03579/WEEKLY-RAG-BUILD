@@ -1,0 +1,31 @@
+{
+  "description": "Declarative rules used to audit which tools an ad-hoc question needs. They say what must be consulted, never what the answer is.",
+  "rules": [
+    {
+      "id": "local_rules",
+      "pattern": "statutor|local law|labou?r law|jurisdiction|public holiday|duty.station|country law|employment (act|law)",
+      "requires_any": ["get_jurisdiction_rules"],
+      "reason": "The question is about jurisdiction-specific rules."
+    },
+    {
+      "id": "grade_band",
+      "pattern": "\\bgrade\\b|\\bband\\b",
+      "requires_any": ["get_grade_band"],
+      "reason": "Grade band is held in the HRIS."
+    },
+    {
+      "id": "leave_balance",
+      "pattern": "balance|days (left|remaining)|accrued (leave|days)",
+      "requires_any": ["get_leave_balance"],
+      "reason": "Accrued leave balance is held in the HRIS."
+    },
+    {
+      "id": "policy_wording",
+      "pattern": "entitle|notice|eligib|severance|carry|accrual|accrues|polic|rule|allowance|commut|probation|resign|redundan|how (much|many)",
+      "requires_any": ["search_handbook"],
+      "reason": "The answer depends on policy wording in the uploaded documents."
+    }
+  ],
+  "employee_lookup_role": "employee_lookup",
+  "evidence_role": "evidence"
+}

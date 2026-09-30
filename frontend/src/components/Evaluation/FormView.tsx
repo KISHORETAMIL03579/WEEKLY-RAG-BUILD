@@ -7,13 +7,13 @@ import { EvaluationDatasetManager } from "./EvaluationDatasetManager";
 import { CancelButton } from "../common/CancelButton";
 import { QADataSetCase, DatasetMode } from "../../types/dataset";
 import { Card } from "../common/Card";
-import { TopKSlider } from "../common/ModelParameterControls";
+import { GenerationControls } from "../common/GenerationControls";
+import { GenerationConfig } from "../../hooks/useGenerationConfig";
 
 interface FormViewProps {
   questions: EvalQuestionInput[];
   setQuestions: React.Dispatch<React.SetStateAction<EvalQuestionInput[]>>;
-  topK: number | string;
-  setTopK: (k: number | string) => void;
+  generation: GenerationConfig;
   strategyFilter: string;
   setStrategyFilter: (s: string) => void;
   presets: Record<string, boolean>;
@@ -27,8 +27,7 @@ interface FormViewProps {
 export const FormView: React.FC<FormViewProps> = ({
   questions,
   setQuestions,
-  topK,
-  setTopK,
+  generation,
   strategyFilter,
   setStrategyFilter,
   presets,
@@ -259,33 +258,13 @@ export const FormView: React.FC<FormViewProps> = ({
             marginBottom: "18px",
           }}
         >
-          <div>
-            <div style={{ display: "flex", gap: "6px", marginBottom: "8px" }}>
-              <button
-                type="button"
-                onClick={() => setTopK(5)}
-                disabled={isRunning}
-                className={`quick-pill ${Number(topK) === 5 ? "active" : ""}`}
-                title="Application Default (K=5)"
-              >
-                K=5 (Default)
-              </button>
-              <button
-                type="button"
-                onClick={() => setTopK(8)}
-                disabled={isRunning}
-                className={`quick-pill ${Number(topK) === 8 ? "active" : ""}`}
-                title="Week 6 Baseline (K=8)"
-              >
-                K=8 (Week 6)
-              </button>
-            </div>
-            <TopKSlider
-              value={Number(topK) || 5}
-              onChange={setTopK}
-              disabled={isRunning}
-            />
-          </div>
+          <GenerationControls
+            config={generation}
+            showTemperature={false}
+            showModel={false}
+            presetScope="topK"
+            disabled={isRunning}
+          />
           <div>
             <label
               htmlFor="strategy-filter-input"
@@ -401,7 +380,7 @@ export const FormView: React.FC<FormViewProps> = ({
           isRunning={true}
           isComplete={false}
           statusText="Executing retrieval across active ablation strategies..."
-          configurationText={`Top-K: ${topK} | Active Strategies: ${Object.keys(presets).filter((k) => presets[k]).length}`}
+          configurationText={`Top-K: ${generation.topK} | Active Strategies: ${Object.keys(presets).filter((k) => presets[k]).length}`}
         />
       )}
     </div>

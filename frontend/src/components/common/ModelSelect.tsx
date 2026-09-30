@@ -7,18 +7,16 @@ interface ModelSelectProps {
   defaultModel?: string;
   isLoading: boolean;
   disabled?: boolean;
-  loadingLabel: string;
-  emptyLabel: string;
+  loadingLabel?: string;
+  emptyLabel?: string;
   error?: string | null;
   showDefaultLabel?: boolean;
   preserveUnavailableValue?: boolean;
-  containerStyle?: React.CSSProperties;
-  labelStyle?: React.CSSProperties;
-  selectStyle?: React.CSSProperties;
-  errorStyle?: React.CSSProperties;
+  className?: string;
   onChange: (value: string) => void;
 }
 
+/** Class-based model picker (styles live in components.css: .model-select*). */
 export const ModelSelect: React.FC<ModelSelectProps> = ({
   label,
   value,
@@ -26,31 +24,30 @@ export const ModelSelect: React.FC<ModelSelectProps> = ({
   defaultModel,
   isLoading,
   disabled = false,
-  loadingLabel,
-  emptyLabel,
+  loadingLabel = "Loading models…",
+  emptyLabel = "No models available",
   error,
   showDefaultLabel = false,
   preserveUnavailableValue = false,
-  containerStyle,
-  labelStyle,
-  selectStyle,
-  errorStyle,
+  className,
   onChange,
 }) => {
   const selectId = useId();
+  const errorId = useId();
   const isDisabled = disabled || isLoading || models.length === 0;
 
   return (
-    <div style={containerStyle}>
-      <label htmlFor={selectId} style={labelStyle}>
+    <div className={className ? `model-select ${className}` : "model-select"}>
+      <label htmlFor={selectId} className="model-select-label">
         {label}
       </label>
       <select
         id={selectId}
+        className="model-select-control"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         disabled={isDisabled}
-        style={selectStyle}
+        aria-describedby={error ? errorId : undefined}
       >
         {preserveUnavailableValue && value && !models.includes(value) && (
           <option value={value} disabled>
@@ -71,7 +68,7 @@ export const ModelSelect: React.FC<ModelSelectProps> = ({
         )}
       </select>
       {error && (
-        <div role="alert" style={errorStyle}>
+        <div id={errorId} role="alert" className="model-select-error">
           {error}
         </div>
       )}

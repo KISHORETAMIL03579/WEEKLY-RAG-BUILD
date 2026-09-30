@@ -1,0 +1,209 @@
+{
+  "server": "hris (stdio subprocess: python -m backend.mcp.servers.hris_server)",
+  "where_the_model_call_happens": "The model call happens in the HOST (backend/services/policy_agent.py -> Groq). It does NOT happen in either MCP server: servers only answer initialize, tools/list and tools/call.",
+  "exchange": [
+    {
+      "step": "initialize (request)",
+      "direction": "client->server",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": "2025-06-18",
+          "capabilities": {},
+          "clientInfo": {
+            "name": "ask-my-docs-policy-host",
+            "version": "1.0.0"
+          }
+        }
+      },
+      "annotations": {
+        "jsonrpc": "Protocol version of the envelope; always the string '2.0'.",
+        "id": "Correlation id chosen by the client; the response echoes it so replies can interleave.",
+        "method": "'initialize' opens the session and negotiates capabilities. It is always the first message.",
+        "params.protocolVersion": "MCP revision the client speaks. The server answers with the one it will use.",
+        "params.capabilities": "Optional client features (sampling, roots, ...). Empty: this host offers none.",
+        "params.clientInfo": "Name/version of the host, for the server's logs."
+      }
+    },
+    {
+      "step": "initialize (response)",
+      "direction": "server->client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+          "protocolVersion": "2025-06-18",
+          "capabilities": {
+            "tools": {
+              "listChanged": false
+            }
+          },
+          "serverInfo": {
+            "name": "hris",
+            "version": "1.0.0"
+          },
+          "instructions": "Read-only HRIS lookups by employee id: grade band and accrued leave balance."
+        }
+      },
+      "annotations": {
+        "result.protocolVersion": "Negotiated revision (server picks from what it supports).",
+        "result.capabilities.tools": "The server exposes tools; listChanged=false means the list is static.",
+        "result.serverInfo": "Server identity. Shown in the MCP tab and audit log.",
+        "result.instructions": "Optional text the host may add to the model context. Capability, not a model call."
+      }
+    },
+    {
+      "step": "notifications/initialized",
+      "direction": "client->server",
+      "message": {
+        "jsonrpc": "2.0",
+        "method": "notifications/initialized"
+      },
+      "annotations": {
+        "method": "A notification (no id, no reply): the client confirms the handshake is complete."
+      }
+    },
+    {
+      "step": "tools/list (request)",
+      "direction": "client->server",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/list"
+      }
+    },
+    {
+      "step": "tools/list (response)",
+      "direction": "server->client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "result": {
+          "tools": [
+            {
+              "name": "get_grade_band",
+              "title": "Get HRIS grade band",
+              "description": "Return ONE employee's salary grade band (for example G7) from the HRIS system of record. Use it when the question asks about grade, band or seniority level. Do NOT use it for leave or policy wording. If the employee does not exist the error says so, which is different from the HRIS being down (retryable): never guess a band.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "employee_id": {
+                    "type": "string",
+                    "description": "The employee id exactly as given in the question, e.g. EMP001.",
+                    "minLength": 2,
+                    "maxLength": 32,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  }
+                },
+                "required": [
+                  "employee_id"
+                ],
+                "additionalProperties": false
+              },
+              "annotations": {
+                "readOnlyHint": true,
+                "openWorldHint": false
+              },
+              "_meta": {
+                "roles": [
+                  "employee_lookup",
+                  "evidence"
+                ]
+              }
+            },
+            {
+              "name": "get_leave_balance",
+              "title": "Get HRIS leave balance",
+              "description": "Return ONE employee's accrued, unused annual leave in days from the HRIS system of record. Use it for 'how many days does this person have left'. It is a balance, not the entitlement rule: use search_handbook for what the policy grants. If the employee does not exist the error says so; never estimate a balance.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "employee_id": {
+                    "type": "string",
+                    "description": "The employee id exactly as given in the question, e.g. EMP001.",
+                    "minLength": 2,
+                    "maxLength": 32,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  }
+                },
+                "required": [
+                  "employee_id"
+                ],
+                "additionalProperties": false
+              },
+              "annotations": {
+                "readOnlyHint": true,
+                "openWorldHint": false
+              },
+              "_meta": {
+                "roles": [
+                  "employee_lookup",
+                  "evidence"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "annotations": {
+        "result.tools[].name": "The identifier the model uses in a tool call.",
+        "result.tools[].description": "Prompt text for the model: what the tool is for and when NOT to use it.",
+        "result.tools[].inputSchema": "JSON Schema the host validates the model's arguments against before sending.",
+        "result.tools[].annotations": "Hints (readOnlyHint ...), informational only.",
+        "result.tools[]._meta.roles": "Roles the server declares (employee_lookup / evidence); the agent's guards use these, not tool names."
+      }
+    },
+    {
+      "step": "tools/call (request)",
+      "direction": "client->server",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+          "name": "get_leave_balance",
+          "arguments": {
+            "employee_id": "EMP001"
+          }
+        }
+      },
+      "annotations": {
+        "method": "Invoke one tool. Sent by the HOST on the model's behalf; the model never talks to the server.",
+        "params.name": "Which discovered tool to run.",
+        "params.arguments": "Model-chosen arguments, already validated against inputSchema.",
+        "params._meta": "Host-supplied context (e.g. the session). Never chosen or seen by the model."
+      }
+    },
+    {
+      "step": "tools/call (response)",
+      "direction": "server->client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"found\": true, \"employee_id\": \"EMP001\", \"accrued_leave_days\": 12, \"source\": \"hris\"}"
+            }
+          ],
+          "structuredContent": {
+            "found": true,
+            "employee_id": "EMP001",
+            "accrued_leave_days": 12,
+            "source": "hris"
+          },
+          "isError": false,
+          "_client_latency_ms": 0.376
+        }
+      },
+      "annotations": {
+        "result.content": "Human/LLM-readable result blocks (here one text block of JSON).",
+        "result.structuredContent": "The same result as a JSON object for programs.",
+        "result.isError": "true = the TOOL failed in a way the model can read and react to; protocol errors use 'error' instead."
+      }
+    }
+  ]
+}

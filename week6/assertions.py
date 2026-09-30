@@ -317,7 +317,7 @@ def out_of_jurisdiction_refusal(
 
 
 def run_all_assertions(case: Dict[str, Any]) -> Dict[str, bool]:
-    """Runs all 5 deterministic assertions on a given eval case dictionary."""
+    """Runs every deterministic assertion on a given eval case dictionary."""
     ans = case.get("answer", "")
     expected_num = case.get("expected_numeric")
     is_ooj = case.get("out_of_jurisdiction", False)
@@ -331,5 +331,6 @@ def run_all_assertions(case: Dict[str, Any]) -> Dict[str, bool]:
     }
 
 
-DETERMINISTIC_ASSERTION_COUNT = 5
-JUDGE_CRITERION_COUNT = 1
+# Counted from the implementation so the reported split can never drift from the code.
+DETERMINISTIC_ASSERTION_COUNT = len(run_all_assertions({"answer": ""}))
+JUDGE_CRITERION_COUNT = 1  # the single binary semantic-correctness criterion

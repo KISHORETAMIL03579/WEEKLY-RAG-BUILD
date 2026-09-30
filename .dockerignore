@@ -14,15 +14,28 @@ __pycache__/
 venv/
 *.egg-info/
 
-# Runtime data — these are volume-mounted at run time (see docker-compose.yaml),
+# Runtime data — these are volume-mounted at run time (see docker-compose.yml),
 # not baked into the image. Excluding them keeps the build context small and
 # avoids ever accidentally shipping real uploaded documents, vectors, or trace
 # logs (even redacted ones) inside an image layer.
 uploads/
 vectorstore/
 traces/
+state/
+benchmarks/policy_execution/runs/
+benchmarks/policy_execution/trajectory_*.json
+benchmarks/policy_execution/trajectory_*.partial
+scratch/
+
+# Dependencies and build output (rebuilt inside the image)
+node_modules/
 frontend/node_modules/
 frontend/dist/
+
+# Not needed at runtime
+tests/
+docs/
+WEEKLY_RAG_TASK/
 
 # Editor / OS cruft
 .vscode/
@@ -44,7 +57,6 @@ htmlcov/
 
 # CI & metadata
 .github/
-project-structure.txt
 *.md
 
 # Container configurations

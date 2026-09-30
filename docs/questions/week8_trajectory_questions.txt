@@ -1,0 +1,92 @@
+# ==============================================================================
+# WEEK 8 - TRAJECTORY EVALUATION: QUESTIONS WHERE THE PATH MATTERS
+# A right answer reached without reading the record (or with a made-up argument)
+# passes the outcome eval and fails the trajectory eval. The expected tool path is
+# in each case header (full data: benchmarks/policy_execution/expected_trajectories.json).
+# Run live in the UI: Policy Assistant -> suite "all" -> Trajectory panel
+# (tool-choice accuracy, argument validity, step efficiency, cost p50/max, gap).
+# CLI: python -m benchmarks.policy_execution.trajectory_eval run baseline --session-id S
+# ==============================================================================
+
+### Case 01 [Trajectory] path: get_employee_record + search_handbook (either order)
+Case ID: w8_01
+Employee ID: EMP003
+Question: How much written notice must EMP003 provide if they decide to resign while on probation?
+Expected Answer: One week (7 days) written notice, because EMP003 is on probation (tenure 4 months).
+Section: 10.1
+
+### Case 02 [Trajectory] path: get_employee_record + search_handbook (either order)
+Case ID: w8_02
+Employee ID: EMP004
+Question: How much written notice must EMP004 provide if resigning as a confirmed staff member?
+Expected Answer: Four weeks written notice (EMP004 is confirmed, tenure 36 months).
+Section: 10.1
+
+### Case 03 [Trajectory] path: get_employee_record + search_handbook; wrong path = answering from the question's '1 month' without reading the record
+Case ID: w8_03
+Employee ID: EMP005
+Question: Is EMP005 eligible for paid sick leave after 1 month of service, and what is the minimum qualifying service threshold?
+Expected Answer: Not eligible: paid sick leave needs at least two consecutive months of service (EMP005 has 1 month).
+Section: 5.3.2
+
+### Case 04 [Trajectory] path: get_employee_record + search_handbook
+Case ID: w8_04
+Employee ID: EMP009
+Question: Is EMP009 currently eligible to receive the 10% pension contribution allowance while on probation?
+Expected Answer: Not eligible: the 10% allowance starts once probation is successfully completed (EMP009 is on probation).
+Section: 4.4.1
+
+### Case 05 [Trajectory] path: get_employee_record + search_handbook
+Case ID: w8_05
+Employee ID: EMP007
+Question: What severance payment and notice period is EMP007 entitled to upon separation due to redundancy with 4 completed years of service?
+Expected Answer: One month's written notice plus severance of fifteen days' pay per completed year: 60 days' pay for 4 years.
+Section: 10.5.1
+
+### Case 06 [Trajectory] path: get_employee_record + search_handbook
+Case ID: w8_06
+Employee ID: EMP008
+Question: What severance pay is EMP008 entitled to upon termination for unsatisfactory performance?
+Expected Answer: None: not entitled to severance; accrued unused leave and pay for time worked are still paid.
+Section: 10.5.2
+
+### Case 07 [Trajectory] path: get_employee_record then get_jurisdiction_rules(Kenya) - jurisdiction argument comes from the record; search_handbook optional
+Case ID: w8_07
+Employee ID: EMP001
+Question: What does the handbook say about Kenyan employment law for EMP001's separation from service?
+Expected Answer: Separation from service is subject to the Employment Act of the Republic of Kenya.
+Section: 10
+
+### Case 08 [Trajectory] path: get_employee_record, get_jurisdiction_rules(Ireland) -> error, search_handbook
+Case ID: w8_08
+Employee ID: EMP002
+Question: Which Irish statutory annual leave rules apply to EMP002, and how do they compare with the handbook entitlement?
+Expected Answer: The uploaded documents contain no Irish rules (tool returns NO_EVIDENCE); the handbook grants 24 days per annum. Quoting Irish law from memory is a failure.
+Section: 5.2.1
+
+### Case 09 [Trajectory] path: get_employee_record, get_jurisdiction_rules(Rwanda) -> error, search_handbook
+Case ID: w8_09
+Employee ID: EMP007
+Question: Under Rwandan statutory law, what notice must EMP007 receive on redundancy?
+Expected Answer: No Rwandan rule is provided in the documents; the handbook gives one month's written notice.
+Section: 10.5.1
+
+### Case 10 [Trajectory] path: get_employee_record, get_jurisdiction_rules(Cote d'Ivoire) -> error
+Case ID: w8_10
+Employee ID: EMP006
+Question: What is EMP006's statutory annual leave accrual under Ivorian labour law?
+Expected Answer: No Ivorian rule is provided in the documents; the handbook accrues 2 days per month.
+Section: 5.2.1
+
+### Case 11 [Trajectory] path: get_employee_record only, then stop (INVALID_EMPLOYEE)
+Case ID: w8_11
+Employee ID: EMP999
+Question: How much annual leave does EMP999 get?
+Expected Answer: No such employee in the uploaded records: the run must stop after the lookup with an unknown-employee message and no invented entitlement.
+
+### Case 12 [Trajectory] path: get_employee_record + search_handbook; tests id normalisation
+Case ID: w8_12
+Employee ID: emp003
+Question: How much notice must emp003 give if resigning on probation?
+Expected Answer: One week written notice (the employee id is matched case-insensitively).
+Section: 10.1

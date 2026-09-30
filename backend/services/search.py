@@ -228,14 +228,23 @@ def search_chunks(
     return scored[:top_k]
 
 
-def reciprocal_rank_fusion(store: Any, query: str, top_k: int = 5) -> List[dict]:
-    """Combines embedding-based ranking and BM25 ranking via Reciprocal Rank Fusion."""
+def reciprocal_rank_fusion(
+    store: Any,
+    query: str,
+    top_k: int = 5,
+    query_vector: Optional[List[float]] = None,
+) -> List[dict]:
+    """Combines embedding-based ranking and BM25 ranking via Reciprocal Rank Fusion.
+
+    ``query_vector`` lets a caller that already embedded the query (with its own
+    timeout) avoid a second embedding call.
+    """
     if not store.chunks:
         return []
     n = len(store.chunks)
 
     embed_scores = (
-        store.query_scores(embed_text(query))
+        store.query_scores(query_vector if query_vector is not None else embed_text(query))
         if store.vectors and len(store.vectors) == len(store.chunks)
         else [0.0] * n
     )

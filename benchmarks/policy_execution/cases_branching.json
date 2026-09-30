@@ -1,0 +1,108 @@
+[
+  {
+    "case_id": "branch_01",
+    "employee_id": "EMP001",
+    "question": "What does the handbook say about Kenyan employment law for EMP001's separation from service?",
+    "source_section": "Section 10 (separation from service)",
+    "expected_value": "Separation is subject to the Employment Act of the Republic of Kenya.",
+    "path_dependency": "The jurisdiction argument (Kenya) must be read from EMP001's record before the local-rules tool is called.",
+    "requires_tools": [
+      "get_jurisdiction_rules"
+    ],
+    "deterministic_pass_criteria": [
+      "employment act",
+      "kenya"
+    ]
+  },
+  {
+    "case_id": "branch_02",
+    "employee_id": "EMP002",
+    "question": "Which Irish statutory annual leave rules apply to EMP002, and how do they compare with the handbook entitlement?",
+    "source_section": "Section 5.2.1",
+    "expected_value": "The uploaded documents contain no Irish rules; the handbook grants 24 days per annum.",
+    "path_dependency": "EMP002's record gives Ireland; the local-rules tool then finds no Irish passage, and the answer must say so instead of citing outside law.",
+    "requires_tools": [
+      "get_jurisdiction_rules"
+    ],
+    "deterministic_pass_criteria": [
+      "24",
+      "ireland"
+    ],
+    "forbidden_phrases": [
+      "20 working days",
+      "4 working weeks",
+      "organisation of working time",
+      "20 days"
+    ]
+  },
+  {
+    "case_id": "branch_03",
+    "employee_id": "EMP007",
+    "question": "Under Rwandan statutory law, what notice must EMP007 receive on redundancy?",
+    "source_section": "Section 10.5.1",
+    "expected_value": "The uploaded documents contain no Rwandan rule; the handbook gives one month's written notice.",
+    "path_dependency": "EMP007's record gives Rwanda; the local-rules tool finds no Rwandan passage.",
+    "requires_tools": [
+      "get_jurisdiction_rules"
+    ],
+    "deterministic_pass_criteria": [
+      "1 month",
+      "rwanda"
+    ],
+    "forbidden_phrases": [
+      "30 days",
+      "15 days' notice",
+      "66/2018"
+    ]
+  },
+  {
+    "case_id": "branch_04",
+    "employee_id": "EMP006",
+    "question": "What is EMP006's statutory annual leave accrual under Ivorian labour law?",
+    "source_section": "Section 5.2.1",
+    "expected_value": "The uploaded documents contain no Ivorian rule; the handbook accrues 2 days per month.",
+    "path_dependency": "EMP006's record gives Cote d'Ivoire; the local-rules tool finds no passage for it.",
+    "requires_tools": [
+      "get_jurisdiction_rules"
+    ],
+    "deterministic_pass_criteria": [
+      "ivoire"
+    ],
+    "forbidden_phrases": [
+      "2.2 working days",
+      "26.4",
+      "article 25"
+    ]
+  },
+  {
+    "case_id": "branch_05",
+    "employee_id": "EMP001",
+    "question": "What is EMP001's grade band and accrued leave balance?",
+    "source_section": "HRIS",
+    "expected_value": "Grade band G7 and 12 accrued leave days, from the HRIS.",
+    "path_dependency": "Answerable only from the HRIS server's tools; no handbook search is needed.",
+    "requires_tools": [
+      "get_grade_band",
+      "get_leave_balance"
+    ],
+    "deterministic_pass_criteria": [
+      "G7",
+      "12"
+    ]
+  },
+  {
+    "case_id": "branch_06",
+    "employee_id": "EMP003",
+    "question": "How does EMP003's accrued leave balance compare with the standard annual leave entitlement?",
+    "source_section": "Section 5.2.1; HRIS",
+    "expected_value": "EMP003 has 4 accrued days against a standard entitlement of 24 days per annum.",
+    "path_dependency": "Needs the HRIS balance and the handbook entitlement; neither result determines the other.",
+    "requires_tools": [
+      "get_leave_balance"
+    ],
+    "deterministic_pass_criteria": [
+      "4",
+      "24"
+    ]
+  }
+]

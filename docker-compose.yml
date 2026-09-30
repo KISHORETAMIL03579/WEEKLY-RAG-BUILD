@@ -1,8 +1,10 @@
-# Self-hosted Qdrant, Ollama & Weekly RAG Server
+# Self-hosted Qdrant & Weekly RAG Server (Groq for chat/agents)
 # Deployment note:
-#   This Docker Compose configuration provides a complete, self-contained
-#   multi-service stack: FastAPI + React application, Qdrant vector database,
-#   and Ollama local LLM/embedding inference engine with automated model initialization.
+#   Default stack: FastAPI + React application and a Qdrant vector database. Chat, the
+#   policy agent and the fixed workflow use Groq (set GROQ_API_KEY). Groq has no
+#   embeddings API, so EMBED_BACKEND defaults to "none": chunks are stored in Qdrant and
+#   searched by keyword (BM25). For semantic search start the optional Ollama services:
+#       docker compose --profile ollama up -d --build     (and set EMBED_BACKEND=ollama)
 #
 # Usage:
 #   docker compose up -d --build
@@ -44,6 +46,7 @@ services:
           memory: 1G
 
   ollama:
+    profiles: ["ollama"]
     image: ollama/ollama:0.33.3
     container_name: weekly-rag-build-ollama
     restart: unless-stopped
@@ -67,6 +70,7 @@ services:
           memory: 6G
 
   ollama_init:
+    profiles: ["ollama"]
     image: ollama/ollama:0.33.3
     container_name: weekly-rag-build-ollama-init
     restart: "no"
@@ -148,8 +152,8 @@ services:
       VECTOR_BACKEND: ${VECTOR_BACKEND:-qdrant}
       QDRANT_URL: ${DOCKER_QDRANT_URL:-http://qdrant:6333}
       QDRANT_API_KEY: ${DOCKER_QDRANT_API_KEY:-}
-      # Embeddings backend — "ollama" (default, no key) or "gemini"
-      EMBED_BACKEND: ${EMBED_BACKEND:-ollama}
+      # Embeddings backend — "none" (default: keyword search over Qdrant chunks), "ollama" or "gemini"
+      EMBED_BACKEND: ${EMBED_BACKEND:-none}
       OLLAMA_URL: ${DOCKER_OLLAMA_URL:-http://ollama:11434}
       OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
@@ -158,8 +162,8 @@ services:
       VISION_BACKEND: ${VISION_BACKEND:-ollama}
       OLLAMA_VISION_MODEL: ${OLLAMA_VISION_MODEL:-llava}
       GEMINI_VISION_MODEL: ${GEMINI_VISION_MODEL:-gemini-3.7-flash}
-      # Chat/generation backend — "ollama", "xai", or "groq"
-      CHAT_BACKEND: ${CHAT_BACKEND:-ollama}
+      # Chat/generation backend — the policy agent/workflow require "groq"
+      CHAT_BACKEND: ${CHAT_BACKEND:-groq}
       OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-llama3.1:8b}
       XAI_API_KEY: ${XAI_API_KEY:-}
       XAI_URL: ${XAI_URL:-https://api.x.ai/v1}
@@ -179,6 +183,14 @@ services:
       DEFAULT_CHUNK_MODE: ${DEFAULT_CHUNK_MODE:-structured}
       DEFAULT_CHUNK_SIZE: ${DEFAULT_CHUNK_SIZE:-512}
       QDRANT_SCROLL_LIMIT: ${QDRANT_SCROLL_LIMIT:-5000}
+      # Policy agent budgets and MCP host (see README: Week 7-9)
+      POLICY_MAX_ITERATIONS: ${POLICY_MAX_ITERATIONS:-6}
+      POLICY_MAX_TOKENS: ${POLICY_MAX_TOKENS:-24000}
+      POLICY_MAX_COST_USD: ${POLICY_MAX_COST_USD:-0.05}
+      POLICY_MAX_WALL_CLOCK_SECONDS: ${POLICY_MAX_WALL_CLOCK_SECONDS:-60}
+      MCP_CONFIG_PATH: ${MCP_CONFIG_PATH:-/app/config/mcp_servers.json}
+      MCP_TOOL_MAX_RETRIES: ${MCP_TOOL_MAX_RETRIES:-2}
+      MCP_AUDIT_LOG_PATH: /app/traces/mcp_audit.jsonl
       EVAL_CHUNK_MODE: ${EVAL_CHUNK_MODE:-structured}
       EMBED_BATCH: ${EMBED_BATCH:-32}
       RERANK_ENABLED: ${RERANK_ENABLED:-false}
@@ -196,10 +208,6 @@ services:
     depends_on:
       qdrant:
         condition: service_healthy
-      ollama:
-        condition: service_healthy
-      ollama_init:
-        condition: service_completed_successfully
     healthcheck:
       test:
         [

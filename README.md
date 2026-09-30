@@ -1,396 +1,188 @@
 # Ask My Docs
 
-Ask My Docs is a document-grounded question-answering and evaluation
-application. It combines a React/TypeScript web client with a FastAPI backend,
-hybrid lexical/vector retrieval, pluggable model providers, and separate
-Week 6, Week 7, and Week 8 evaluation surfaces.
+Upload documents, ask questions, and evaluate the answers. A React + TypeScript client sits on a
+FastAPI backend with Qdrant for chunks, **Groq** for chat, the HR policy agent and the judge, and an
+**MCP** host that gives the agent its tools.
 
-This README describes the checked-in application, not a claim that every
-production deployment or live-provider benchmark has been verified. The
-repository's current Week 8 live measurements and limitations are recorded
-below. Never commit `.env`, provider credentials, uploaded documents, runtime
-traces, or generated benchmark results.
+This repository is the working build for Weeks 6 to 9 of the course:
 
-## Contents
+| Week | Topic | What you can do with it | Detail |
+| --- | --- | --- | --- |
+| 6 | Validate the judge | 25 labelled cases, assertions vs judge, agreement % (Judge Evaluator tab) | [docs/training/week6](docs/training/week6/README.md) |
+| 7 | Agent vs fixed workflow | Policy Search (auto-routed) and Policy Assistant (race + 4 numbers) | [docs/training/week7](docs/training/week7/README.md) |
+| 8 | Trajectory evaluation | Score the tool path: accuracy, argument validity, step efficiency, cost p50/max, outcome-vs-trajectory gap | [docs/training/week8](docs/training/week8/README.md) |
+| 9 | MCP | Add an HRIS tool server by config only; raw wire log | [docs/training/week9](docs/training/week9/README.md) |
 
-- [Architecture](#architecture)
-- [End-to-end request flows](#end-to-end-request-flows)
-- [Weeks 6, 7, and 8](#weeks-6-7-and-8)
-- [Local setup](#local-setup)
-- [Docker Compose](#docker-compose)
-- [Configuration](#configuration)
-- [HTTP API overview](#http-api-overview)
-- [Data lifecycle and session cleanup](#data-lifecycle-and-session-cleanup)
-- [Testing and live verification](#testing-and-live-verification)
-- [Repository audit and known limitations](#repository-audit-and-known-limitations)
-- [Troubleshooting](#troubleshooting)
+**Start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**: one diagram per week, how data flows, where every
+piece lives, the JSON trace explained, and a live demo script.
 
-## Architecture
+> **The one rule:** the policy tools read **only the chunks you uploaded** (Qdrant). No policy text, employee
+> data or country rule is typed into the code. If the documents are silent the tools say so and the answer says so.
 
-```text
-React + TypeScript SPA (frontend/src)
-  ├─ chat, sources, viewer, evaluation and policy views
-  └─ typed HTTP client (frontend/src/services/api.ts)
-                 │ HTTP / JSON
-                 ▼
-FastAPI application (backend/main.py)
-  ├─ routes/       HTTP validation, authorization and serialization
-  ├─ schemas/      request and response contracts
-  ├─ services/     retrieval, provider calls, policy execution and run managers
-  ├─ evaluation/   Week 6 assertions, metrics, judges and retrieval runner
-  └─ storage/      vector stores, sessions, SQLite coordination and traces
-        ├─ Qdrant or in-memory vector store
-        ├─ source files and per-session manifests
-        ├─ SQLite shared run/session metadata
-        └─ append-only trace and orphan records
-```
-
-`backend.main:create_app()` is the application factory and `backend.main:app`
-is the ASGI application. The root [`app.py`](app.py) remains a compatibility
-facade for older imports and launch/deployment references; it re-exports
-backend symbols and should not be treated as a second implementation.
-
-| Area | Main code |
-| --- | --- |
-| Chat and document status/reset | `backend/routes/chat.py` |
-| Upload, URL indexing and document removal | `backend/routes/ingestion.py` |
-| Source document viewing | `backend/routes/documents.py` |
-| Week 6 evaluation APIs | `backend/routes/evaluation.py` |
-| Week 7 policy search and benchmark APIs | `backend/routes/policy.py` |
-| Provider adapters and answer generation | `backend/services/llm.py` |
-| Chunking, retrieval and ranking | `backend/services/chunker.py`, `backend/services/search.py` |
-| Agent, workflow and automatic routing | `backend/services/policy_agent.py`, `policy_workflow.py`, `policy_router.py` |
-| Session stores and vector backends | `backend/storage/session_manager.py`, `vector_store.py`, `qdrant_store.py` |
-| Browser UI | `frontend/src/components/`, `pages/`, `services/api.ts` |
-
-The UI already reuses shared controls for evaluation progress, model selection,
-parameters, metric cards, buttons, icons, and status presentation. A repository
-audit found no confirmed dead implementation safe to delete: the apparent
-overlaps include legacy compatibility exports, alternate memory/Qdrant
-implementations, and tested evaluation contracts. See the audit notes below.
-
-## End-to-end request flows
-
-### Document ingestion and grounded chat
-
-1. The browser stages an upload and submits it to `POST /upload` with the
-   session cookie and selected chunk strategy.
-2. FastAPI validates supported upload extensions (`.pdf`, `.txt`, `.md`),
-   extracts document text, chunks it, and requests embeddings when configured.
-3. Chunks and metadata are stored in the session's vector store. Qdrant uses a
-   collection named `chunks_<session_id>`; the memory backend stays in-process.
-4. `GET /status` reads the active session store and returns indexed documents,
-   chunks, retrieval mode, and vector backend.
-5. `POST /ask` retrieves lexical and, when configured, dense candidates; fuses
-   rankings; applies context limits and answer-generation rules; and returns
-   sources and telemetry. The chat trace is recorded separately.
-6. The frontend renders the answer with its grounded source list. Stop requests
-   cancellation; it does not disable typing in the composer.
-
-The text extractor has additional internal readers, but the upload route's
-allowlist is the supported upload contract. It currently accepts PDF, plain
-text, and Markdown files.
-
-### Week 6 evaluation
-
-The evaluation UI sends the selected cases, model, Top-K, temperature, and
-execution options to the evaluation routes. Background runs are assigned run
-IDs, persisted, polled for progress, and can be cancelled. The Judge path
-executes deterministic assertions and optionally configured LLM judges;
-retrieval benchmarking reports retrieval metrics and per-case evidence. Keep
-the canonical cases and labels under `week6/` unchanged when evaluating
-implementation behavior.
-
-### Week 7 policy execution
-
-The Policy Search UI sends the employee, question, selected model, Top-K,
-temperature, retry configuration, and optional forced execution mode to
-`/api/policy/search`. Automatic routing chooses the deterministic Workflow or
-the bounded Agent. Responses include execution mode, routing reason, tool
-calls, retries, provider token provenance, latency, termination reason, and
-the unchanged deterministic case result. Long-running policy benchmarks have
-persisted run state and cancellation endpoints.
-
-### Week 8 trajectory evaluation
-
-The Week 8 CLI runs the unchanged ten canonical Week 7 policy cases with live
-Groq Agent calls. It stores per-case results, required tool ordering, extra and
-duplicate tool calls, termination reason, actual provider tokens, latency,
-and a clearly labeled token-cost proxy. New evidence also shows each existing
-deterministic answer criterion as matched/unmatched; these diagnostics do not
-change the pass predicate or benchmark truth.
-
-The recorded baseline had 3/10 successful provider executions, 3/10 valid
-required tool sequences, and 0/10 answer passes; 7 runs ended in HTTP 429. The
-single recorded mitigation was bounded Groq retry honoring `Retry-After` and
-the existing request time budget. The same cases then had 10/10 completed
-executions, 10/10 valid required tool sequences, and 2/10 answer passes. Median
-latency increased from about 1.10 seconds to 17.16 seconds. Eight answers still
-failed the existing deterministic criteria. These measurements demonstrate
-improved transient-failure handling, not complete answer correctness or
-production readiness. See
-[`docs/training/week8/README.md`](docs/training/week8/README.md) for the
-methodology and evidence limitations.
-
-To run fresh live evidence, configure a valid, private Groq key and use a new
-output path (the runner refuses to overwrite evidence):
-
-```powershell
-python -m benchmarks.policy_execution.trajectory_eval run baseline `
-  --output benchmarks/policy_execution/trajectory_baseline_new.json
-# Review baseline before changing one mitigation.
-python -m benchmarks.policy_execution.trajectory_eval run mitigation `
-  --output benchmarks/policy_execution/trajectory_mitigation_new.json
-python -m benchmarks.policy_execution.trajectory_eval compare `
-  benchmarks/policy_execution/trajectory_baseline_new.json `
-  benchmarks/policy_execution/trajectory_mitigation_new.json
-```
-
-Live runs call the provider and may incur cost and rate limits. Keep generated
-evidence local unless deliberately publishing approved, non-sensitive results.
-
-## Local setup
-
-### Prerequisites
-
-- Python 3.11 or newer (the Docker image uses Python 3.11).
-- Node.js/npm supported by the frontend lockfile.
-- Qdrant and/or Ollama only when selected by the configuration.
-
-### Install and configure
-
-PowerShell:
+## Quick start (Groq only)
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-Copy-Item .env.example .env
-```
-
-Edit `.env` locally. For the configured Groq chat path, set a freshly rotated
-`GROQ_API_KEY`; never paste credentials into source files, README, logs, or
-commits. Configure embeddings separately (the example uses Ollama). Set a
-stable `SECRET_KEY` for sessions, especially when running multiple workers.
-
-Build the browser application and start FastAPI:
-
-```powershell
-Push-Location frontend
-npm ci
-npm run build
-Pop-Location
+Copy-Item .env.example .env          # then edit .env
+Push-Location frontend; npm ci; npm run build; Pop-Location
 python -m uvicorn backend.main:app --host 127.0.0.1 --port 5000
 ```
 
-Open `http://127.0.0.1:5000`. The interactive API docs are available at
-`/docs`; liveness and readiness endpoints are `/healthz` and `/readyz`.
-Alternatively, `python app.py` is the compatibility launch entrypoint and
-ensures the frontend build is present.
+Minimum `.env` (see [`.env.example`](.env.example) for everything):
 
-For local Ollama, start Ollama and pull the configured embedding and vision
-models. A chat model is needed when `CHAT_BACKEND=ollama`. Docker Compose
-contains a one-shot model initializer for those configured local models.
-
-## Docker Compose
-
-The Compose stack defines the FastAPI app, Qdrant, Ollama, and an Ollama model
-initializer:
-
-```powershell
-Copy-Item .env.example .env
-# Set SECRET_KEY and any provider credentials in .env before starting.
-docker compose up -d --build
-docker compose ps
-docker compose logs -f app
+```dotenv
+CHAT_BACKEND=groq
+GROQ_API_KEY=<your rotated key>
+LLM_MODEL=openai/gpt-oss-20b
+GROQ_AGENT_MODELS=openai/gpt-oss-20b
+EMBED_BACKEND=none                    # see below
+VECTOR_BACKEND=qdrant
+QDRANT_URL=<your Qdrant endpoint>
+QDRANT_API_KEY=<your Qdrant key>
+SECRET_KEY=<python -c "import secrets; print(secrets.token_hex(32))">
 ```
 
-The app is published on loopback port 5000; Qdrant and Ollama are also bound
-to loopback by default. Docker's internal service URLs are
-`http://qdrant:6333` and `http://ollama:11434`. Named volumes persist Qdrant
-data, Ollama model files, and app state; `./uploads`, `./vectorstore`, and
-`./traces` are mounted from the repository host. `docker compose down` stops
-services without deleting volumes. `docker compose down -v` deletes named
-volumes and is destructive.
+**Why `EMBED_BACKEND=none`?** Groq has no embeddings API. In this lexical mode chunks are stored in Qdrant and
+searched with BM25; chat and every policy tool still use Groq. To get semantic hybrid search instead, set
+`EMBED_BACKEND=ollama` (run `ollama serve`, `ollama pull nomic-embed-text`) or `gemini` (`GEMINI_API_KEY`).
+Mixing modes inside one session is not supported; re-upload after changing it.
 
-Compose forwards Groq API configuration (`GROQ_API_KEY`, `GROQ_URL`,
-`GROQ_MODEL`, and `GROQ_AGENT_MODELS`) into the app container. Keep the API key
-in the ignored local `.env`; do not put it in the Compose file. The default
-Compose profile still starts Ollama for local embedding/vision configurations.
-For a changed provider combination, confirm effective values through the
-application's health/configuration surface and exercise a real request.
+Open `http://127.0.0.1:5000` (API docs at `/docs`, health at `/healthz`, readiness at `/readyz`).
 
-This is a single-host deployment arrangement. SQLite, local files, and
-file-lock coordination are not a distributed multi-node storage design. Use
-shared database and object/file storage before horizontally scaling across
-hosts.
+## Try it live (5 minutes)
+
+1. **Chat page:** upload `WEEKLY_RAG_TASK/HRPolicy.pdf` **and** `backend/data/samples/employee_records.md`.
+2. **Policy Search:** the banner lists the indexed documents, retrieval mode and tool count. Ask
+   *"How much written notice must EMP003 provide if they decide to resign while on probation?"* and read the tool trace.
+3. **MCP tab:** 2 servers, 5 tools, the raw JSON-RPC frames.
+4. **Policy Assistant:** run the `canonical` suite, then `all`, and open the Trajectory panel.
+5. Import any question file from [`docs/questions/`](docs/questions/README.md) to run a week's cases.
+
+CLI alternatives (no browser): `scripts/index_documents.py`, `benchmarks/policy_execution/trajectory_eval.py`,
+`scripts/mcp_week9_evidence.py`; each file's docstring shows the commands.
+
+## How it fits together
+
+```text
+Browser (React)            chat, policy search, benchmark, trajectory, MCP, judge
+   │  HTTP/JSON
+FastAPI (backend/main.py)
+   ├─ routes/ingestion.py   upload -> extract -> chunk -> Qdrant (chunks_<session>)
+   ├─ routes/policy.py      /api/policy/*  router -> workflow | agent -> full JSON trace
+   ├─ routes/mcp.py         /api/mcp/*     discovered servers, tools, wire log
+   ├─ services/             policy_agent, policy_workflow, policy_router,
+   │                        policy_retrieval, policy_scoring, policy_trajectory, policy_run
+   ├─ mcp/                  host: registry, client, schema validation, 2 servers
+   └─ storage/              Qdrant store, sessions, SQLite run state, traces
+Groq (chat, agent, judge) · Qdrant (chunks) · config/mcp_servers.json (which tool servers exist)
+```
+
+`backend.main:app` is the ASGI app; root `app.py` is a compatibility facade older imports still use.
 
 ## Configuration
 
-`.env.example` documents the variables. Relevant settings:
+Everything is in `.env` ([`.env.example`](.env.example) is the documented template).
 
 | Variable | Purpose |
 | --- | --- |
-| `CHAT_BACKEND` | Chat provider: `groq`, `ollama`, or `xai`. |
-| `GROQ_API_KEY` | Private API credential required for Groq requests and model discovery. |
-| `GROQ_URL` | Groq OpenAI-compatible API base URL. |
-| `LLM_MODEL` / `GROQ_MODEL` | Selected chat model. The example selects `openai/gpt-oss-20b`. |
-| `GROQ_AGENT_MODELS` | Allowlist used for Groq Agent-mode models. |
-| `EMBED_BACKEND` | Embeddings provider, independently configurable from chat. |
-| `VISION_BACKEND` | OCR provider for image extraction. |
-| `OLLAMA_URL` | Ollama URL; use Docker service DNS from inside Compose. |
-| `OLLAMA_EMBED_MODEL`, `OLLAMA_VISION_MODEL`, `OLLAMA_CHAT_MODEL` | Local Ollama model names. |
-| `VECTOR_BACKEND` | `qdrant` or `memory`; `.env.example` configures Qdrant. |
-| `QDRANT_URL`, `QDRANT_API_KEY` | Qdrant endpoint and optional cloud credential. |
-| `QDRANT_TIMEOUT`, `QDRANT_CANDIDATE_POOL`, `QDRANT_SCROLL_LIMIT` | Qdrant operation and retrieval limits. |
-| `TOP_K`, `MAX_CONTEXT_TOKENS` | Retrieval and answer context limits. |
-| `RETRIEVAL_MODE`, `RRF_K`, `HYBRID_ALPHA` | Retrieval strategy and fusion tuning. |
-| `RERANK_ENABLED`, `QUERY_REWRITE_ENABLED` | Optional model-assisted retrieval steps. |
-| `APP_STATE_DB` | SQLite file for shared session/run metadata. |
-| `SECRET_KEY` | Signs browser session cookies; use a stable random secret in production. |
-| `SESSION_COOKIE_SECURE` | Set true only when HTTPS/TLS is used. |
-| `ADMIN_API_KEY` | Optional credential for documented administrative endpoints. |
-| `TRACE_LOG_PATH`, `LOG_LEVEL`, `HOST`, `PORT`, `APP_DEBUG` | Logging and server settings. |
+| `CHAT_BACKEND` | `groq` is required for the agent, workflow, trajectory and MCP features (`ollama`/`xai` only serve plain chat). |
+| `GROQ_API_KEY`, `GROQ_URL`, `LLM_MODEL`, `GROQ_AGENT_MODELS` | Groq access, default model, allow-list of tool-calling models. |
+| `EMBED_BACKEND` | `none` (lexical, recommended with Groq only), `ollama`, or `gemini`. |
+| `VECTOR_BACKEND`, `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_TIMEOUT` | Chunk store (`qdrant` or in-process `memory`). |
+| `RETRIEVAL_MODE`, `TOP_K`, `EMBED_MIN_SCORE`, `MAX_CONTEXT_TOKENS` | Retrieval tuning (semantic mode uses hybrid RRF; lexical mode uses BM25). |
+| `POLICY_MAX_ITERATIONS`, `POLICY_MAX_TOKENS`, `POLICY_MAX_COST_USD`, `POLICY_MAX_WALL_CLOCK_SECONDS` | The four agent budgets (hard ceilings). |
+| `MCP_CONFIG_PATH` | Which tool servers exist (`config/mcp_servers.json`). Adding a server is a config change. |
+| `MCP_TOOL_MAX_RETRIES`, `MCP_TOOL_RETRY_BACKOFF_SECONDS`, `MCP_TOOL_TIMEOUT_SECONDS`, `MCP_AUDIT_LOG_PATH` | Tool-call retry bounds and the audit log. |
+| `HRIS_DATA_PATH` | Data file for the stand-in HRIS server (point it at a real export). |
+| `EMBED_QUERY_TIMEOUT_SECONDS`, `EMBED_COOLDOWN_SECONDS` | Semantic mode only: fail fast, then fall back to keyword search. |
+| `APP_STATE_DB`, `SECRET_KEY`, `SESSION_COOKIE_SECURE`, `ADMIN_API_KEY`, `TRACE_LOG_PATH`, `LOG_LEVEL`, `HOST`, `PORT` | Sessions, security, logging, server. |
 
-The Python configuration defaults are not identical to `.env.example` or
-Docker Compose defaults; verify which environment source is active. An empty
-inherited environment variable may differ from an unset variable. Never
-publish effective secrets when diagnosing configuration.
+Never commit `.env`, credentials, uploads, traces or generated evidence (all git-ignored).
 
 ## HTTP API overview
 
-FastAPI's `/docs` and `/openapi.json` expose the current, complete contract.
-Main routes include:
+FastAPI's `/docs` has the exact schemas. Main routes:
 
 | Method | Route | Function |
 | --- | --- | --- |
-| `POST` | `/upload` | Upload and index allowed files for the browser session. |
-| `POST` | `/upload-cancel` | Request cancellation of an in-flight upload. |
-| `POST` | `/load-url` | Fetch and index a supported web page. |
-| `POST` | `/ask` | Retrieve grounded context and generate an answer. |
-| `POST` | `/ask/{run_id}/cancel` | Cancel an active chat request. |
-| `GET` | `/status` | Return current session document/index status. |
-| `POST` | `/remove` | Remove a document from the current session. |
-| `POST` | `/clear` | Clear indexed data/files for the current session. |
-| `GET` | `/file/{doc_id}/raw`, `/pages` | Stream an uploaded file or extracted page text. |
-| `POST` | `/eval/run` | Run the retrieval evaluation matrix. |
-| `POST` | `/api/evaluation/runs` | Start a Week 6 background evaluation. |
-| `GET` | `/api/evaluation/runs/{run_id}` | Read persisted evaluation progress/results. |
-| `POST` | `/api/evaluation/runs/{run_id}/cancel` | Request evaluation cancellation. |
-| `POST` | `/api/evaluation/judges` | Run the Week 6 Judge evaluation. |
-| `GET` | `/api/policy/models` | Discover available policy chat models. |
-| `POST` | `/api/policy/search` | Run auto-routed Week 7 Policy Search. |
-| `POST` | `/api/policy/benchmark/start` | Start a persisted policy benchmark run. |
-| `GET` | `/healthz`, `/readyz` | Liveness and dependency readiness checks. |
-| `GET` | `/traces`, `POST /replay/{trace_id}` | Inspect/replay traces subject to session/admin access. |
-| `GET` | `/orphans` | Inspect failed ingestion cleanup records subject to authorization. |
+| `POST` | `/upload`, `/load-url`, `/remove`, `/clear` | Index, list-reset documents for the browser session |
+| `POST` | `/ask`, `GET /status` | Grounded chat; indexed documents and retrieval mode |
+| `GET` | `/api/policy/readiness` | Indexed documents, retrieval mode, tools, whether the policy features are ready |
+| `GET` | `/api/policy/employees` | Roster rows parsed from the uploaded employee file |
+| `POST` | `/api/policy/search` | Auto-routed question -> answer + full trace (`force_mode`, `max_retries`) |
+| `POST` | `/api/policy/agent`, `/workflow` | Run one implementation directly |
+| `GET` | `/api/policy/cases?suite=canonical\|branching\|all` | Benchmark cases |
+| `POST` | `/api/policy/benchmark/start`, `GET .../runs/{id}`, `POST .../runs/{id}/cancel` | Background race with progress and cancel |
+| `GET`/`POST` | `/api/policy/trajectory/expected`, `/api/policy/trajectory/evaluate` | Week 8 expected paths; scoring and before/after comparison |
+| `GET` | `/api/policy/models` | Groq models (and which support tool calling) |
+| `GET`/`POST` | `/api/mcp/status`, `/api/mcp/wire`, `/api/mcp/reload` | Discovered servers/tools, raw frames, config reload |
+| `POST` | `/api/evaluation/runs`, `GET .../runs/{id}` | Week 6 judge evaluation |
+| `GET` | `/healthz`, `/readyz`, `/traces` | Operations |
 
-Some older Week 6 routes remain aliases for compatibility. Consult OpenAPI for
-exact request/response schemas, route aliases, constraints, and error formats.
+Policy endpoints return **409 `NO_INDEXED_DOCUMENTS`** until the session has indexed chunks.
 
-## Data lifecycle and session cleanup
-
-- The session cookie is browser-managed and configured for a 14-day maximum
-  age; that cookie lifetime is not the vector-data retention period.
-- Session activity is tracked in SQLite. The session store expires inactive
-  sessions after one hour and enforces a maximum active-session count.
-- Qdrant collection names are session-scoped (`chunks_<session_id>`). Current
-  session clear deletes its collection through the existing Clear route.
-- With `VECTOR_BACKEND=qdrant`, the backend sweeps collections that no longer
-  have recent activity records, at startup activity/request opportunities and
-  periodically while the application is running. Failed deletions are logged
-  and retried on a later sweep. Closing a browser does not send an immediate
-  session-end signal; cleanup follows the inactivity TTL and sweep interval.
-- Local source files and manifests are removed with session cleanup. SQLite
-  metadata coordinates workers on one host; it does not contain vector
-  embeddings.
-
-Do not manually delete collections while a session is active. For a live
-cleanup problem, check the application's effective `VECTOR_BACKEND` and
-`QDRANT_URL`, backend logs, session cookie continuity, Qdrant collection names,
-and `/status` from the same browser session.
-
-## Testing and live verification
-
-Install Python requirements, then run:
+## Testing
 
 ```powershell
-python -m pytest
-python -m pytest tests\test_policy_trajectory_evaluation.py tests\test_policy_execution.py
-python -m pytest tests\test_shared_state.py tests\test_qdrant_session_cleanup.py
+python -m pytest                       # 340 tests, no live provider needed
 Push-Location frontend
-npm ci
-npm run typecheck
-npm run build
+npm run typecheck; npm run build
 Pop-Location
 ```
 
-Most automated tests use local fixtures/mocks and do not prove that a live
-Groq, Ollama, or Qdrant service is available. For runtime verification, start
-the configured services, check `/healthz` and `/readyz`, then exercise upload →
-`/status` → `/ask` → `/remove` or `/clear` using one persistent browser/client
-session. For a vector backend, inspect Qdrant for the corresponding
-`chunks_<session_id>` collection and verify it is absent after a successful
-clear or after session expiry and a subsequent cleanup sweep.
+What the tests cover: the tools on chunk-shaped data, every agent stop condition and budget, rejected model calls,
+retry accounting at all four layers (including a deliberately flaky MCP server and a killed subprocess), the
+zero-code-change server swap, secret isolation for the subprocess, trajectory scoring, lexical mode, the HTTP API,
+and the Week 6 lifecycle. Tests use a temporary state database and evidence directory and never read your
+`.env` embedding setting.
 
-Full test/build/runtime results should be reported from the current run; do not
-infer them from an earlier commit or from this README.
+Live verification is separate: start the app, upload, then follow the demo above. A green test run is not evidence
+that Groq, Qdrant or your documents behave; the readiness banner and a real question are.
 
-## Repository audit and known limitations
+## Docker Compose
 
-A repository-wide source audit found **no confirmed unused component or safe
-dead-code deletion**. In particular:
+```powershell
+Copy-Item .env.example .env            # set SECRET_KEY, GROQ_API_KEY, Qdrant settings
+docker compose up -d --build           # app + Qdrant; Groq for the LLM; EMBED_BACKEND=none
+docker compose --profile ollama up -d  # optional: also start Ollama (then set EMBED_BACKEND=ollama)
+```
 
-- `app.py` is a compatibility facade still used by tests and legacy imports.
-- `VectorStore` and `QdrantVectorStore` are alternate implementations of a
-  shared interface, not redundant copies.
-- Session lifecycle in `session_manager.py` and durable shared state in
-  `shared_state.py` are coupled; refactoring them needs concurrency and
-  persistence regression tests.
-- Existing shared evaluation components are reused across views. The large
-  Policy Assistant view may merit decomposition, but file size alone is not
-  proof of duplicated behavior.
-- Week 6 aliases and standalone Week 6 assets remain tested compatibility and
-  ground-truth surfaces.
+The app binds to loopback port 5000; Qdrant is loopback-only. Named volumes hold Qdrant data and app state;
+`./uploads`, `./vectorstore` and `./traces` are host mounts. `docker compose down -v` deletes volumes.
+SQLite and local file locks are a single-host design; scaling out needs shared storage.
 
-The audit recommends targeted, test-backed work rather than deleting code
-based on names or visual similarity. Remaining architecture constraints:
+## Data lifecycle
 
-- SQLite and local file locks support a single host/shared volume, not
-  multi-host coordination.
-- Qdrant cleanup does not immediately detect browser closure; it is TTL based.
-- The Week 8 retry mitigation improved execution and tool ordering but only
-  2/10 answers passed the unchanged deterministic criteria in the recorded
-  run. Eight answer-quality failures and increased latency remain real issues.
-- No Week 9 implementation is included in this repository documentation or
-  scope.
+- Uploaded files and manifests live in `uploads/`; chunks in Qdrant collection `chunks_<session_id>`.
+- Sessions expire after one hour idle; idle collections are swept on a timer (not when the tab closes).
+- Benchmark evidence: `benchmarks/policy_execution/runs/<run_id>.csv` per run and `results.csv` = latest run only.
+- A benchmark interrupted by a restart is marked `ERROR` at startup; it cannot leave a stuck lock.
+- Audit: `traces/mcp_audit.jsonl` (one line per tool call, hashed session, no returned values).
 
 ## Troubleshooting
 
-**Groq model list or chat requests fail**
-Check `CHAT_BACKEND=groq`, a valid rotated `GROQ_API_KEY`, the API base URL,
-and the selected `LLM_MODEL`/`GROQ_MODEL`. In Docker, confirm the Groq variables
-were passed into the app container without printing the secret. HTTP 429 is a
-provider rate-limit response; bounded retry can improve completion rates but
-adds latency and cannot guarantee capacity.
+**Uploads fail with an embedding error.** Your `EMBED_BACKEND` points at a provider that is not running
+(typically Ollama). Use `EMBED_BACKEND=none` or start the provider.
 
-**Ollama is unreachable from the backend container**
-Inside Compose, the service hostname is `ollama`, not `localhost`. From the
-host, use the published loopback port. Confirm `OLLAMA_URL` matches where the
-backend process runs and that the required model was initialized.
+**Policy pages say "Upload the HR policy documents first" (HTTP 409).** The policy tools only read the current
+browser session's chunks. Upload on the Chat page in the same browser; check `GET /api/policy/readiness`.
 
-**Qdrant contains chunks but the current UI lists no documents**
-The collection may belong to a different browser session. `/status` is scoped
-to the session cookie; it does not list every Qdrant collection. Verify the
-same browser session and its cookie before treating the data as missing.
-Inactive collections are removed after the one-hour session TTL and the
-periodic sweep; a stopped backend cannot run that sweep until it starts again.
+**An employee is "not found".** The roster must be uploaded (`backend/data/samples/employee_records.md` is the
+format: one `ID | Key: value | ...` line per employee). Ids are matched case-insensitively.
 
-**Clear reports an error or warning**
-Do not interpret a failed Qdrant deletion as success. Check the backend error
-and Qdrant availability, then retry cleanup after restoring connectivity.
+**A country question answers "documents do not cover it".** That is the intended behaviour: the handbook is silent
+on that country. The tool returns `NO_EVIDENCE` and the model must not quote outside law.
 
-**The evaluation process stops when the backend shuts down**
-In-process workers belong to their application process. A successful HTTP
-response that creates a run does not guarantee the run will survive termination
-of that process; inspect persisted run status after restart.
+**Slow answers / many "model retries" in the trace.** Groq returned HTTP 429; the client waits `Retry-After` and
+retries up to 3 times. It shows up as `provider_retries`, not as a failure. Use a model/account with more quota.
+
+**The HRIS tools are missing in the MCP tab.** Check `config/mcp_servers.json` and `GET /api/mcp/status` (a server
+that fails to start shows `status: error` with the reason; the other server keeps working). `POST /api/mcp/reload`
+re-reads the config.
+
+**Qdrant has chunks but the UI lists no documents.** `/status` is scoped to the session cookie. Use the same browser
+session; inactive collections are removed after the one-hour TTL.
+
+**Clear reports an error.** A failed Qdrant deletion is never reported as success; fix connectivity and retry.

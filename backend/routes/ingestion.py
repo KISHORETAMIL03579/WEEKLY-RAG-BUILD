@@ -20,7 +20,12 @@ from backend.schemas.document import (
     UrlPayload,
 )
 from backend.services.chunker import chunk_text
-from backend.services.embeddings import embed_texts, embeddings_configured
+from backend.services.embeddings import (
+    LEXICAL_ONLY,
+    embed_texts,
+    embeddings_configured,
+    lexical_placeholder_vectors,
+)
 from backend.services.llm import RAGTracer
 from backend.services.text_extractor import (
     extract_pdf_pages,
@@ -298,7 +303,9 @@ def upload(
         stored_path = None
         try:
             embedding_degraded = False
-            if vec_backend_val == "qdrant":
+            if vec_backend_val == "qdrant" and LEXICAL_ONLY:
+                vectors = lexical_placeholder_vectors(len(item["chunks"]))
+            elif vec_backend_val == "qdrant":
                 if not embedding_ok:
                     raise ValueError(
                         "Qdrant vector backend requires embeddings. "
@@ -401,7 +408,11 @@ def upload(
             release_session_hash(sid, *item["hash"])
             session_files_map.get(sid, {}).pop(item["doc_id"], None)
             hash_by_doc_map.get(sid, {}).pop(item["doc_id"], None)
-            fn_save_manifest(sid)
+            try:
+                fn_save_manifest(sid)
+            except Exception:
+                # Already rolling back: report the original failure, not this secondary one.
+                logger.warning("Could not save session manifest during rollback", exc_info=True)
             logger.error(
                 "❌ Failed to index '%s': %s", item["filename"], exc, exc_info=True
             )
@@ -552,7 +563,9 @@ def load_url(sid: SessionId, payload: Optional[UrlPayload] = Body(default=None))
         )
 
     store = fn_get_store(sid)
-    if vec_backend_val == "qdrant":
+    if vec_backend_val == "qdrant" and LEXICAL_ONLY:
+        store.add(new_chunks, lexical_placeholder_vectors(len(new_chunks)))
+    elif vec_backend_val == "qdrant":
         if not embedding_ok:
             return JSONResponse(
                 {

@@ -104,6 +104,18 @@ QDRANT_TIMEOUT = float(os.environ.get("QDRANT_TIMEOUT", "10"))
 QDRANT_CANDIDATE_POOL = int(os.environ.get("QDRANT_CANDIDATE_POOL", "30"))
 QDRANT_SCROLL_LIMIT = int(os.environ.get("QDRANT_SCROLL_LIMIT", "5000"))
 
+# MCP host (Week 9): tool servers are declared in a config file, never in code.
+MCP_CONFIG_PATH = Path(
+    os.environ.get("MCP_CONFIG_PATH", str(BASE_DIR / "config" / "mcp_servers.json"))
+)
+MCP_FORCE_TRANSPORT = os.environ.get("MCP_FORCE_TRANSPORT", "").lower()  # "" | "inprocess"
+MCP_TOOL_MAX_RETRIES = int(os.environ.get("MCP_TOOL_MAX_RETRIES", "2"))
+MCP_TOOL_RETRY_BACKOFF_SECONDS = float(os.environ.get("MCP_TOOL_RETRY_BACKOFF_SECONDS", "0.2"))
+MCP_TOOL_TIMEOUT_SECONDS = float(os.environ.get("MCP_TOOL_TIMEOUT_SECONDS", "30"))
+MCP_AUDIT_LOG_PATH = Path(
+    os.environ.get("MCP_AUDIT_LOG_PATH", str(BASE_DIR / "traces" / "mcp_audit.jsonl"))
+)
+
 # Retrieval hyperparameters
 EMBED_MIN_SCORE = float(os.environ.get("EMBED_MIN_SCORE", "0.55"))
 SAFETY_MIN_SCORE = float(os.environ.get("SAFETY_MIN_SCORE", "0.40"))

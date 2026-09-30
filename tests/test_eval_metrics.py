@@ -1924,7 +1924,7 @@ class TestFastAPIMigration(unittest.TestCase):
             self.assertEqual(kwargs.get("cwd"), str(FRONTEND_DIR))
 
     def test_ensure_frontend_built_failure_nonzero_exit(self):
-        """TEST 3 — Build failure: Non-zero npm exit code raises SystemExit(1)."""
+        """TEST 3 — Build failure: Non-zero npm exit code returns False (the API keeps serving; the failure is logged)."""
         from app import ensure_frontend_built
         from unittest.mock import patch, MagicMock
 
@@ -1939,12 +1939,10 @@ class TestFastAPIMigration(unittest.TestCase):
         with patch("pathlib.Path.exists", side_effect=exists_side_effects), patch(
             "subprocess.run", return_value=mock_res
         ):
-            with self.assertRaises(SystemExit) as ctx:
-                ensure_frontend_built(force=False)
-            self.assertEqual(ctx.exception.code, 1)
+            self.assertFalse(ensure_frontend_built(force=False))
 
     def test_ensure_frontend_built_missing_index_html_after_build(self):
-        """TEST 4 — Build succeeds (code 0) but index.html missing raises SystemExit(1)."""
+        """TEST 4 — Build succeeds (code 0) but index.html missing returns False (the API keeps serving; the failure is logged)."""
         from app import ensure_frontend_built
         from unittest.mock import patch, MagicMock
 
@@ -1959,12 +1957,10 @@ class TestFastAPIMigration(unittest.TestCase):
         with patch("pathlib.Path.exists", side_effect=exists_side_effects), patch(
             "subprocess.run", return_value=mock_res
         ):
-            with self.assertRaises(SystemExit) as ctx:
-                ensure_frontend_built(force=False)
-            self.assertEqual(ctx.exception.code, 1)
+            self.assertFalse(ensure_frontend_built(force=False))
 
     def test_ensure_frontend_built_missing_package_json(self):
-        """TEST 5 — Missing frontend/package.json raises SystemExit(1)."""
+        """TEST 5 — Missing frontend/package.json returns False (the API keeps serving; the failure is logged)."""
         from app import ensure_frontend_built
         from unittest.mock import patch
 
@@ -1972,12 +1968,10 @@ class TestFastAPIMigration(unittest.TestCase):
         exists_side_effects = [False, False]
 
         with patch("pathlib.Path.exists", side_effect=exists_side_effects):
-            with self.assertRaises(SystemExit) as ctx:
-                ensure_frontend_built(force=False)
-            self.assertEqual(ctx.exception.code, 1)
+            self.assertFalse(ensure_frontend_built(force=False))
 
     def test_ensure_frontend_built_npm_not_found(self):
-        """TEST 6 — npm not found in PATH raises SystemExit(1)."""
+        """TEST 6 — npm not found in PATH returns False (the API keeps serving; the failure is logged)."""
         from app import ensure_frontend_built
         from unittest.mock import patch
 
@@ -1987,9 +1981,7 @@ class TestFastAPIMigration(unittest.TestCase):
         with patch("pathlib.Path.exists", side_effect=exists_side_effects), patch(
             "subprocess.run", side_effect=FileNotFoundError("npm not found")
         ):
-            with self.assertRaises(SystemExit) as ctx:
-                ensure_frontend_built(force=False)
-            self.assertEqual(ctx.exception.code, 1)
+            self.assertFalse(ensure_frontend_built(force=False))
 
 
 def _decode_session_cookie(cookie_value: str) -> dict:

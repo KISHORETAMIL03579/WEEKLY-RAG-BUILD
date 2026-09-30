@@ -20,9 +20,41 @@ import {
 } from "../types/evaluation";
 import { TracesResponse, ReplayResponse } from "../types/trace";
 import { DatasetParseResult } from "../types/dataset";
-import { ChatModelListResponse } from "../types/policy";
+import {
+  ActiveBenchmarkRunResponse,
+  BenchmarkCase,
+  BenchmarkSuite,
+  CancelBenchmarkResponse,
+  ChatModelListResponse,
+  EmployeeRecord,
+  ExpectedTrajectory,
+  PolicyBenchmarkRunStateResponse,
+  PolicyBenchmarkStartRequest,
+  PolicyOutputContract,
+  PolicyQueryRequest,
+  PolicyReadiness,
+  PolicySearchRequest,
+  RoutingDecision,
+  TrajectoryEvaluateRequest,
+  TrajectoryEvaluateResponse,
+} from "../types/policy";
+import { McpStatusResponse, McpWireResponse } from "../types/mcp";
+import { ApiError } from "./apiError";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+
+/** Fired after the set of indexed documents may have changed (upload, remove, clear). */
+export const DOCUMENTS_CHANGED_EVENT = "amd:documents-changed";
+
+function notifyDocumentsChanged(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(DOCUMENTS_CHANGED_EVENT));
+  }
+}
+
+function pickString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
 
 async function handleResponse<T>(res: Response): Promise<T> {
   const payload: unknown = await res.json().catch(() => ({}));
@@ -31,23 +63,38 @@ async function handleResponse<T>(res: Response): Promise<T> {
       ? (payload as Record<string, unknown>)
       : {};
   if (!res.ok) {
-    const apiError = data.error;
-    const structuredError =
-      apiError && typeof apiError === "object" && !Array.isArray(apiError)
-        ? (apiError as Record<string, unknown>).message
+    const structured =
+      data.error && typeof data.error === "object" && !Array.isArray(data.error)
+        ? (data.error as Record<string, unknown>)
         : null;
-    const errorMsg =
-      (typeof data.error === "string" ? data.error : structuredError) ||
-      (typeof data.message === "string" ? data.message : null) ||
-      (typeof data.detail === "string" ? data.detail : null) ||
-      `Request failed with status ${res.status}`;
-    throw new Error(
-      typeof errorMsg === "string"
-        ? errorMsg
-        : `Request failed with status ${res.status}`,
-    );
+    throw new ApiError({
+      status: res.status,
+      code: pickString(structured?.code),
+      backendMessage:
+        pickString(data.error) ||
+        pickString(structured?.message) ||
+        pickString(data.message) ||
+        pickString(data.detail),
+      retryable: Boolean(structured?.retryable),
+      requestId:
+        pickString(structured?.request_id) || res.headers.get("X-Request-ID"),
+      details: structured?.details,
+    });
   }
   return payload as T;
+}
+
+function postJson(
+  url: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<Response> {
+  return fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
 }
 
 export const api = {
@@ -65,14 +112,16 @@ export const api = {
       body: formData,
       signal,
     });
-    return handleResponse<UploadResponse>(res);
+    try {
+      return await handleResponse<UploadResponse>(res);
+    } finally {
+      notifyDocumentsChanged();
+    }
   },
 
   async cancelUpload(uploadId: string): Promise<{ ok: boolean }> {
-    const res = await fetch(`${API_BASE}/upload-cancel`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ upload_id: uploadId }),
+    const res = await postJson(`${API_BASE}/upload-cancel`, {
+      upload_id: uploadId,
     });
     return handleResponse<{ ok: boolean }>(res);
   },
@@ -86,19 +135,18 @@ export const api = {
     turn_id?: string,
     run_id?: string,
   ): Promise<AskResponse> {
-    const res = await fetch(`${API_BASE}/ask`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const res = await postJson(
+      `${API_BASE}/ask`,
+      {
         query,
         chunk_mode,
         top_k,
         temperature,
         ...(turn_id ? { turn_id } : {}),
         ...(run_id ? { run_id } : {}),
-      }),
+      },
       signal,
-    });
+    );
     return handleResponse<AskResponse>(res);
   },
 
@@ -118,26 +166,28 @@ export const api = {
     chunk_mode: string = "structured",
     signal?: AbortSignal,
   ): Promise<LoadUrlResponse> {
-    const res = await fetch(`${API_BASE}/load-url`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, chunk_mode }),
+    const res = await postJson(
+      `${API_BASE}/load-url`,
+      { url, chunk_mode },
       signal,
-    });
-    return handleResponse<LoadUrlResponse>(res);
+    );
+    try {
+      return await handleResponse<LoadUrlResponse>(res);
+    } finally {
+      notifyDocumentsChanged();
+    }
   },
 
   async removeDoc(
     doc_id: string,
     signal?: AbortSignal,
   ): Promise<RemoveResponse> {
-    const res = await fetch(`${API_BASE}/remove`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ doc_id }),
-      signal,
-    });
-    return handleResponse<RemoveResponse>(res);
+    const res = await postJson(`${API_BASE}/remove`, { doc_id }, signal);
+    try {
+      return await handleResponse<RemoveResponse>(res);
+    } finally {
+      notifyDocumentsChanged();
+    }
   },
 
   async clearSession(signal?: AbortSignal): Promise<ClearResponse> {
@@ -145,7 +195,11 @@ export const api = {
       method: "POST",
       signal,
     });
-    return handleResponse<ClearResponse>(res);
+    try {
+      return await handleResponse<ClearResponse>(res);
+    } finally {
+      notifyDocumentsChanged();
+    }
   },
 
   async getTraces(signal?: AbortSignal): Promise<TracesResponse> {
@@ -184,12 +238,7 @@ export const api = {
     payload: EvalRunPayload,
     signal?: AbortSignal,
   ): Promise<EvalRunResponse> {
-    const res = await fetch(`${API_BASE}/eval/run`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal,
-    });
+    const res = await postJson(`${API_BASE}/eval/run`, payload, signal);
     return handleResponse<EvalRunResponse>(res);
   },
 
@@ -242,18 +291,17 @@ export const api = {
     model: string = "llama3.1:8b",
     signal?: AbortSignal,
   ): Promise<EvaluationRunStateResponse> {
-    const res = await fetch(`${API_BASE}/api/evaluation/runs`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const res = await postJson(
+      `${API_BASE}/api/evaluation/runs`,
+      {
         cases,
         run_llm: runLlm,
         top_k,
         temperature,
         model,
-      }),
+      },
       signal,
-    });
+    );
     return handleResponse<EvaluationRunStateResponse>(res);
   },
 
@@ -326,12 +374,11 @@ export const api = {
     runLlm: boolean = true,
     signal?: AbortSignal,
   ): Promise<JudgeEvalResponse> {
-    const res = await fetch(`${API_BASE}/api/evaluation/judges`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cases, run_llm: runLlm }),
+    const res = await postJson(
+      `${API_BASE}/api/evaluation/judges`,
+      { cases, run_llm: runLlm },
       signal,
-    });
+    );
     return handleResponse<JudgeEvalResponse>(res);
   },
 
@@ -348,124 +395,119 @@ export const api = {
     return this.evaluateJudges(cases, runLlm, signal);
   },
 
-  // HR Policy Assistant API endpoints
-  async getPolicyCases(signal?: AbortSignal): Promise<any[]> {
-    const res = await fetch(`${API_BASE}/api/policy/cases`, { signal });
-    return handleResponse<any[]>(res);
+  // ── HR Policy Assistant ────────────────────────────────────────────────
+  // Every policy call runs against the documents uploaded in the current
+  // browser session; a 409 NO_INDEXED_DOCUMENTS means nothing is indexed yet.
+
+  async getPolicyReadiness(signal?: AbortSignal): Promise<PolicyReadiness> {
+    const res = await fetch(`${API_BASE}/api/policy/readiness`, { signal });
+    return handleResponse<PolicyReadiness>(res);
   },
 
-  async getCanonicalEmployees(signal?: AbortSignal): Promise<any[]> {
+  async getPolicyCases(
+    suite: BenchmarkSuite = "canonical",
+    signal?: AbortSignal,
+  ): Promise<BenchmarkCase[]> {
+    const res = await fetch(
+      `${API_BASE}/api/policy/cases?suite=${encodeURIComponent(suite)}`,
+      { signal },
+    );
+    return handleResponse<BenchmarkCase[]>(res);
+  },
+
+  /** Roster rows parsed from the uploaded employee records (409 when nothing is uploaded). */
+  async getPolicyEmployees(signal?: AbortSignal): Promise<EmployeeRecord[]> {
     const res = await fetch(`${API_BASE}/api/policy/employees`, { signal });
-    return handleResponse<any[]>(res);
+    return handleResponse<EmployeeRecord[]>(res);
+  },
+
+  async getExpectedTrajectories(
+    suite: BenchmarkSuite = "all",
+    signal?: AbortSignal,
+  ): Promise<ExpectedTrajectory[]> {
+    const res = await fetch(
+      `${API_BASE}/api/policy/trajectory/expected?suite=${encodeURIComponent(suite)}`,
+      { signal },
+    );
+    return handleResponse<ExpectedTrajectory[]>(res);
+  },
+
+  async evaluateTrajectory(
+    payload: TrajectoryEvaluateRequest,
+    signal?: AbortSignal,
+  ): Promise<TrajectoryEvaluateResponse> {
+    const res = await postJson(
+      `${API_BASE}/api/policy/trajectory/evaluate`,
+      payload,
+      signal,
+    );
+    return handleResponse<TrajectoryEvaluateResponse>(res);
   },
 
   async runPolicyAgent(
-    payload: {
-      employee_id: string;
-      question: string;
-      case_id?: string;
-      top_k?: number;
-      temperature?: number;
-      model?: string;
-    },
+    payload: PolicyQueryRequest,
     signal?: AbortSignal,
-  ): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/policy/agent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal,
-    });
-    return handleResponse<any>(res);
+  ): Promise<PolicyOutputContract> {
+    const res = await postJson(`${API_BASE}/api/policy/agent`, payload, signal);
+    return handleResponse<PolicyOutputContract>(res);
   },
 
   async runPolicyWorkflow(
-    payload: {
-      employee_id: string;
-      question: string;
-      case_id?: string;
-      top_k?: number;
-      temperature?: number;
-      model?: string;
-    },
+    payload: PolicyQueryRequest,
     signal?: AbortSignal,
-  ): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/policy/workflow`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+  ): Promise<PolicyOutputContract> {
+    const res = await postJson(
+      `${API_BASE}/api/policy/workflow`,
+      payload,
       signal,
-    });
-    return handleResponse<any>(res);
+    );
+    return handleResponse<PolicyOutputContract>(res);
   },
 
   async startPolicyBenchmark(
-    payload?: {
-      top_k?: number;
-      temperature?: number;
-      model?: string;
-      cases?: any[];
-    },
+    payload: PolicyBenchmarkStartRequest = {},
     signal?: AbortSignal,
-  ): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/policy/benchmark`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...(payload || {}), background: true }),
+  ): Promise<PolicyBenchmarkRunStateResponse> {
+    const res = await postJson(
+      `${API_BASE}/api/policy/benchmark/start`,
+      payload,
       signal,
-    });
-    return handleResponse<any>(res);
-  },
-
-  async runPolicyBenchmark(signal?: AbortSignal): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/policy/benchmark`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-      signal,
-    });
-    return handleResponse<any>(res);
+    );
+    return handleResponse<PolicyBenchmarkRunStateResponse>(res);
   },
 
   async getPolicyBenchmarkRun(
     runId: string,
     signal?: AbortSignal,
-  ): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/policy/benchmark/runs/${runId}`, {
-      signal,
-    });
-    return handleResponse<any>(res);
+  ): Promise<PolicyBenchmarkRunStateResponse> {
+    const res = await fetch(
+      `${API_BASE}/api/policy/benchmark/runs/${encodeURIComponent(runId)}`,
+      { signal },
+    );
+    return handleResponse<PolicyBenchmarkRunStateResponse>(res);
   },
 
-  async getActivePolicyBenchmarkRun(signal?: AbortSignal): Promise<any> {
+  async getActivePolicyBenchmarkRun(
+    signal?: AbortSignal,
+  ): Promise<ActiveBenchmarkRunResponse> {
     const res = await fetch(`${API_BASE}/api/policy/benchmark/runs/active`, {
       signal,
     });
-    return handleResponse<any>(res);
+    return handleResponse<ActiveBenchmarkRunResponse>(res);
   },
 
   async cancelPolicyBenchmarkRun(
     runId: string,
     signal?: AbortSignal,
-  ): Promise<any> {
+  ): Promise<CancelBenchmarkResponse> {
     const res = await fetch(
-      `${API_BASE}/api/policy/benchmark/runs/${runId}/cancel`,
-      {
-        method: "POST",
-        signal,
-      },
+      `${API_BASE}/api/policy/benchmark/runs/${encodeURIComponent(runId)}/cancel`,
+      { method: "POST", signal },
     );
-    return handleResponse<any>(res);
+    return handleResponse<CancelBenchmarkResponse>(res);
   },
 
-  async getLatestBenchmarkResults(signal?: AbortSignal): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/policy/benchmark/latest`, {
-      signal,
-    });
-    return handleResponse<any>(res);
-  },
-
-  // Auto-routed HR Policy Search (Week 7 production search)
+  // Auto-routed HR Policy Search
   async getAvailableChatModels(
     signal?: AbortSignal,
   ): Promise<ChatModelListResponse> {
@@ -474,25 +516,15 @@ export const api = {
   },
 
   async runPolicySearch(
-    payload: {
-      employee_id: string;
-      question: string;
-      case_id?: string;
-      top_k?: number;
-      temperature?: number;
-      model?: string;
-      max_retries?: number;
-      force_mode?: string;
-    },
+    payload: PolicySearchRequest,
     signal?: AbortSignal,
-  ): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/policy/search`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+  ): Promise<PolicyOutputContract> {
+    const res = await postJson(
+      `${API_BASE}/api/policy/search`,
+      payload,
       signal,
-    });
-    return handleResponse<any>(res);
+    );
+    return handleResponse<PolicyOutputContract>(res);
   },
 
   // Preview routing decision without executing
@@ -500,13 +532,42 @@ export const api = {
     question: string,
     employeeId?: string,
     signal?: AbortSignal,
-  ): Promise<any> {
+  ): Promise<RoutingDecision> {
     const params = new URLSearchParams({ question });
     if (employeeId) params.append("employee_id", employeeId);
     const res = await fetch(
       `${API_BASE}/api/policy/router/classify?${params.toString()}`,
       { signal },
     );
-    return handleResponse<any>(res);
+    return handleResponse<RoutingDecision>(res);
+  },
+
+  // ── MCP visibility (Week 9) ────────────────────────────────────────────
+  async getMcpStatus(signal?: AbortSignal): Promise<McpStatusResponse> {
+    const res = await fetch(`${API_BASE}/api/mcp/status`, { signal });
+    return handleResponse<McpStatusResponse>(res);
+  },
+
+  async getMcpWire(
+    options: { server?: string; limit?: number } = {},
+    signal?: AbortSignal,
+  ): Promise<McpWireResponse> {
+    const params = new URLSearchParams();
+    if (options.server) params.set("server", options.server);
+    if (options.limit) params.set("limit", String(options.limit));
+    const query = params.toString();
+    const res = await fetch(
+      `${API_BASE}/api/mcp/wire${query ? `?${query}` : ""}`,
+      { signal },
+    );
+    return handleResponse<McpWireResponse>(res);
+  },
+
+  async reloadMcp(signal?: AbortSignal): Promise<McpStatusResponse> {
+    const res = await fetch(`${API_BASE}/api/mcp/reload`, {
+      method: "POST",
+      signal,
+    });
+    return handleResponse<McpStatusResponse>(res);
   },
 };

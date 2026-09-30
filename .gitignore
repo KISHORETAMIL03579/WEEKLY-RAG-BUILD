@@ -43,6 +43,8 @@ htmlcov/
 uploads/
 vectorstore/
 benchmarks/policy_execution/trajectory_*.json
+benchmarks/policy_execution/runs/
+traces/mcp_audit.jsonl
 benchmarks/policy_execution/trajectory_*.json.partial
 uploads/
 __pycache__/

@@ -1,1394 +1,1289 @@
-// frontend/src/components/Evaluation/PolicyAssistantView.tsx — Professional HR Policy Benchmark Dashboard
-import React, { useState, useEffect, useRef, useMemo } from "react";
+// frontend/src/components/Evaluation/PolicyAssistantView.tsx
+// HR Policy benchmark dashboard: ReAct agent vs fixed-sequence workflow over the
+// documents the user uploaded, with per-case traces and the Week 8 trajectory report.
+import React, {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { api } from "../../services/api";
+import { ApiError, describeError, isAbortError } from "../../services/apiError";
 import {
-  EmployeeRecord,
   BenchmarkCase,
-  PolicyOutputContract,
-  PolicyBenchmarkRunStateResponse,
   BenchmarkCaseLiveStatus,
+  BenchmarkSuite,
+  CustomBenchmarkCase,
+  ExecutionSummary,
+  PolicyBenchmarkRunStateResponse,
+  PolicyOutputContract,
+  TrajectoryCaseRecord,
 } from "../../types/policy";
-import { EvaluationDatasetManager } from "./EvaluationDatasetManager";
 import { QADataSetCase, DatasetMode } from "../../types/dataset";
-import { MetricCard } from "../common/MetricCard";
-import { ModelSelect } from "../common/ModelSelect";
-import { useAvailableModels } from "../../hooks/useAvailableModels";
+import { useGenerationConfig } from "../../hooks/useGenerationConfig";
+import { usePolicyReadiness } from "../../hooks/usePolicyReadiness";
+import { formatInt, formatMs, formatPct, formatUsd } from "../../utils/helpers";
+import { Banner } from "../common/Banner";
 import { CancelButton } from "../common/CancelButton";
-import {
-  TemperatureSlider,
-  TopKSlider,
-} from "../common/ModelParameterControls";
-import { ProgressBar } from "../common/ProgressBar";
+import { DataTable, DataColumn } from "../common/DataTable";
+import { GenerationControls } from "../common/GenerationControls";
+import { MetricCard } from "../common/MetricCard";
+import { Modal } from "../common/Modal";
+import { ProgressBar, ProgressTone } from "../common/ProgressBar";
+import { StatusBadge, VerdictBadge } from "../common/StatusBadge";
+import { EmployeePicker } from "../Policy/EmployeePicker";
+import { ReadinessBanner } from "../Policy/ReadinessBanner";
+import { PathSequence, ToolTrace } from "../Policy/ToolTrace";
+import { TrajectoryPanel } from "../Policy/TrajectoryPanel";
+import { EvaluationDatasetManager } from "./EvaluationDatasetManager";
 
 interface PolicyAssistantViewProps {
   onNotify: (msg: string, type?: "info" | "success" | "error") => void;
 }
 
+const SUITES: Array<{ id: BenchmarkSuite; label: string; hint: string }> = [
+  {
+    id: "canonical",
+    label: "Canonical",
+    hint: "Single-path cases: the same tools every time.",
+  },
+  {
+    id: "branching",
+    label: "Branching",
+    hint: "The tool path depends on what earlier tools return.",
+  },
+  { id: "all", label: "All", hint: "Canonical and branching together." },
+];
+
+const POLL_INTERVAL_MS = 500;
+
+const isLive = (status?: string) =>
+  status === "RUNNING" || status === "CANCELLING";
+const isTerminal = (status?: string) =>
+  status === "COMPLETED" || status === "CANCELLED" || status === "ERROR";
+
+const RUN_STATUS_LABEL: Record<string, string> = {
+  RUNNING: "Benchmark running",
+  CANCELLING: "Cancelling after the current step…",
+  COMPLETED: "Benchmark complete",
+  CANCELLED: "Benchmark cancelled",
+  ERROR: "Benchmark error",
+};
+
+function progressTone(status: string): ProgressTone {
+  switch (status) {
+    case "COMPLETED":
+      return "success";
+    case "CANCELLED":
+    case "CANCELLING":
+      return "warning";
+    case "ERROR":
+      return "danger";
+    default:
+      return "accent";
+  }
+}
+
+/** Backend reads `source_section`/`expected_value`; the dataset manager uses other names. */
+function toBackendCase(c: QADataSetCase): CustomBenchmarkCase {
+  return {
+    case_id: c.case_id,
+    employee_id: (c.employee_id || "").trim(),
+    question: c.question,
+    expected_value: c.expected_answer || c.expected_entitlement || "",
+    source_section: c.expected_section || "",
+  };
+}
+
+/**
+ * A case the server still lists as RUNNING inside a run that ended (ERROR/CANCELLED) was
+ * cut off, not running: say so instead of showing a live spinner-state forever.
+ */
+function displayStatus(status: string, runStatus: string | undefined): string {
+  if (
+    status === "RUNNING" &&
+    (runStatus === "ERROR" || runStatus === "CANCELLED")
+  ) {
+    return "INTERRUPTED";
+  }
+  return status;
+}
+
+const pair = (
+  agent: string | number | null | undefined,
+  workflow: string | number | null | undefined,
+) => (
+  <span className="u-mono">
+    {agent ?? "—"} <span className="u-muted">/</span> {workflow ?? "—"}
+  </span>
+);
+
+interface ScorecardRow {
+  key: string;
+  metric: string;
+  hint?: string;
+  agent: React.ReactNode;
+  workflow: React.ReactNode;
+}
+
+function scorecardRows(
+  agent: ExecutionSummary,
+  workflow: ExecutionSummary,
+): ScorecardRow[] {
+  const terminations = (summary: ExecutionSummary) => {
+    const entries = Object.entries(summary.terminations || {});
+    return entries.length === 0 ? (
+      "—"
+    ) : (
+      <span className="chip-list">
+        {entries.map(([reason, count]) => (
+          <span key={reason} className="u-row" style={{ gap: 4 }}>
+            <StatusBadge status={reason} />
+            <span className="u-tiny u-muted">×{count}</span>
+          </span>
+        ))}
+      </span>
+    );
+  };
+  return [
+    {
+      key: "pass",
+      metric: "Pass rate",
+      hint: "normalised scorer (aliases, number words)",
+      agent: `${formatPct(agent.pass_rate_pct)} (${agent.passed_count}/${agent.total_cases})`,
+      workflow: `${formatPct(workflow.pass_rate_pct)} (${workflow.passed_count}/${workflow.total_cases})`,
+    },
+    {
+      key: "strict",
+      metric: "Strict pass rate",
+      hint: "legacy literal-substring check",
+      agent: formatPct(agent.strict_pass_rate_pct),
+      workflow: formatPct(workflow.strict_pass_rate_pct),
+    },
+    {
+      key: "lat50",
+      metric: "Latency p50",
+      agent: formatMs(agent.p50_latency_ms, 0),
+      workflow: formatMs(workflow.p50_latency_ms, 0),
+    },
+    {
+      key: "latmax",
+      metric: "Latency max",
+      agent: formatMs(agent.max_latency_ms, 0),
+      workflow: formatMs(workflow.max_latency_ms, 0),
+    },
+    {
+      key: "cost50",
+      metric: "Estimated cost p50",
+      hint: "token-cost proxy, not billing",
+      agent: formatUsd(agent.p50_cost_usd),
+      workflow: formatUsd(workflow.p50_cost_usd),
+    },
+    {
+      key: "costmax",
+      metric: "Estimated cost max",
+      hint: "token-cost proxy, not billing",
+      agent: formatUsd(agent.max_cost_usd),
+      workflow: formatUsd(workflow.max_cost_usd),
+    },
+    {
+      key: "costq",
+      metric: "Estimated cost / question",
+      hint: "token-cost proxy, not billing",
+      agent: formatUsd(agent.cost_per_question_usd),
+      workflow: formatUsd(workflow.cost_per_question_usd),
+    },
+    {
+      key: "tok50",
+      metric: "Tokens p50",
+      agent: formatInt(agent.p50_tokens),
+      workflow: formatInt(workflow.p50_tokens),
+    },
+    {
+      key: "tokmax",
+      metric: "Tokens max",
+      agent: formatInt(agent.max_tokens),
+      workflow: formatInt(workflow.max_tokens),
+    },
+    {
+      key: "toktotal",
+      metric: "Tokens total",
+      agent: formatInt(agent.total_tokens),
+      workflow: formatInt(workflow.total_tokens),
+    },
+    {
+      key: "term",
+      metric: "Terminations",
+      agent: terminations(agent),
+      workflow: terminations(workflow),
+    },
+  ];
+}
+
 export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
   onNotify,
 }) => {
-  // Canonical data
-  const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
-  const [cases, setCases] = useState<BenchmarkCase[]>([]);
+  const readiness = usePolicyReadiness();
+  const { employees, hasDocuments } = readiness;
+  const gen = useGenerationConfig({
+    capability: "agent",
+    defaults: { topK: 5, temperature: 0.3 },
+    emptyModelsMessage:
+      "No tool-enabled model is available from the configured provider for the agent.",
+  });
 
-  // Common Dataset State
+  // Suite / cases
+  const [suite, setSuite] = useState<BenchmarkSuite>("canonical");
+  const [cases, setCases] = useState<BenchmarkCase[]>([]);
+  const [casesError, setCasesError] = useState<string | null>(null);
+  const [isLoadingCases, setIsLoadingCases] = useState(true);
+
+  // Custom dataset (optional)
   const [datasetMode, setDatasetMode] = useState<DatasetMode>("builtin");
   const [customDatasetCases, setCustomDatasetCases] = useState<QADataSetCase[]>(
     [],
   );
 
-  const canonicalDatasetCases: QADataSetCase[] = useMemo(() => {
-    return cases.map((c) => ({
-      case_id: c.case_id,
-      question: c.question,
-      expected_answer: c.expected_value,
-      employee_id: c.employee_id,
-      expected_section: c.source_section,
-      expected_entitlement: c.expected_value,
-    }));
-  }, [cases]);
-
-  const activeCasesCount =
-    datasetMode === "custom"
-      ? customDatasetCases.length
-      : canonicalDatasetCases.length || cases.length || 10;
-
-  // Benchmark Configuration State
-  const [topK, setTopK] = useState<number>(5);
-  const [temperature, setTemperature] = useState<number>(0.3);
-  const {
-    model: selectedModel,
-    setModel: setSelectedModel,
-    models: availableModels,
-    defaultModel,
-    provider,
-    isLoadingModels,
-    modelsError,
-  } = useAvailableModels(
-    "agent",
-    "No tool-enabled model is available from the configured provider for the Week 7 agent.",
-  );
-
-  // Benchmark Run State
-  const [activeRunId, setActiveRunId] = useState<string | null>(null);
-  const [benchmarkRunState, setBenchmarkRunState] =
+  // Run state
+  const [runState, setRunState] =
     useState<PolicyBenchmarkRunStateResponse | null>(null);
-  const [isRunningBenchmark, setIsRunningBenchmark] = useState<boolean>(false);
-  const [benchmarkHistory, setBenchmarkHistory] = useState<
-    PolicyBenchmarkRunStateResponse[]
-  >([]);
+  const [isStarting, setIsStarting] = useState(false);
+  const [history, setHistory] = useState<PolicyBenchmarkRunStateResponse[]>([]);
+  const [inspectCaseId, setInspectCaseId] = useState<string | null>(null);
+  const [showMethodology, setShowMethodology] = useState(false);
+  const [loadRunId, setLoadRunId] = useState("");
+  const [isLoadingRun, setIsLoadingRun] = useState(false);
 
-  // Inspect Modal / Drawer State
-  const [inspectCase, setInspectCase] =
-    useState<BenchmarkCaseLiveStatus | null>(null);
-
-  // Methodology Accordion State
-  const [showMethodology, setShowMethodology] = useState<boolean>(false);
-
-  // Single Case Playground State (Dedicated Separate Section)
-  const [showPlayground, setShowPlayground] = useState<boolean>(false);
-  const [selectedEmpId, setSelectedEmpId] = useState<string>("EMP001");
-  const [queryText, setQueryText] = useState<string>(
-    "What is the standard annual leave entitlement and monthly accrual rate for EMP001?",
+  // Single-case playground
+  const [showPlayground, setShowPlayground] = useState(false);
+  const [selectedEmpId, setSelectedEmpId] = useState("");
+  const [selectedCaseId, setSelectedCaseId] = useState("");
+  const [queryText, setQueryText] = useState("");
+  const [isRunningSingle, setIsRunningSingle] = useState(false);
+  const [agentSingle, setAgentSingle] = useState<PolicyOutputContract | null>(
+    null,
   );
-  const [selectedCaseId, setSelectedCaseId] = useState<string>("case_01");
-  const [isRunningSingle, setIsRunningSingle] = useState<boolean>(false);
-  const canRunAgent = availableModels.includes(selectedModel);
-  const [agentSingleResult, setAgentSingleResult] =
+  const [workflowSingle, setWorkflowSingle] =
     useState<PolicyOutputContract | null>(null);
-  const [workflowSingleResult, setWorkflowSingleResult] =
-    useState<PolicyOutputContract | null>(null);
+  const [singleError, setSingleError] = useState<string | null>(null);
+  const queryId = useId();
 
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollBusyRef = useRef(false);
+  const notifyRef = useRef(onNotify);
+  notifyRef.current = onNotify;
   const notifiedModelErrorRef = useRef<string | null>(null);
 
+  const isRunning = isLive(runState?.status);
+  const customMode = datasetMode === "custom";
+  const activeCasesCount = customMode
+    ? customDatasetCases.length
+    : cases.length;
+
+  // ── data loading ───────────────────────────────────────────────────────────
+
   useEffect(() => {
-    loadInitialData();
-    checkActiveBenchmark();
-    return () => {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-    };
+    const controller = new AbortController();
+    setIsLoadingCases(true);
+    setCasesError(null);
+    api
+      .getPolicyCases(suite, controller.signal)
+      .then((list) => setCases(Array.isArray(list) ? list : []))
+      .catch((e: unknown) => {
+        if (isAbortError(e)) return;
+        setCases([]);
+        setCasesError(describeError(e));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoadingCases(false);
+      });
+    return () => controller.abort();
+  }, [suite]);
+
+  useEffect(() => {
+    if (gen.modelsError && notifiedModelErrorRef.current !== gen.modelsError) {
+      notifiedModelErrorRef.current = gen.modelsError;
+      onNotify(gen.modelsError, "error");
+    }
+  }, [gen.modelsError, onNotify]);
+
+  // Follow the roster for the playground.
+  useEffect(() => {
+    if (employees.length === 0) return;
+    if (!employees.some((e) => e.employee_id === selectedEmpId)) {
+      setSelectedEmpId(employees[0].employee_id);
+    }
+  }, [employees, selectedEmpId]);
+
+  const stopPolling = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
   }, []);
 
-  useEffect(() => {
-    if (
-      modelsError &&
-      notifiedModelErrorRef.current !== modelsError
-    ) {
-      notifiedModelErrorRef.current = modelsError;
-      onNotify(modelsError, "error");
-    }
-  }, [modelsError, onNotify]);
-
-  const loadInitialData = async () => {
-    try {
-      const [empsData, casesData] = await Promise.all([
-        api.getCanonicalEmployees(),
-        api.getPolicyCases(),
-      ]);
-      setEmployees(empsData || []);
-      setCases(casesData || []);
-    } catch (err: any) {
-      onNotify(
-        "Failed to load employee records or benchmark cases: " + err.message,
-        "error",
-      );
-    }
-  };
-
-  const checkActiveBenchmark = async () => {
-    try {
-      const activeData = await api.getActivePolicyBenchmarkRun();
-      if (activeData && activeData.active && activeData.run) {
-        setActiveRunId(activeData.run.run_id);
-        setBenchmarkRunState(activeData.run);
-        if (activeData.run.status === "RUNNING") {
-          setIsRunningBenchmark(true);
-          startPolling(activeData.run.run_id);
-        }
+  const applyRunState = useCallback(
+    (state: PolicyBenchmarkRunStateResponse) => {
+      setRunState(state);
+      if (!isTerminal(state.status)) return;
+      stopPolling();
+      if (state.status === "COMPLETED") {
+        notifyRef.current(
+          `Benchmark run ${state.run_id} completed.`,
+          "success",
+        );
+        setHistory((prev) => [
+          state,
+          ...prev.filter((p) => p.run_id !== state.run_id),
+        ]);
+      } else if (state.status === "CANCELLED") {
+        notifyRef.current(`Benchmark run ${state.run_id} cancelled.`, "info");
+      } else {
+        notifyRef.current(
+          `Benchmark run failed: ${state.error_message || "unknown error"}`,
+          "error",
+        );
       }
-    } catch {
-      // Ignore background active check errors
-    }
-  };
+    },
+    [stopPolling],
+  );
 
-  const startPolling = (runId: string) => {
-    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-
-    pollIntervalRef.current = setInterval(async () => {
-      try {
-        const state: PolicyBenchmarkRunStateResponse =
-          await api.getPolicyBenchmarkRun(runId);
-        if (state) {
-          setBenchmarkRunState(state);
-          if (
-            state.status === "COMPLETED" ||
-            state.status === "CANCELLED" ||
-            state.status === "ERROR"
-          ) {
-            if (pollIntervalRef.current) {
-              clearInterval(pollIntervalRef.current);
-              pollIntervalRef.current = null;
-            }
-            setIsRunningBenchmark(false);
-            if (state.status === "COMPLETED") {
-              onNotify(
-                `Benchmark run ${runId} completed successfully!`,
-                "success",
-              );
-              setBenchmarkHistory((prev) => [
-                state,
-                ...prev.filter((p) => p.run_id !== state.run_id),
-              ]);
-            } else if (state.status === "CANCELLED") {
-              onNotify(`Benchmark run ${runId} cancelled.`, "info");
-            } else if (state.status === "ERROR") {
-              onNotify(
-                `Benchmark run failed: ${state.error_message || "Unknown error"}`,
-                "error",
-              );
-            }
+  const startPolling = useCallback(
+    (runId: string) => {
+      stopPolling();
+      pollTimerRef.current = setInterval(async () => {
+        if (pollBusyRef.current) return;
+        pollBusyRef.current = true;
+        try {
+          applyRunState(await api.getPolicyBenchmarkRun(runId));
+        } catch (e: unknown) {
+          if (e instanceof ApiError && e.code === "RUN_NOT_FOUND") {
+            stopPolling();
+            notifyRef.current(describeError(e), "error");
+          } else {
+            console.warn("Error polling benchmark state:", e);
           }
+        } finally {
+          pollBusyRef.current = false;
         }
-      } catch (err: any) {
-        console.warn("Error polling benchmark state:", err);
-      }
-    }, 400);
-  };
+      }, POLL_INTERVAL_MS);
+    },
+    [applyRunState, stopPolling],
+  );
+
+  // Resume a run that is already active on the server (survives a page reload).
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getActivePolicyBenchmarkRun()
+      .then((active) => {
+        if (cancelled || !active.active || !active.run) return;
+        setRunState(active.run);
+        if (isLive(active.run.status)) startPolling(active.run.run_id);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      stopPolling();
+    };
+  }, [startPolling, stopPolling]);
+
+  // ── actions ────────────────────────────────────────────────────────────────
+
+  const runBlockers: string[] = [];
+  if (!hasDocuments) runBlockers.push("upload documents on the Chat page");
+  if (gen.isLoadingModels) runBlockers.push("wait for the model list");
+  else if (!gen.modelReady) runBlockers.push("select a tool-capable model");
+  if (!customMode && isLoadingCases) runBlockers.push("wait for the case list");
+  if (activeCasesCount === 0 && !isLoadingCases)
+    runBlockers.push(
+      customMode ? "add custom cases" : "load a suite with at least one case",
+    );
+  if (isRunning) runBlockers.push("wait for the current run");
+  if (isRunningSingle) runBlockers.push("wait for the playground run");
+  const canRun = runBlockers.length === 0 && !isStarting;
 
   const handleStartBenchmark = async () => {
-    if (!availableModels.includes(selectedModel)) {
-      onNotify("Select a tool-enabled model from the configured provider.", "error");
+    if (!canRun) return;
+    if (
+      customMode &&
+      customDatasetCases.some((c) => !(c.employee_id || "").trim())
+    ) {
+      onNotify("Every custom case needs an employee ID.", "error");
       return;
     }
-    if (datasetMode === "custom" && customDatasetCases.length === 0) {
-      onNotify(
-        "Custom dataset is empty. Please add or import test cases first.",
-        "error",
-      );
-      return;
-    }
-    setIsRunningBenchmark(true);
-    setBenchmarkRunState(null);
-    setActiveRunId(null);
+    setIsStarting(true);
+    setRunState(null);
     try {
-      const res: PolicyBenchmarkRunStateResponse =
-        await api.startPolicyBenchmark({
-          top_k: topK,
-          temperature,
-          model: selectedModel,
-          cases: datasetMode === "custom" ? customDatasetCases : undefined,
-        });
-      setActiveRunId(res.run_id);
-      setBenchmarkRunState(res);
+      const res = await api.startPolicyBenchmark({
+        suite,
+        top_k: gen.topK,
+        temperature: gen.temperature,
+        model: gen.model,
+        cases: customMode ? customDatasetCases.map(toBackendCase) : undefined,
+      });
+      setRunState(res);
       startPolling(res.run_id);
       onNotify(
-        `Started Benchmark Race (${activeCasesCount} cases, Run ID: ${res.run_id})`,
+        `Started benchmark ${res.run_id} (${res.total_cases} cases, suite: ${customMode ? "custom" : suite}).`,
         "info",
       );
-    } catch (err: any) {
-      setIsRunningBenchmark(false);
-      onNotify("Failed to start benchmark: " + err.message, "error");
+    } catch (e: unknown) {
+      onNotify("Failed to start benchmark: " + describeError(e), "error");
+      if (e instanceof ApiError && e.action === "upload-documents") {
+        void readiness.refresh();
+      }
+    } finally {
+      setIsStarting(false);
     }
   };
 
   const handleCancelBenchmark = async () => {
-    if (!activeRunId) return;
+    if (!runState || runState.status !== "RUNNING") return;
     try {
-      await api.cancelPolicyBenchmarkRun(activeRunId);
-      onNotify(`Cancelling benchmark run ${activeRunId}...`, "info");
-    } catch (err: any) {
-      onNotify("Failed to cancel benchmark: " + err.message, "error");
+      await api.cancelPolicyBenchmarkRun(runState.run_id);
+      setRunState((prev) =>
+        prev
+          ? { ...prev, status: "CANCELLING", cancellation_requested: true }
+          : prev,
+      );
+      onNotify(
+        `Cancelling ${runState.run_id}; the current case will finish first.`,
+        "info",
+      );
+    } catch (e: unknown) {
+      onNotify("Failed to cancel benchmark: " + describeError(e), "error");
     }
   };
 
-  const handleSetWeek6Baseline = () => {
-    setTopK(8);
-    setTemperature(0.0);
-    onNotify(
-      "Loaded Week 6 Frozen Baseline: Top-K = 8, Temperature = 0.0",
-      "info",
-    );
+  const handleLoadRun = async (runId: string) => {
+    const id = runId.trim();
+    if (!id) return;
+    setIsLoadingRun(true);
+    try {
+      const loaded = await api.getPolicyBenchmarkRun(id);
+      setRunState(loaded);
+      gen.setTopK(loaded.top_k);
+      gen.setTemperature(loaded.temperature);
+      if (loaded.model && gen.models.includes(loaded.model)) {
+        gen.setModel(loaded.model);
+      }
+      if (isLive(loaded.status)) startPolling(loaded.run_id);
+      else stopPolling();
+      if (loaded.status === "COMPLETED") {
+        setHistory((prev) => [
+          loaded,
+          ...prev.filter((p) => p.run_id !== loaded.run_id),
+        ]);
+      }
+      onNotify(`Loaded benchmark run ${loaded.run_id}.`, "success");
+    } catch (e: unknown) {
+      onNotify("Could not load that run: " + describeError(e), "error");
+    } finally {
+      setIsLoadingRun(false);
+    }
   };
 
-  const handleSetAppDefault = () => {
-    setTopK(5);
-    setTemperature(0.3);
-    setSelectedModel(defaultModel);
-    onNotify(
-      "Loaded Application Default: Top-K = 5, Temperature = 0.3",
-      "info",
-    );
-  };
-
-  const handleLoadHistoricRun = (
-    historicRun: PolicyBenchmarkRunStateResponse,
-  ) => {
-    setBenchmarkRunState(historicRun);
-    setActiveRunId(historicRun.run_id);
-    setTopK(historicRun.top_k);
-    setTemperature(historicRun.temperature);
-    if (historicRun.model) setSelectedModel(historicRun.model);
-    onNotify(`Loaded historic benchmark run: ${historicRun.run_id}`, "success");
-  };
-
-  // Single Case Playground Handlers
   const handleSelectCase = (c: BenchmarkCase) => {
     setSelectedCaseId(c.case_id);
     setSelectedEmpId(c.employee_id);
     setQueryText(c.question);
   };
 
-  const handleRunSingle = async (mode: "both" | "agent" | "workflow") => {
-    if (!selectedEmpId || !queryText.trim()) {
-      onNotify("Please select employee ID and query", "error");
-      return;
-    }
-    if ((mode === "both" || mode === "agent") && !canRunAgent) {
-      onNotify("Select a tool-enabled model from the configured provider.", "error");
-      return;
-    }
+  const singleBlockers: string[] = [];
+  if (!hasDocuments) singleBlockers.push("upload documents on the Chat page");
+  if (!selectedEmpId.trim()) singleBlockers.push("choose an employee");
+  if (!queryText.trim()) singleBlockers.push("enter a question");
+  if (isRunning) singleBlockers.push("wait for the benchmark");
+  const agentBlockers = [
+    ...singleBlockers,
+    ...(gen.isLoadingModels
+      ? ["wait for the model list"]
+      : gen.modelReady
+        ? []
+        : ["select a tool-capable model"]),
+  ];
 
+  const handleRunSingle = async (mode: "both" | "agent" | "workflow") => {
+    const blockers = mode === "workflow" ? singleBlockers : agentBlockers;
+    if (blockers.length > 0 || isRunningSingle) return;
     setIsRunningSingle(true);
-    setAgentSingleResult(null);
-    setWorkflowSingleResult(null);
+    setAgentSingle(null);
+    setWorkflowSingle(null);
+    setSingleError(null);
+    const payload = {
+      employee_id: selectedEmpId.trim(),
+      question: queryText.trim(),
+      ...(selectedCaseId ? { case_id: selectedCaseId } : {}),
+      top_k: gen.topK,
+      temperature: gen.temperature,
+      model: gen.model,
+    };
     const results: PolicyOutputContract[] = [];
     try {
       if (mode === "both" || mode === "agent") {
-        const aRes = await api.runPolicyAgent({
-          employee_id: selectedEmpId,
-          question: queryText.trim(),
-          case_id: selectedCaseId,
-          top_k: topK,
-          temperature,
-          model: selectedModel,
-        });
-        setAgentSingleResult(aRes);
-        results.push(aRes);
+        const res = await api.runPolicyAgent(payload);
+        setAgentSingle(res);
+        results.push(res);
       }
       if (mode === "both" || mode === "workflow") {
-        const wRes = await api.runPolicyWorkflow({
-          employee_id: selectedEmpId,
-          question: queryText.trim(),
-          case_id: selectedCaseId,
-          top_k: topK,
-          temperature,
-          model: selectedModel,
-        });
-        setWorkflowSingleResult(wRes);
-        results.push(wRes);
+        const res = await api.runPolicyWorkflow(payload);
+        setWorkflowSingle(res);
+        results.push(res);
       }
-      const failedResult = results.find(
-        (result) => result.termination_reason !== "SUCCESS",
-      );
-      if (failedResult) {
+      const failed = results.find((r) => r.termination_reason !== "SUCCESS");
+      if (failed) {
         onNotify(
-          `Policy execution failed (${failedResult.termination_reason}).`,
+          `Policy execution ended with ${failed.termination_reason}.`,
           "error",
         );
       } else {
-        onNotify("Policy query evaluated successfully!", "success");
+        onNotify("Policy query evaluated.", "success");
       }
-    } catch (err: any) {
-      onNotify("Execution error: " + err.message, "error");
+    } catch (e: unknown) {
+      setSingleError(describeError(e));
+      onNotify("Execution error: " + describeError(e), "error");
+      if (e instanceof ApiError && e.action === "upload-documents") {
+        void readiness.refresh();
+      }
     } finally {
       setIsRunningSingle(false);
     }
   };
 
-  const selectedEmp = employees.find((e) => e.employee_id === selectedEmpId);
+  // ── derived ────────────────────────────────────────────────────────────────
 
-  // Compute Latency percentiles (p50 and p95) from results
-  const latencyMetrics = useMemo(() => {
-    if (!benchmarkRunState || !benchmarkRunState.cases_status) {
-      return { agentP50: 0, agentP95: 0, wfP50: 0, wfP95: 0 };
-    }
-    const agentLats = benchmarkRunState.cases_status
-      .map((c) => c.agent_latency_ms)
-      .filter((l): l is number => typeof l === "number")
-      .sort((a, b) => a - b);
+  const inspectCase: BenchmarkCaseLiveStatus | null =
+    runState?.cases_status.find((c) => c.case_id === inspectCaseId) ?? null;
+  const trajectoryByCase = useMemo(() => {
+    const map = new Map<string, TrajectoryCaseRecord>();
+    runState?.trajectory?.cases.forEach((c) => map.set(c.case_id, c));
+    return map;
+  }, [runState?.trajectory]);
+  const skippedCount =
+    runState?.cases_status.filter((c) => c.status === "SKIPPED").length ?? 0;
+  const baselineCandidates = history
+    .filter((h) => h.run_id !== runState?.run_id)
+    .map((h) => ({
+      run_id: h.run_id,
+      label: `${h.run_id} · K=${h.top_k} T=${h.temperature} · ${formatPct(h.summary?.agent.pass_rate_pct)} agent`,
+    }));
 
-    const wfLats = benchmarkRunState.cases_status
-      .map((c) => c.workflow_latency_ms)
-      .filter((l): l is number => typeof l === "number")
-      .sort((a, b) => a - b);
-
-    const median = (arr: number[]) => {
-      if (!arr.length) return 0;
-      const middle = Math.floor(arr.length / 2);
-      return arr.length % 2 === 0
-        ? (arr[middle - 1] + arr[middle]) / 2
-        : arr[middle];
-    };
-    const percentile = (arr: number[], p: number) => {
-      if (!arr.length) return 0;
-      const rank = Math.ceil(arr.length * p);
-      return arr[Math.min(arr.length - 1, Math.max(0, rank - 1))];
-    };
-
-    return {
-      agentP50: median(agentLats),
-      agentP95: percentile(agentLats, 0.95),
-      wfP50: median(wfLats),
-      wfP95: percentile(wfLats, 0.95),
-    };
-  }, [benchmarkRunState]);
-
-  // Determine stage progression states for Agent and Workflow
-  const agentStages = [
-    `Calling ${provider || "model provider"}`,
-    "Selecting tool",
-    "Executing tool",
-    "Processing tool result",
-    "Generating final answer",
+  const caseColumns: DataColumn<BenchmarkCaseLiveStatus>[] = [
+    {
+      key: "case",
+      header: "Case",
+      render: (cs) => <strong>{cs.case_id.toUpperCase()}</strong>,
+    },
+    {
+      key: "emp",
+      header: "Employee",
+      render: (cs) => (
+        <span style={{ color: "var(--accent-hover)" }}>{cs.employee_id}</span>
+      ),
+    },
+    {
+      key: "question",
+      header: "Question",
+      clip: true,
+      render: (cs) => (
+        <div>
+          <div className="u-clip" style={{ maxWidth: 240 }} title={cs.question}>
+            {cs.question}
+          </div>
+          {cs.status === "SKIPPED" && cs.skip_reason && (
+            <div
+              className="u-tiny"
+              style={{ color: "var(--amber)", whiteSpace: "normal" }}
+            >
+              {cs.skip_reason}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "expected",
+      header: "Expected",
+      clip: true,
+      render: (cs) => (
+        <span className="u-muted u-tiny" title={cs.ground_truth}>
+          {cs.ground_truth || "—"}
+        </span>
+      ),
+    },
+    {
+      key: "agent",
+      header: "Agent",
+      render: (cs) =>
+        cs.status === "SKIPPED" ? (
+          <StatusBadge status="SKIPPED" title={cs.skip_reason || undefined} />
+        ) : (
+          <VerdictBadge
+            passed={cs.agent_passed}
+            fallback={displayStatus(cs.agent_status, runState?.status)}
+          />
+        ),
+    },
+    {
+      key: "workflow",
+      header: "Workflow",
+      render: (cs) =>
+        cs.status === "SKIPPED" ? (
+          <StatusBadge status="SKIPPED" title={cs.skip_reason || undefined} />
+        ) : (
+          <VerdictBadge
+            passed={cs.workflow_passed}
+            fallback={displayStatus(cs.workflow_status, runState?.status)}
+          />
+        ),
+    },
+    {
+      key: "tools",
+      header: "Agent tool sequence",
+      render: (cs) => <PathSequence sequence={cs.agent_tool_sequence} />,
+    },
+    {
+      key: "toolRetries",
+      header: "Tool retries",
+      align: "right",
+      render: (cs) => cs.agent_tool_retries ?? "—",
+    },
+    {
+      key: "modelRetries",
+      header: "Model retries",
+      align: "right",
+      render: (cs) => cs.agent_model_retries ?? "—",
+    },
+    {
+      key: "rejected",
+      header: "Rejected calls",
+      align: "right",
+      render: (cs) =>
+        cs.agent_rejected_calls ? (
+          <span className="chip tone-danger">{cs.agent_rejected_calls}</span>
+        ) : (
+          (cs.agent_rejected_calls ?? "—")
+        ),
+    },
+    {
+      key: "selection",
+      header: "Selection ok",
+      align: "center",
+      render: (cs) =>
+        cs.agent_selection_ok === true ? (
+          <StatusBadge status="PASS" label="OK" />
+        ) : cs.agent_selection_ok === false ? (
+          <StatusBadge status="FAIL" label="NOT OK" />
+        ) : (
+          <span
+            className="u-muted"
+            title="Not judged (run ended early, skipped or not run yet)"
+          >
+            —
+          </span>
+        ),
+    },
+    {
+      key: "tokens",
+      header: "Tokens (A / W)",
+      align: "right",
+      render: (cs) =>
+        pair(
+          cs.agent_tokens != null ? formatInt(cs.agent_tokens) : null,
+          cs.workflow_tokens != null ? formatInt(cs.workflow_tokens) : null,
+        ),
+    },
+    {
+      key: "latency",
+      header: "Latency (A / W)",
+      align: "right",
+      render: (cs) =>
+        pair(
+          cs.agent_latency_ms != null ? formatMs(cs.agent_latency_ms, 0) : null,
+          cs.workflow_latency_ms != null
+            ? formatMs(cs.workflow_latency_ms, 0)
+            : null,
+        ),
+    },
+    {
+      key: "cost",
+      header: "Est. cost (A / W)",
+      headerTitle: "Estimated token cost (proxy, not billing)",
+      align: "right",
+      render: (cs) =>
+        pair(
+          cs.agent_cost_usd != null ? formatUsd(cs.agent_cost_usd) : null,
+          cs.workflow_cost_usd != null ? formatUsd(cs.workflow_cost_usd) : null,
+        ),
+    },
+    {
+      key: "inspect",
+      header: "Inspect",
+      align: "center",
+      render: (cs) => (
+        <button
+          type="button"
+          className="btn-secondary btn-small"
+          onClick={() => setInspectCaseId(cs.case_id)}
+          aria-label={`Inspect ${cs.case_id}`}
+        >
+          Inspect
+        </button>
+      ),
+    },
   ];
 
-  const getAgentStageStatus = (
-    stageName: string,
-    currentStage?: string | null,
-  ) => {
-    if (!currentStage) return "○";
-    const currLower = currentStage.toLowerCase();
-    const targetLower = stageName.toLowerCase();
+  // ── render ─────────────────────────────────────────────────────────────────
 
-    if (currLower.includes(targetLower) || targetLower.includes(currLower)) {
-      return "⚡";
-    }
-
-    const currentIdx = agentStages.findIndex((s) =>
-      currLower.includes(s.toLowerCase()),
+  const renderCaseDetail = (cs: BenchmarkCaseLiveStatus) => {
+    const trajectory = trajectoryByCase.get(cs.case_id);
+    const side = (
+      label: string,
+      result: PolicyOutputContract | null | undefined,
+      fallbackStatus: string,
+    ) => (
+      <div className="panel-inset u-stack" style={{ minWidth: 0 }}>
+        <div className="u-row">
+          <h3 className="panel-title" style={{ fontSize: "0.95rem" }}>
+            {label}
+          </h3>
+          <span className="u-right">
+            <StatusBadge
+              status={
+                result ? (result.passed ? "PASS" : "FAIL") : fallbackStatus
+              }
+            />
+          </span>
+        </div>
+        {result ? (
+          <ToolTrace result={result} showCriteria showRouting={false} />
+        ) : (
+          <div className="u-small u-muted">
+            {cs.status === "SKIPPED"
+              ? `Skipped: ${cs.skip_reason || "required tools are not connected"}.`
+              : "No result recorded for this case yet."}
+          </div>
+        )}
+      </div>
     );
-    const targetIdx = agentStages.findIndex(
-      (s) => s.toLowerCase() === targetLower,
+    return (
+      <>
+        <dl className="kv-grid panel-inset">
+          <dt>Question</dt>
+          <dd>{cs.question}</dd>
+          <dt>Expected</dt>
+          <dd>{cs.ground_truth || "N/A"}</dd>
+          {cs.pass_criteria && cs.pass_criteria.length > 0 && (
+            <>
+              <dt>Pass criteria</dt>
+              <dd>{cs.pass_criteria.map((c) => `"${c}"`).join(", ")}</dd>
+            </>
+          )}
+          {cs.path_dependency && (
+            <>
+              <dt>Path dependency</dt>
+              <dd>{cs.path_dependency}</dd>
+            </>
+          )}
+          {cs.requires_tools && cs.requires_tools.length > 0 && (
+            <>
+              <dt>Requires tools</dt>
+              <dd className="u-mono">{cs.requires_tools.join(", ")}</dd>
+            </>
+          )}
+          {cs.status === "SKIPPED" && (
+            <>
+              <dt>Skipped because</dt>
+              <dd style={{ color: "var(--amber)" }}>{cs.skip_reason}</dd>
+            </>
+          )}
+        </dl>
+
+        {trajectory && (
+          <div className="panel-inset u-stack" style={{ gap: 8 }}>
+            <div className="u-row">
+              <span className="section-label">Trajectory for this case</span>
+              <StatusBadge
+                status={trajectory.trajectory_passed ? "PASS" : "FAIL"}
+                label={trajectory.trajectory_passed ? "PATH OK" : "PATH WRONG"}
+              />
+              {trajectory.right_answer_wrong_path && (
+                <span className="chip tone-warning">
+                  right answer, wrong path
+                </span>
+              )}
+            </div>
+            <div className="u-small">
+              <span className="u-muted">Allowed: </span>
+              <span className="u-stack" style={{ gap: 2 }}>
+                {trajectory.expected_paths.map((p, i) => (
+                  <PathSequence key={i} sequence={p} />
+                ))}
+              </span>
+            </div>
+            <div className="u-small">
+              <span className="u-muted">Observed: </span>
+              <PathSequence
+                sequence={trajectory.observed_sequence}
+                tone={trajectory.path_exact ? "match" : "miss"}
+              />
+            </div>
+            {trajectory.path_notes && (
+              <div className="u-tiny u-muted">{trajectory.path_notes}</div>
+            )}
+            {trajectory.failure_modes.length > 0 && (
+              <div className="chip-list">
+                {trajectory.failure_modes.map((mode) => (
+                  <span key={mode} className="chip is-mono tone-danger">
+                    {mode}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div
+          style={{
+            display: "grid",
+            gap: 16,
+            gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))",
+          }}
+        >
+          {side("Agent", cs.agent_result, cs.agent_status)}
+          {side("Workflow", cs.workflow_result, cs.workflow_status)}
+        </div>
+      </>
     );
-
-    if (currentIdx > targetIdx && currentIdx !== -1) {
-      return "✓";
-    }
-    return "○";
-  };
-
-  const wfSteps = [
-    { title: "Step 1 — Employee lookup", key: "step 1" },
-    { title: "Step 2 — Handbook lookup", key: "step 2" },
-    { title: "Step 3 — Deterministic policy resolution", key: "step 3" },
-  ];
-
-  const getWfStepStatus = (stepKey: string, currentWfStage?: string | null) => {
-    if (!currentWfStage) return { icon: "○", status: "WAITING" };
-    const currLower = currentWfStage.toLowerCase();
-
-    if (currLower.includes(stepKey)) {
-      return { icon: "⚡", status: "RUNNING" };
-    }
-
-    if (
-      stepKey === "step 1" &&
-      (currLower.includes("step 2") || currLower.includes("step 3"))
-    ) {
-      return { icon: "✓", status: "COMPLETE" };
-    }
-    if (stepKey === "step 2" && currLower.includes("step 3")) {
-      return { icon: "✓", status: "COMPLETE" };
-    }
-    return { icon: "○", status: "WAITING" };
   };
 
   return (
     <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: "20px",
-        maxWidth: "1200px",
-        margin: "0 auto",
-        width: "100%",
-      }}
+      className="u-stack"
+      style={{ gap: 20, maxWidth: 1200, margin: "0 auto", width: "100%" }}
     >
-      {/* ==================================================
-          1. HEADER / HERO
-          ================================================== */}
+      {/* 1. Header + run controls */}
       <div
+        className="panel"
         style={{
-          background: "var(--bg-surface)",
-          border: "1px solid var(--border)",
-          borderRadius: "12px",
-          padding: "24px 28px",
-          display: "flex",
-          justifyContent: "space-between",
+          flexDirection: "row",
           alignItems: "center",
           flexWrap: "wrap",
-          gap: "16px",
+          justifyContent: "space-between",
         }}
       >
-        <div>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: "1.4rem",
-              color: "#fff",
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-            }}
-          >
-            <span>🤖</span> HR Policy Assistant
-          </h1>
+        <div style={{ minWidth: 0, flex: "1 1 360px" }}>
+          <h2 className="panel-title" style={{ fontSize: "1.4rem" }}>
+            <span aria-hidden="true">🤖</span> HR Policy Assistant
+          </h2>
           <div
             style={{
-              fontSize: "0.95rem",
+              color: "var(--accent-hover)",
               fontWeight: 600,
-              color: "#60a5fa",
-              marginTop: "4px",
+              marginTop: 4,
             }}
           >
-            Dynamic ReAct Agent vs Fixed-Sequence LLM Workflow
+            Dynamic ReAct agent vs fixed-sequence LLM workflow
           </div>
-          <p
-            style={{
-              margin: "6px 0 0 0",
-              fontSize: "0.85rem",
-              color: "var(--text-muted)",
-              maxWidth: "650px",
-              lineHeight: "1.4",
-            }}
-          >
-            Compare a tool-calling policy agent against a fixed-sequence,
-            LLM-backed workflow using HR policy cases.
+          <p className="panel-subtitle" style={{ maxWidth: 650 }}>
+            Runs each case through a tool-calling agent and a fixed workflow
+            over the documents you uploaded, then scores the answers and, for
+            the agent, the tool path.
           </p>
         </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          {isRunningBenchmark ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <button
-                type="button"
-                disabled
-                style={{
-                  padding: "10px 22px",
-                  background: "var(--bg-surface-elevated)",
-                  color: "#fbbf24",
-                  border: "1px solid var(--border)",
-                  borderRadius: "8px",
-                  fontWeight: 600,
-                  fontSize: "0.9rem",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  cursor: "not-allowed",
-                }}
-              >
-                <span>⏳</span> Benchmark Running...
-              </button>
-              <CancelButton
-                onClick={handleCancelBenchmark}
-                style={{
-                  padding: "10px 18px",
-                  background: "#ef4444",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "8px",
-                  fontWeight: 600,
-                  fontSize: "0.85rem",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                }}
-              >
-                ⏹️ Cancel
-              </CancelButton>
-            </div>
+        <div className="u-row" style={{ gap: 10 }}>
+          {isRunning ? (
+            <>
+              <StatusBadge
+                status={runState?.status}
+                size="lg"
+                label={RUN_STATUS_LABEL[runState?.status || ""]}
+              />
+              {runState?.status === "RUNNING" && (
+                <CancelButton
+                  className="btn-danger"
+                  onClick={() => void handleCancelBenchmark()}
+                >
+                  ■ Cancel
+                </CancelButton>
+              )}
+            </>
           ) : (
             <button
               type="button"
-              onClick={handleStartBenchmark}
-              disabled={
-                isRunningBenchmark ||
-                isRunningSingle ||
-                isLoadingModels ||
-                !canRunAgent
+              className="btn-primary btn-inline"
+              disabled={!canRun}
+              aria-disabled={!canRun}
+              onClick={() => void handleStartBenchmark()}
+              title={
+                canRun
+                  ? "Start the benchmark"
+                  : `To run: ${runBlockers.join(", ")}`
               }
-              style={{
-                padding: "10px 24px",
-                background:
-                  datasetMode === "custom" && customDatasetCases.length === 0
-                    ? "var(--bg-card)"
-                    : "var(--accent)",
-                color:
-                  datasetMode === "custom" && customDatasetCases.length === 0
-                    ? "var(--text-muted)"
-                    : "#fff",
-                border: "none",
-                borderRadius: "8px",
-                fontWeight: 600,
-                fontSize: "0.92rem",
-                cursor:
-                  datasetMode === "custom" && customDatasetCases.length === 0
-                    ? "not-allowed"
-                    : "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                boxShadow: "0 2px 10px rgba(59, 130, 246, 0.35)",
-                transition: "all 0.15s ease",
-              }}
             >
-              <span>▶</span> Run {activeCasesCount}-Case Benchmark
+              {isStarting
+                ? "Starting…"
+                : `▶ Run ${activeCasesCount || ""}-case benchmark`}
             </button>
           )}
         </div>
+        {!isRunning && !canRun && !isStarting && (
+          <div
+            className="field-hint"
+            style={{ flexBasis: "100%" }}
+            role="status"
+          >
+            To run: {runBlockers.join(", ")}.
+          </div>
+        )}
       </div>
 
-      {/* DATASET MANAGEMENT (UPLOAD / MANUAL EDITING) */}
+      <ReadinessBanner state={readiness} />
+
+      {/* 2. Suite + dataset */}
+      <div className="panel">
+        <div className="u-row" style={{ justifyContent: "space-between" }}>
+          <fieldset
+            style={{ border: "none", padding: 0, minWidth: 0 }}
+            disabled={isRunning || customMode}
+          >
+            <legend className="section-label" style={{ marginBottom: 6 }}>
+              Case suite
+            </legend>
+            <div
+              className="u-row"
+              role="radiogroup"
+              aria-label="Benchmark suite"
+            >
+              {SUITES.map((option) => (
+                <label
+                  key={option.id}
+                  className={`suite-option${suite === option.id ? " active" : ""}`}
+                  title={option.hint}
+                >
+                  <input
+                    type="radio"
+                    name="policy-suite"
+                    value={option.id}
+                    checked={suite === option.id}
+                    onChange={() => setSuite(option.id)}
+                  />
+                  <span>{option.label}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <span className="u-small u-muted" style={{ maxWidth: 520 }}>
+            {customMode
+              ? "A custom dataset is active, so the suite selection is ignored."
+              : SUITES.find((s) => s.id === suite)?.hint}
+          </span>
+        </div>
+
+        {casesError ? (
+          <Banner
+            tone="danger"
+            icon="⚠"
+            title="Could not load the case list"
+            live="alert"
+          >
+            {casesError}
+          </Banner>
+        ) : (
+          !customMode && (
+            <details className="disclosure">
+              <summary>
+                {isLoadingCases
+                  ? "Loading cases…"
+                  : `${cases.length} case${cases.length === 1 ? "" : "s"} in the “${suite}” suite`}
+              </summary>
+              <div className="disclosure-body">
+                <DataTable
+                  ariaLabel={`Cases in the ${suite} suite`}
+                  rows={cases}
+                  rowKey={(c) => c.case_id}
+                  empty="This suite has no cases."
+                  columns={[
+                    {
+                      key: "id",
+                      header: "Case",
+                      render: (c) => <strong>{c.case_id}</strong>,
+                    },
+                    {
+                      key: "emp",
+                      header: "Employee",
+                      render: (c) => c.employee_id,
+                    },
+                    { key: "q", header: "Question", render: (c) => c.question },
+                    {
+                      key: "tools",
+                      header: "Requires tools",
+                      render: (c) =>
+                        c.requires_tools && c.requires_tools.length > 0 ? (
+                          <span className="u-mono u-tiny">
+                            {c.requires_tools.join(", ")}
+                          </span>
+                        ) : (
+                          <span className="u-muted">—</span>
+                        ),
+                    },
+                    {
+                      key: "dep",
+                      header: "Path dependency",
+                      render: (c) => (
+                        <span className="u-tiny u-muted">
+                          {c.path_dependency || "—"}
+                        </span>
+                      ),
+                    },
+                  ]}
+                />
+                <div className="u-tiny u-muted" style={{ marginTop: 6 }}>
+                  A case that requires a tool no connected MCP server provides
+                  is reported as SKIPPED with the reason, not silently dropped.
+                </div>
+              </div>
+            </details>
+          )
+        )}
+      </div>
+
       <EvaluationDatasetManager
         evaluatorType="policy"
         title="HR Policy Assistant"
-        builtinCount={cases.length || 10}
-        builtinLabel="Canonical HR Policy Benchmark"
+        builtinCount={cases.length}
+        builtinLabel={`${SUITES.find((s) => s.id === suite)?.label ?? "Canonical"} HR Policy Benchmark`}
         datasetMode={datasetMode}
         customCases={customDatasetCases}
-        isRunning={isRunningBenchmark}
+        isRunning={isRunning}
         onModeChange={(mode) => {
           setDatasetMode(mode);
-          if (mode === "builtin") {
-            onNotify(
-              "Switched to Canonical HR Policy Benchmark dataset.",
-              "info",
-            );
-          } else {
-            onNotify(
-              `Switched to Custom Dataset (${customDatasetCases.length} cases loaded).`,
-              "info",
-            );
-          }
+          onNotify(
+            mode === "builtin"
+              ? "Switched to the built-in HR Policy benchmark suite."
+              : `Switched to Custom Dataset (${customDatasetCases.length} cases loaded).`,
+            "info",
+          );
         }}
         onCustomCasesChange={(updated) => setCustomDatasetCases(updated)}
         onResetToBuiltin={() => {
           setDatasetMode("builtin");
-          onNotify("Reset to Canonical HR Policy Benchmark dataset.", "info");
+          onNotify("Reset to the built-in HR Policy benchmark suite.", "info");
         }}
         onNotify={onNotify}
         storageKey="policy_custom_dataset"
       />
 
-      {/* ==================================================
-          2. BENCHMARK CONFIGURATION
-          ================================================== */}
-      <div
-        style={{
-          background: "var(--bg-surface)",
-          border: "1px solid var(--border)",
-          borderRadius: "12px",
-          padding: "18px 24px",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "14px",
-            flexWrap: "wrap",
-            gap: "8px",
-          }}
-        >
-          <h3
-            style={{
-              margin: 0,
-              fontSize: "0.95rem",
-              color: "#fff",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-            }}
-          >
-            <span>⚙️</span> Benchmark Configuration
+      {/* 3. Configuration */}
+      <div className="panel">
+        <div className="u-row" style={{ justifyContent: "space-between" }}>
+          <h3 className="panel-title" style={{ fontSize: "0.95rem" }}>
+            <span aria-hidden="true">⚙️</span> Benchmark configuration
           </h3>
-
-          {isRunningBenchmark ? (
-            <span
-              style={{
-                fontSize: "0.78rem",
-                color: "#fbbf24",
-                fontWeight: 600,
-                display: "flex",
-                alignItems: "center",
-                gap: "4px",
-              }}
-            >
-              <span>🔒</span> Configuration Frozen
+          {isRunning && (
+            <span className="chip tone-warning">
+              🔒 Configuration frozen while running
             </span>
-          ) : (
-            <div style={{ display: "flex", gap: "8px" }}>
-              <button
-                type="button"
-                onClick={handleSetWeek6Baseline}
-                className="btn-secondary"
-                style={{ fontSize: "0.76rem", padding: "4px 10px" }}
-                title="Restore Frozen Week 6 Baseline (k=8, T=0.0)"
-              >
-                Week 6 Baseline
-              </button>
-              <button
-                type="button"
-                onClick={handleSetAppDefault}
-                className="btn-secondary"
-                style={{ fontSize: "0.76rem", padding: "4px 10px" }}
-                title="Restore Application Default (k=5, T=0.3)"
-              >
-                App Default
-              </button>
-            </div>
           )}
         </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-            gap: "14px",
-            background: "var(--bg-surface-elevated)",
-            padding: "12px 16px",
-            borderRadius: "8px",
-            border: "1px solid var(--border)",
-            opacity: isRunningBenchmark ? 0.75 : 1,
-          }}
-        >
-          <TopKSlider
-            value={topK}
-            onChange={setTopK}
-            disabled={isRunningBenchmark}
+        <div className="panel-inset">
+          <GenerationControls
+            config={gen}
+            showModel
+            disabled={isRunning}
+            onPresetApplied={(preset) =>
+              onNotify(
+                `Loaded ${preset.label}: Top-K = ${preset.topK}, Temperature = ${preset.temperature.toFixed(1)}`,
+                "info",
+              )
+            }
           />
-          <TemperatureSlider
-            value={temperature}
-            onChange={setTemperature}
-            disabled={isRunningBenchmark}
-          />
-
-          {/* Shared model selection for both execution paths */}
-          <ModelSelect
-            label={`Model (${provider || "configured provider"})`}
-            value={selectedModel}
-            onChange={setSelectedModel}
-            models={availableModels}
-            defaultModel={defaultModel}
-            isLoading={isLoadingModels}
-            disabled={isRunningBenchmark}
-            loadingLabel="Loading models…"
-            emptyLabel="No tool-capable models"
-            showDefaultLabel
-            preserveUnavailableValue
-            containerStyle={{ minWidth: 160 }}
-            labelStyle={{
-              fontSize: "0.75rem",
-              color: "var(--text-muted)",
-              display: "block",
-              marginBottom: "4px",
-            }}
-            selectStyle={{
-              width: "100%",
-              padding: "6px 8px",
-              borderRadius: "6px",
-              background: "var(--bg-surface)",
-              border: "1px solid var(--border)",
-              color: "#fff",
-              fontSize: "0.82rem",
-              cursor:
-                isRunningBenchmark ||
-                isLoadingModels ||
-                availableModels.length === 0
-                  ? "not-allowed"
-                  : "pointer",
-            }}
-          />
-
-          {/* Workflow Architecture Readout */}
-          <div>
-            <label
-              style={{
-                fontSize: "0.75rem",
-                color: "var(--text-muted)",
-                display: "block",
-                marginBottom: "4px",
-              }}
-            >
-              Workflow
-            </label>
-            <div
-              style={{
-                padding: "6px 8px",
-                background: "var(--bg-surface)",
-                borderRadius: "6px",
-                border: "1px solid var(--border)",
-                fontSize: "0.82rem",
-                color: "#10b981",
-                fontWeight: 600,
-              }}
-            >
-              Fixed sequence · LLM synthesis
-            </div>
-          </div>
-
-          {/* Workflow Temperature Readout */}
-          <div>
-            <label
-              style={{
-                fontSize: "0.75rem",
-                color: "var(--text-muted)",
-                display: "block",
-                marginBottom: "4px",
-              }}
-            >
-              Workflow Temperature
-            </label>
-            <div
-              style={{
-                padding: "6px 8px",
-                background: "var(--bg-surface)",
-                borderRadius: "6px",
-                border: "1px solid var(--border)",
-                fontSize: "0.82rem",
-                color: "var(--text-muted)",
-              }}
-            >
-              {temperature.toFixed(2)}
-            </div>
-          </div>
+        </div>
+        <div className="field-hint">
+          The workflow uses the same model and temperature as the agent: a fixed
+          sequence (employee lookup, policy search, optional jurisdiction rules)
+          followed by one model call.
         </div>
       </div>
 
-      {/* ==================================================
-          3. EMPTY STATE (BEFORE FIRST RUN)
-          ================================================== */}
-      {!benchmarkRunState && (
-        <div
-          style={{
-            background: "var(--bg-surface)",
-            border: "1px dashed var(--border)",
-            borderRadius: "12px",
-            padding: "48px 24px",
-            textAlign: "center",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: "14px",
-          }}
-        >
-          <div style={{ fontSize: "2rem" }}>🏁</div>
-          <div style={{ fontSize: "1.05rem", fontWeight: 600, color: "#fff" }}>
-            No benchmark results yet.
+      {/* 4. Empty state */}
+      {!runState && (
+        <div className="empty-state">
+          <div style={{ fontSize: "2rem" }} aria-hidden="true">
+            🏁
           </div>
-          <p
-            style={{
-              margin: 0,
-              fontSize: "0.85rem",
-              color: "var(--text-muted)",
-              maxWidth: "480px",
-            }}
-          >
-            Run the {activeCasesCount}-case benchmark to compare the tool-calling
-            Agent with the fixed-sequence, LLM-backed Workflow under shared
-            execution budgets.
+          <div className="empty-state-title">No benchmark results yet</div>
+          <p className="empty-state-text">
+            Run the {activeCasesCount || ""}-case benchmark to compare the
+            tool-calling agent with the fixed workflow under the same budgets,
+            or load a finished run by its id below.
           </p>
           <button
             type="button"
-            onClick={handleStartBenchmark}
-            disabled={
-              isRunningBenchmark ||
-              isLoadingModels ||
-              !canRunAgent ||
-              (datasetMode === "custom" && customDatasetCases.length === 0)
+            className="btn-primary btn-inline"
+            disabled={!canRun}
+            onClick={() => void handleStartBenchmark()}
+            title={
+              canRun
+                ? "Start the benchmark"
+                : `To run: ${runBlockers.join(", ")}`
             }
-            style={{
-              marginTop: "8px",
-              padding: "10px 22px",
-              background:
-                datasetMode === "custom" && customDatasetCases.length === 0
-                  ? "var(--bg-card)"
-                  : "var(--accent)",
-              color:
-                datasetMode === "custom" && customDatasetCases.length === 0
-                  ? "var(--text-muted)"
-                  : "#fff",
-              border: "none",
-              borderRadius: "8px",
-              fontWeight: 600,
-              fontSize: "0.88rem",
-              cursor:
-                datasetMode === "custom" && customDatasetCases.length === 0
-                  ? "not-allowed"
-                  : "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-            }}
           >
-            <span>▶</span> Run {activeCasesCount}-Case Benchmark
+            ▶ Run {activeCasesCount || ""}-case benchmark
           </button>
         </div>
       )}
 
-      {/* ==================================================
-          4. ERROR STATE
-          ================================================== */}
-      {benchmarkRunState && benchmarkRunState.status === "ERROR" && (
-        <div
-          style={{
-            background: "rgba(239, 68, 68, 0.1)",
-            border: "1px solid #ef4444",
-            borderRadius: "12px",
-            padding: "20px 24px",
-            display: "flex",
-            flexDirection: "column",
-            gap: "12px",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "1.05rem",
-              fontWeight: 700,
-              color: "#ef4444",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-            }}
-          >
-            <span>❌</span> Benchmark Failed
-          </div>
-          <div style={{ fontSize: "0.85rem", color: "var(--text-main)" }}>
-            <strong>Completed:</strong> {benchmarkRunState.completed_cases} /{" "}
-            {benchmarkRunState.total_cases} cases
-          </div>
-          {benchmarkRunState.current_case_id && (
-            <div style={{ fontSize: "0.85rem", color: "var(--text-main)" }}>
-              <strong>Failed Case:</strong>{" "}
-              {benchmarkRunState.current_case_id.toUpperCase()}
-            </div>
-          )}
-          <div
-            style={{
-              fontSize: "0.82rem",
-              color: "var(--text-muted)",
-              background: "var(--bg-surface)",
-              padding: "10px",
-              borderRadius: "6px",
-              border: "1px solid var(--border)",
-            }}
-          >
-            <strong>Error:</strong>{" "}
-            {benchmarkRunState.error_message ||
-              "An unexpected execution failure occurred."}
-          </div>
-          <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
+      {/* 5. Error */}
+      {runState?.status === "ERROR" && (
+        <Banner
+          tone="danger"
+          icon="❌"
+          title="Benchmark failed"
+          live="alert"
+          actions={
             <button
               type="button"
-              onClick={handleStartBenchmark}
-              disabled={isLoadingModels || !canRunAgent}
-              className="btn-secondary"
-              style={{
-                fontSize: "0.82rem",
-                borderColor: "#ef4444",
-                color: "#fff",
-              }}
+              className="btn-secondary btn-small"
+              disabled={!canRun}
+              onClick={() => void handleStartBenchmark()}
             >
-              🔄 Retry Benchmark
+              Retry benchmark
             </button>
-          </div>
-        </div>
+          }
+        >
+          {runState.completed_cases} / {runState.total_cases} cases finished.{" "}
+          {runState.error_message ||
+            "An unexpected execution failure occurred."}
+        </Banner>
       )}
 
-      {/* ==================================================
-          5. LIVE BENCHMARK PROGRESS (MOST IMPORTANT SECTION)
-          ================================================== */}
-      {benchmarkRunState && (
+      {/* 6. Live progress */}
+      {runState && (
         <div
-          style={{
-            background: "var(--bg-surface)",
-            border: isRunningBenchmark
-              ? "2px solid var(--accent)"
-              : "1px solid var(--border)",
-            borderRadius: "12px",
-            padding: "24px",
-            display: "flex",
-            flexDirection: "column",
-            gap: "20px",
-            boxShadow: isRunningBenchmark
-              ? "0 0 20px rgba(59, 130, 246, 0.25)"
-              : "none",
-          }}
+          className={`panel${isRunning ? " is-accent" : ""}`}
+          aria-live="polite"
         >
-          {/* Status Header Banner */}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: "12px",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  padding: "4px 14px",
-                  borderRadius: "6px",
-                  fontSize: "0.85rem",
-                  fontWeight: 700,
-                  background:
-                    benchmarkRunState.status === "RUNNING"
-                      ? "rgba(59, 130, 246, 0.2)"
-                      : benchmarkRunState.status === "COMPLETED"
-                        ? "rgba(16, 185, 129, 0.2)"
-                        : benchmarkRunState.status === "CANCELLED"
-                          ? "rgba(245, 158, 11, 0.2)"
-                          : "rgba(239, 68, 68, 0.2)",
-                  color:
-                    benchmarkRunState.status === "RUNNING"
-                      ? "#60a5fa"
-                      : benchmarkRunState.status === "COMPLETED"
-                        ? "#10b981"
-                        : benchmarkRunState.status === "CANCELLED"
-                          ? "#fbbf24"
-                          : "#ef4444",
-                }}
-              >
-                {benchmarkRunState.status === "RUNNING" &&
-                  "⚡ Benchmark Running"}
-                {benchmarkRunState.status === "COMPLETED" &&
-                  "✅ Benchmark Complete"}
-                {benchmarkRunState.status === "CANCELLED" &&
-                  "⏹️ Benchmark Cancelled"}
-                {benchmarkRunState.status === "ERROR" && "❌ Benchmark Error"}
-              </span>
-
-              <span
-                style={{ fontSize: "1.05rem", fontWeight: 700, color: "#fff" }}
-              >
-                {benchmarkRunState.completed_cases} /{" "}
-                {benchmarkRunState.total_cases} Cases Evaluated
+          <div className="u-row" style={{ justifyContent: "space-between" }}>
+            <div className="u-row" style={{ gap: 12 }}>
+              <StatusBadge
+                status={runState.status}
+                size="lg"
+                label={RUN_STATUS_LABEL[runState.status] || runState.status}
+              />
+              <strong>
+                {runState.completed_cases} / {runState.total_cases} cases
+                evaluated
+              </strong>
+              {skippedCount > 0 && (
+                <span className="chip tone-warning">
+                  {skippedCount} skipped
+                </span>
+              )}
+              <span className="chip is-mono" title="Run id">
+                {runState.run_id}
               </span>
             </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-              <span
-                style={{
-                  fontSize: "1.15rem",
-                  fontWeight: 800,
-                  color: isRunningBenchmark ? "#60a5fa" : "#10b981",
-                }}
-              >
-                {benchmarkRunState.progress_pct}%
-              </span>
-              {isRunningBenchmark && (
+            <div className="u-row" style={{ gap: 14 }}>
+              <strong style={{ fontSize: "1.1rem" }}>
+                {runState.progress_pct}%
+              </strong>
+              {runState.status === "RUNNING" && (
                 <CancelButton
-                  onClick={handleCancelBenchmark}
-                  className="btn-secondary"
-                  style={{
-                    fontSize: "0.78rem",
-                    padding: "4px 10px",
-                    borderColor: "#ef4444",
-                    color: "#ef4444",
-                  }}
+                  className="btn-secondary btn-danger btn-small"
+                  onClick={() => void handleCancelBenchmark()}
                 >
-                  Cancel Benchmark
+                  Cancel benchmark
                 </CancelButton>
+              )}
+              {runState.status === "CANCELLING" && (
+                <span className="u-row" style={{ gap: 6 }}>
+                  <span className="spinner" style={{ width: 14, height: 14 }} />
+                  <span className="u-small">Finishing the current case…</span>
+                </span>
               )}
             </div>
           </div>
 
-          {/* Large Animated Progress Bar */}
           <ProgressBar
             ariaLabel="Policy benchmark progress"
-            percentage={benchmarkRunState.progress_pct}
-            trackStyle={{
-              width: "100%",
-              height: "16px",
-              background: "var(--bg-surface-elevated)",
-              borderRadius: "8px",
-              overflow: "hidden",
-              border: "1px solid var(--border)",
-            }}
-            fillStyle={{
-              height: "100%",
-              background:
-                benchmarkRunState.status === "COMPLETED"
-                  ? "linear-gradient(90deg, #10b981, #059669)"
-                  : benchmarkRunState.status === "CANCELLED"
-                    ? "#f59e0b"
-                    : "linear-gradient(90deg, #3b82f6, #60a5fa)",
-              transition: "width 0.35s ease-in-out",
-              borderRadius: "8px",
-            }}
+            percentage={runState.progress_pct}
+            tone={progressTone(runState.status)}
+            size="lg"
           />
 
-          {/* Metadata Row: Current Case, Elapsed Time, Subsystem Progress */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-              gap: "12px",
-              background: "var(--bg-surface-elevated)",
-              padding: "14px 18px",
-              borderRadius: "8px",
-              border: "1px solid var(--border)",
-            }}
-          >
-            <div>
-              <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                Current Case
-              </div>
-              <div
-                style={{
-                  fontSize: "0.92rem",
-                  fontWeight: 700,
-                  color: "#fff",
-                  marginTop: "2px",
-                }}
-              >
-                {benchmarkRunState.current_case_id
-                  ? `${benchmarkRunState.current_case_id.toUpperCase()} · ${
-                      benchmarkRunState.cases_status.find(
-                        (c) => c.case_id === benchmarkRunState.current_case_id,
+          <div className="metric-grid">
+            <MetricCard
+              label="Current case"
+              value={
+                runState.current_case_id && isRunning
+                  ? `${runState.current_case_id.toUpperCase()} · ${
+                      runState.cases_status.find(
+                        (c) => c.case_id === runState.current_case_id,
                       )?.employee_id || ""
                     }`
-                  : "—"}
-              </div>
-            </div>
-
-            <div>
-              <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                Elapsed Time
-              </div>
-              <div
-                style={{
-                  fontSize: "0.92rem",
-                  fontWeight: 700,
-                  color: "#60a5fa",
-                  marginTop: "2px",
-                }}
-              >
-                {benchmarkRunState.elapsed_seconds.toFixed(1)}s
-              </div>
-            </div>
-
-            <div>
-              <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                Agent
-              </div>
-              <div
-                style={{
-                  fontSize: "0.92rem",
-                  fontWeight: 700,
-                  color: "#fff",
-                  marginTop: "2px",
-                }}
-              >
-                {benchmarkRunState.status === "COMPLETED"
-                  ? `${benchmarkRunState.summary?.agent.passed_count ?? 10} / 10 PASS`
-                  : `${benchmarkRunState.agent_completed_count} / ${benchmarkRunState.total_cases} completed`}
-              </div>
-            </div>
-
-            <div>
-              <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                Workflow
-              </div>
-              <div
-                style={{
-                  fontSize: "0.92rem",
-                  fontWeight: 700,
-                  color: "#fff",
-                  marginTop: "2px",
-                }}
-              >
-                {benchmarkRunState.status === "COMPLETED"
-                  ? `${benchmarkRunState.summary?.workflow.passed_count ?? 10} / 10 PASS`
-                  : `${benchmarkRunState.workflow_completed_count} / ${benchmarkRunState.total_cases} completed`}
-              </div>
-            </div>
+                  : "—"
+              }
+              hint={isRunning ? runState.current_question : undefined}
+              tone="info"
+            />
+            <MetricCard
+              label="Elapsed"
+              value={`${runState.elapsed_seconds.toFixed(1)} s`}
+              tone="info"
+            />
+            <MetricCard
+              label="Agent"
+              value={`${runState.agent_completed_count} / ${runState.total_cases}`}
+              hint={isRunning ? runState.current_agent_stage : "runs completed"}
+              tone="neutral"
+            />
+            <MetricCard
+              label="Workflow"
+              value={`${runState.workflow_completed_count} / ${runState.total_cases}`}
+              hint={
+                isRunning ? runState.current_workflow_stage : "runs completed"
+              }
+              tone="neutral"
+            />
           </div>
 
-          {/* Operational Stage Trackers: Current Agent Execution & Current Workflow */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: "16px",
-            }}
-          >
-            {/* Agent Stage Tracker */}
-            <div
-              style={{
-                background: "var(--bg-surface-elevated)",
-                border: "1px solid var(--border)",
-                borderRadius: "8px",
-                padding: "16px",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: "12px",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "0.85rem",
-                    fontWeight: 700,
-                    color: "#60a5fa",
-                  }}
-                >
-                  Current Agent Execution
-                </div>
-                <span
-                  style={{
-                    fontSize: "0.75rem",
-                    color: "var(--text-muted)",
-                    fontWeight: 600,
-                  }}
-                >
-                  {benchmarkRunState.current_case_id
-                    ? benchmarkRunState.current_case_id.toUpperCase()
-                    : "—"}
-                </span>
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "8px",
-                  fontSize: "0.78rem",
-                }}
-              >
-                {agentStages.map((stageName) => {
-                  const icon = getAgentStageStatus(
-                    stageName,
-                    benchmarkRunState.current_agent_stage,
-                  );
-                  const isCurrent = icon === "⚡";
-                  return (
-                    <div
-                      key={stageName}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        color: isCurrent
-                          ? "#fbbf24"
-                          : icon === "✓"
-                            ? "#10b981"
-                            : "var(--text-muted)",
-                        fontWeight: isCurrent ? 700 : 500,
-                      }}
-                    >
-                      <span style={{ width: "16px", textAlign: "center" }}>
-                        {icon}
-                      </span>
-                      <span>{stageName}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Workflow Step Tracker */}
-            <div
-              style={{
-                background: "var(--bg-surface-elevated)",
-                border: "1px solid var(--border)",
-                borderRadius: "8px",
-                padding: "16px",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: "12px",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "0.85rem",
-                    fontWeight: 700,
-                    color: "#10b981",
-                  }}
-                >
-                  Current Workflow
-                </div>
-                <span
-                  style={{
-                    fontSize: "0.75rem",
-                    color: "var(--text-muted)",
-                    fontWeight: 600,
-                  }}
-                >
-                  {benchmarkRunState.current_case_id
-                    ? benchmarkRunState.current_case_id.toUpperCase()
-                    : "—"}
-                </span>
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "8px",
-                  fontSize: "0.78rem",
-                }}
-              >
-                {wfSteps.map((s) => {
-                  const st = getWfStepStatus(
-                    s.key,
-                    benchmarkRunState.current_workflow_stage,
-                  );
-                  const isCurrent = st.status === "RUNNING";
-                  return (
-                    <div
-                      key={s.key}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        color: isCurrent
-                          ? "#fbbf24"
-                          : st.status === "COMPLETE"
-                            ? "#10b981"
-                            : "var(--text-muted)",
-                        fontWeight: isCurrent ? 700 : 500,
-                      }}
-                    >
-                      <span style={{ width: "16px", textAlign: "center" }}>
-                        {st.icon}
-                      </span>
-                      <span>{s.title}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* Compact live status grid */}
           <div>
-            <div
-              style={{
-                fontSize: "0.82rem",
-                fontWeight: 600,
-                color: "var(--text-main)",
-                marginBottom: "10px",
-              }}
-            >
-              Case Progress
+            <div className="section-label" style={{ marginBottom: 8 }}>
+              Case progress
             </div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(5, 1fr)",
-                gap: "8px",
-              }}
-            >
-              {benchmarkRunState.cases_status.map((cs) => {
-                const isCurrent =
-                  cs.case_id === benchmarkRunState.current_case_id &&
-                  benchmarkRunState.status === "RUNNING";
+            <div className="case-grid">
+              {runState.cases_status.map((cs) => {
+                const current =
+                  cs.case_id === runState.current_case_id &&
+                  runState.status === "RUNNING";
+                const open = () => setInspectCaseId(cs.case_id);
                 return (
                   <div
                     key={cs.case_id}
-                    onClick={() => setInspectCase(cs)}
-                    style={{
-                      background: isCurrent
-                        ? "rgba(59, 130, 246, 0.15)"
-                        : "var(--bg-surface-elevated)",
-                      border: isCurrent
-                        ? "1px solid var(--accent)"
-                        : "1px solid var(--border)",
-                      borderRadius: "6px",
-                      padding: "8px",
-                      textAlign: "center",
-                      cursor: "pointer",
-                      transition: "all 0.15s ease",
+                    className={`case-tile${current ? " is-current" : ""}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Inspect ${cs.case_id}, status ${displayStatus(cs.status, runState.status)}`}
+                    title={cs.skip_reason || cs.question}
+                    onClick={open}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        open();
+                      }
                     }}
                   >
-                    <div
-                      style={{
-                        fontSize: "0.75rem",
-                        fontWeight: 700,
-                        color: "#fff",
-                      }}
-                    >
+                    <div className="case-tile-id">
                       {cs.case_id.replace("_", " ").toUpperCase()}
                     </div>
-                    <div
-                      style={{
-                        fontSize: "0.72rem",
-                        fontWeight: 700,
-                        marginTop: "4px",
-                        color:
-                          cs.status === "PASS"
-                            ? "#10b981"
-                            : cs.status === "FAIL"
-                              ? "#ef4444"
-                              : cs.status === "RUNNING"
-                                ? "#60a5fa"
-                                : cs.status === "ERROR"
-                                  ? "#fbbf24"
-                                  : "var(--text-muted)",
-                      }}
-                    >
-                      {cs.status === "PASS" && "✓ PASS"}
-                      {cs.status === "FAIL" && "✗ FAIL"}
-                      {cs.status === "RUNNING" && "⚡ RUN"}
-                      {cs.status === "WAITING" && "○ WAIT"}
-                      {cs.status === "ERROR" && "! ERROR"}
+                    <div className="case-tile-status">
+                      <StatusBadge
+                        status={displayStatus(cs.status, runState.status)}
+                      />
                     </div>
                   </div>
                 );
@@ -1396,1436 +1291,468 @@ export const PolicyAssistantView: React.FC<PolicyAssistantViewProps> = ({
             </div>
           </div>
 
-          {/* Action button if Completed */}
-          {benchmarkRunState.status === "COMPLETED" && (
+          {runState.status === "COMPLETED" && (
             <div
+              className="u-row"
               style={{
-                display: "flex",
                 justifyContent: "flex-end",
                 borderTop: "1px solid var(--border)",
-                paddingTop: "16px",
+                paddingTop: 14,
               }}
             >
               <button
                 type="button"
-                onClick={handleStartBenchmark}
-                disabled={isLoadingModels || !canRunAgent}
-                style={{
-                  padding: "8px 18px",
-                  background: "var(--accent)",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "6px",
-                  fontWeight: 600,
-                  fontSize: "0.85rem",
-                  cursor: "pointer",
-                }}
+                className="btn-primary btn-inline"
+                disabled={!canRun}
+                onClick={() => void handleStartBenchmark()}
               >
-                🔄 Run Benchmark Again
+                🔄 Run benchmark again
               </button>
             </div>
           )}
         </div>
       )}
 
-      {/* ==================================================
-          6. FINAL SCORECARD
-          ================================================== */}
-      {benchmarkRunState && benchmarkRunState.summary && (
-        <div
-          style={{
-            background: "var(--bg-surface)",
-            border: "1px solid var(--accent)",
-            borderRadius: "12px",
-            padding: "20px 24px",
-          }}
-        >
-          <h3
-            style={{
-              margin: "0 0 16px 0",
-              fontSize: "1.05rem",
-              color: "#60a5fa",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-            }}
-          >
-            <span>🏁</span> Benchmark Scorecard
+      {/* 7. Scorecard */}
+      {runState?.summary && (
+        <div className="panel is-accent">
+          <h3 className="panel-title">
+            <span aria-hidden="true">🏁</span> Benchmark scorecard
           </h3>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-              gap: "14px",
-            }}
-          >
+          <div className="metric-grid">
             <MetricCard
-              label="Pass Rate (Agent / Workflow)"
-              value={
-                <>
-                  {benchmarkRunState.summary.agent.pass_rate_pct}% /{" "}
-                  {benchmarkRunState.summary.workflow.pass_rate_pct}%
-                </>
-              }
-              description={
-                <>
-                  {benchmarkRunState.summary.agent.passed_count}/
-                  {benchmarkRunState.total_cases} vs{" "}
-                  {benchmarkRunState.summary.workflow.passed_count}/
-                  {benchmarkRunState.total_cases}
-                </>
-              }
-              valueColor="#10b981"
+              label="Agent pass rate"
+              value={formatPct(runState.summary.agent.pass_rate_pct)}
+              hint={`strict ${formatPct(runState.summary.agent.strict_pass_rate_pct)} · ${runState.summary.agent.passed_count}/${runState.summary.agent.total_cases} cases`}
+              tone="success"
             />
-
             <MetricCard
-              label="p50 Latency (Agent / Workflow)"
-              value={
-                <>
-                  {latencyMetrics.agentP50
-                    ? `${latencyMetrics.agentP50.toFixed(1)}ms`
-                    : `${benchmarkRunState.summary.agent.p50_latency_ms}ms`}{" "}
-                  /{" "}
-                  {latencyMetrics.wfP50
-                    ? `${latencyMetrics.wfP50.toFixed(2)}ms`
-                    : `${benchmarkRunState.summary.workflow.p50_latency_ms}ms`}
-                </>
-              }
-              description="Median response latency"
-              valueColor="#60a5fa"
+              label="Workflow pass rate"
+              value={formatPct(runState.summary.workflow.pass_rate_pct)}
+              hint={`strict ${formatPct(runState.summary.workflow.strict_pass_rate_pct)} · ${runState.summary.workflow.passed_count}/${runState.summary.workflow.total_cases} cases`}
+              tone="success"
             />
-
             <MetricCard
-              label="p95 Latency (Agent / Workflow)"
-              value={
-                <>
-                  {latencyMetrics.agentP95
-                    ? `${latencyMetrics.agentP95.toFixed(1)}ms`
-                    : "—"}{" "}
-                  /{" "}
-                  {latencyMetrics.wfP95
-                    ? `${latencyMetrics.wfP95.toFixed(2)}ms`
-                    : "—"}
-                </>
-              }
-              description="95th percentile latency"
-              valueColor="#38bdf8"
-            />
-
-            <MetricCard
-              label="Total Tokens (Agent / Workflow)"
-              value={
-                <>
-                  {benchmarkRunState.summary.agent.total_tokens.toLocaleString()}{" "}
-                  /{" "}
-                  {benchmarkRunState.summary.workflow.total_tokens.toLocaleString()}
-                </>
-              }
-              description="Prompt + completion tokens"
-              valueColor="#fbbf24"
-            />
-
-            <MetricCard
-              label="Estimated Cost / Question (Agent / Workflow)"
-              value={
-                <>
-                  $
-                  {benchmarkRunState.summary.agent.cost_per_question_usd.toFixed(
-                    6,
-                  )}{" "}
-                  / $
-                  {benchmarkRunState.summary.workflow.cost_per_question_usd.toFixed(
-                    6,
-                  )}
-                </>
-              }
-              description="Token-cost proxy only; provider cost is N/A"
-              valueColor="#a78bfa"
+              label="Skipped cases"
+              value={skippedCount}
+              hint="Needed tools no connected MCP server provides"
+              tone={skippedCount > 0 ? "warning" : "neutral"}
             />
           </div>
-        </div>
-      )}
-
-      {/* ==================================================
-          7. BENCHMARK RESULTS TABLE
-          ================================================== */}
-      {benchmarkRunState &&
-        benchmarkRunState.cases_status &&
-        benchmarkRunState.cases_status.length > 0 && (
-          <div
-            style={{
-              background: "var(--bg-surface)",
-              border: "1px solid var(--border)",
-              borderRadius: "12px",
-              padding: "20px",
-              overflowX: "auto",
-            }}
-          >
-            <h3
-              style={{
-                margin: "0 0 16px 0",
-                fontSize: "1.05rem",
-                color: "#fff",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-              }}
-            >
-              <span>📋</span> {benchmarkRunState.total_cases}-Case Benchmark
-              Results
-            </h3>
-
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: "0.78rem",
-                textAlign: "left",
-              }}
-            >
-              <thead>
-                <tr
-                  style={{
-                    borderBottom: "1px solid var(--border)",
-                    color: "var(--text-muted)",
-                  }}
-                >
-                  <th style={{ padding: "8px 10px" }}>Case</th>
-                  <th style={{ padding: "8px 10px" }}>Employee</th>
-                  <th style={{ padding: "8px 10px" }}>Question</th>
-                  <th style={{ padding: "8px 10px" }}>Expected</th>
-                  <th style={{ padding: "8px 10px" }}>Agent</th>
-                  <th style={{ padding: "8px 10px" }}>Workflow</th>
-                  <th style={{ padding: "8px 10px" }}>Agent Tokens</th>
-                  <th style={{ padding: "8px 10px" }}>Workflow Tokens</th>
-                  <th style={{ padding: "8px 10px" }}>Agent Latency</th>
-                  <th style={{ padding: "8px 10px" }}>Workflow Latency</th>
-                  <th style={{ padding: "8px 10px" }}>
-                    Estimated Cost (Proxy)
-                  </th>
-                  <th style={{ padding: "8px 10px", textAlign: "center" }}>
-                    Inspect
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {benchmarkRunState.cases_status.map((cs) => (
-                  <tr
-                    key={cs.case_id}
-                    style={{ borderBottom: "1px solid var(--border)" }}
-                  >
-                    <td
-                      style={{
-                        padding: "10px 8px",
-                        fontWeight: 600,
-                        color: "#fff",
-                      }}
-                    >
-                      {cs.case_id.toUpperCase()}
-                    </td>
-                    <td
-                      style={{
-                        padding: "10px 8px",
-                        fontWeight: 600,
-                        color: "#60a5fa",
-                      }}
-                    >
-                      {cs.employee_id}
-                    </td>
-                    <td style={{ padding: "10px 8px", maxWidth: "220px" }}>
-                      <div
-                        style={{
-                          color: "var(--text-main)",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                        title={cs.question}
-                      >
-                        {cs.question}
-                      </div>
-                    </td>
-                    <td style={{ padding: "10px 8px", maxWidth: "180px" }}>
-                      <div
-                        style={{
-                          color: "var(--text-muted)",
-                          fontSize: "0.72rem",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                        title={cs.ground_truth}
-                      >
-                        {cs.ground_truth || "—"}
-                      </div>
-                    </td>
-                    <td style={{ padding: "10px 8px" }}>
-                      <span
-                        style={{
-                          fontWeight: 700,
-                          color: cs.agent_passed
-                            ? "#10b981"
-                            : cs.agent_passed === false
-                              ? "#ef4444"
-                              : "var(--text-muted)",
-                        }}
-                      >
-                        {cs.agent_passed
-                          ? "✓ PASS"
-                          : cs.agent_passed === false
-                            ? "✗ FAIL"
-                            : cs.agent_status}
-                      </span>
-                    </td>
-                    <td style={{ padding: "10px 8px" }}>
-                      <span
-                        style={{
-                          fontWeight: 700,
-                          color: cs.workflow_passed
-                            ? "#10b981"
-                            : cs.workflow_passed === false
-                              ? "#ef4444"
-                              : "var(--text-muted)",
-                        }}
-                      >
-                        {cs.workflow_passed
-                          ? "✓ PASS"
-                          : cs.workflow_passed === false
-                            ? "✗ FAIL"
-                            : cs.workflow_status}
-                      </span>
-                    </td>
-                    <td style={{ padding: "10px 8px", color: "#fbbf24" }}>
-                      {cs.agent_tokens ?? "—"}
-                    </td>
-                    <td style={{ padding: "10px 8px", color: "#fbbf24" }}>
-                      {cs.workflow_tokens ?? "—"}
-                    </td>
-                    <td style={{ padding: "10px 8px", color: "#60a5fa" }}>
-                      {cs.agent_latency_ms
-                        ? `${cs.agent_latency_ms.toFixed(1)}ms`
-                        : "—"}
-                    </td>
-                    <td style={{ padding: "10px 8px", color: "#10b981" }}>
-                      {cs.workflow_latency_ms
-                        ? `${cs.workflow_latency_ms.toFixed(2)}ms`
-                        : "—"}
-                    </td>
-                    <td style={{ padding: "10px 8px", color: "#a78bfa" }}>
-                      {cs.agent_cost_usd
-                        ? `$${cs.agent_cost_usd.toFixed(6)}`
-                        : "—"}
-                    </td>
-                    <td style={{ padding: "10px 8px", textAlign: "center" }}>
-                      <button
-                        type="button"
-                        onClick={() => setInspectCase(cs)}
-                        className="btn-secondary"
-                        style={{ fontSize: "0.72rem", padding: "3px 8px" }}
-                      >
-                        Inspect
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-      {/* ==================================================
-          8. INSPECT CASE (MODAL / DRAWER)
-          ================================================== */}
-      {inspectCase && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0, 0, 0, 0.82)",
-            zIndex: 1000,
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            padding: "20px",
-          }}
-          onClick={() => setInspectCase(null)}
-        >
-          <div
-            style={{
-              background: "var(--bg-surface)",
-              border: "1px solid var(--border)",
-              borderRadius: "12px",
-              maxWidth: "880px",
-              width: "100%",
-              maxHeight: "88vh",
-              overflowY: "auto",
-              padding: "26px",
-              display: "flex",
-              flexDirection: "column",
-              gap: "18px",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                borderBottom: "1px solid var(--border)",
-                paddingBottom: "12px",
-              }}
-            >
-              <h3 style={{ margin: 0, fontSize: "1.15rem", color: "#fff" }}>
-                {inspectCase.case_id.toUpperCase()} · {inspectCase.employee_id}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setInspectCase(null)}
-                className="btn-secondary"
-                style={{ fontSize: "0.8rem", padding: "4px 10px" }}
-              >
-                ✕ Close
-              </button>
-            </div>
-
-            {/* Case Metadata */}
-            <div
-              style={{
-                background: "var(--bg-surface-elevated)",
-                padding: "14px",
-                borderRadius: "8px",
-                fontSize: "0.82rem",
-                display: "flex",
-                flexDirection: "column",
-                gap: "6px",
-              }}
-            >
-              <div>
-                <strong>Employee:</strong> {inspectCase.employee_id}
-              </div>
-              <div>
-                <strong>Question:</strong> {inspectCase.question}
-              </div>
-              <div>
-                <strong>Expected:</strong> {inspectCase.ground_truth || "N/A"}
-              </div>
-              {inspectCase.pass_criteria &&
-                inspectCase.pass_criteria.length > 0 && (
+          <DataTable
+            ariaLabel="Benchmark scorecard: agent versus workflow"
+            caption="Agent vs workflow (scored cases only; skipped cases are excluded)"
+            rows={scorecardRows(
+              runState.summary.agent,
+              runState.summary.workflow,
+            )}
+            rowKey={(row) => row.key}
+            columns={[
+              {
+                key: "metric",
+                header: "Metric",
+                render: (row) => (
                   <div>
-                    <strong>Pass Criteria:</strong>{" "}
-                    {inspectCase.pass_criteria.map((c) => `"${c}"`).join(", ")}
-                  </div>
-                )}
-            </div>
-
-            {/* Side-by-Side Execution Breakdown */}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "16px",
-              }}
-            >
-              {/* AGENT BREAKDOWN */}
-              <div
-                style={{
-                  background: "var(--bg-surface-elevated)",
-                  padding: "16px",
-                  borderRadius: "8px",
-                  border: "1px solid var(--border)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "10px",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
-                  <h4
-                    style={{ margin: 0, fontSize: "0.95rem", color: "#60a5fa" }}
-                  >
-                    AGENT
-                  </h4>
-                  <span
-                    style={{
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      color: inspectCase.agent_passed ? "#10b981" : "#ef4444",
-                    }}
-                  >
-                    Status: {inspectCase.agent_passed ? "PASS" : "FAIL"}
-                  </span>
-                </div>
-
-                <div style={{ fontSize: "0.78rem" }}>
-                  <strong>Actual Answer:</strong>
-                  <div
-                    style={{
-                      marginTop: "2px",
-                      color: "var(--text-main)",
-                      background: "var(--bg-surface)",
-                      padding: "8px",
-                      borderRadius: "6px",
-                    }}
-                  >
-                    {inspectCase.agent_entitlement || "None"}
-                  </div>
-                </div>
-
-                <div style={{ fontSize: "0.78rem" }}>
-                  <strong>Rule Cited:</strong>{" "}
-                  <code>{inspectCase.agent_rule || "None"}</code>
-                </div>
-
-                {/* Execution Trace (Operational metadata ONLY, NO CoT) */}
-                <div style={{ fontSize: "0.78rem" }}>
-                  <strong>Execution Trace:</strong>
-                  <div
-                    style={{
-                      marginTop: "6px",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "6px",
-                    }}
-                  >
-                    {inspectCase.agent_result?.tool_calls &&
-                    inspectCase.agent_result.tool_calls.length > 0 ? (
-                      inspectCase.agent_result.tool_calls.map((tc, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            background: "var(--bg-surface)",
-                            padding: "6px 8px",
-                            borderRadius: "4px",
-                            fontSize: "0.72rem",
-                          }}
-                        >
-                          <div style={{ color: "#60a5fa", fontWeight: 600 }}>
-                            Iteration {tc.step}: ✓ {tc.tool_name}
-                          </div>
-                          <div
-                            style={{
-                              color: "var(--text-muted)",
-                              marginTop: "2px",
-                            }}
-                          >
-                            Input: {JSON.stringify(tc.arguments)}
-                          </div>
-                          <div style={{ color: "var(--text-muted)" }}>
-                            Latency: {tc.latency_ms?.toFixed(2)}ms
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div
-                        style={{
-                          background: "var(--bg-surface)",
-                          padding: "6px 8px",
-                          borderRadius: "4px",
-                          fontSize: "0.72rem",
-                        }}
-                      >
-                        <div>
-                          Iteration 1: ✓ get_employee_record (Input:{" "}
-                          {inspectCase.employee_id})
-                        </div>
-                        <div>
-                          Iteration 2: ✓ search_handbook (Top K: {topK})
-                        </div>
-                        <div>Iteration 3: ✓ Final answer generation</div>
-                      </div>
+                    <strong>{row.metric}</strong>
+                    {row.hint && (
+                      <div className="u-tiny u-muted">{row.hint}</div>
                     )}
                   </div>
-                </div>
-
-                <div
-                  style={{
-                    fontSize: "0.75rem",
-                    color: "var(--text-muted)",
-                    borderTop: "1px solid var(--border)",
-                    paddingTop: "8px",
-                    marginTop: "auto",
-                  }}
-                >
-                  <div>
-                    Tokens: {inspectCase.agent_tokens ?? "—"} (Cost: $
-                    {inspectCase.agent_cost_usd?.toFixed(6) ?? "0.000000"})
-                  </div>
-                  <div>
-                    Latency: {inspectCase.agent_latency_ms?.toFixed(2) ?? "—"}ms
-                  </div>
-                </div>
-              </div>
-
-              {/* WORKFLOW BREAKDOWN */}
-              <div
-                style={{
-                  background: "var(--bg-surface-elevated)",
-                  padding: "16px",
-                  borderRadius: "8px",
-                  border: "1px solid var(--border)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "10px",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
-                  <h4
-                    style={{ margin: 0, fontSize: "0.95rem", color: "#10b981" }}
-                  >
-                    WORKFLOW
-                  </h4>
-                  <span
-                    style={{
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      color: inspectCase.workflow_passed
-                        ? "#10b981"
-                        : "#ef4444",
-                    }}
-                  >
-                    Status: {inspectCase.workflow_passed ? "PASS" : "FAIL"}
-                  </span>
-                </div>
-
-                <div style={{ fontSize: "0.78rem" }}>
-                  <strong>Actual Answer:</strong>
-                  <div
-                    style={{
-                      marginTop: "2px",
-                      color: "var(--text-main)",
-                      background: "var(--bg-surface)",
-                      padding: "8px",
-                      borderRadius: "6px",
-                    }}
-                  >
-                    {inspectCase.workflow_entitlement || "None"}
-                  </div>
-                </div>
-
-                <div style={{ fontSize: "0.78rem" }}>
-                  <strong>Rule Cited:</strong>{" "}
-                  <code>{inspectCase.workflow_rule || "None"}</code>
-                </div>
-
-                {/* Steps */}
-                <div style={{ fontSize: "0.78rem" }}>
-                  <strong>Workflow Execution Steps:</strong>
-                  <div
-                    style={{
-                      marginTop: "6px",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "6px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        background: "var(--bg-surface)",
-                        padding: "6px 8px",
-                        borderRadius: "4px",
-                        fontSize: "0.72rem",
-                      }}
-                    >
-                      <div style={{ color: "#10b981", fontWeight: 600 }}>
-                        Step 1: ✓ Employee lookup
-                      </div>
-                      <div style={{ color: "var(--text-muted)" }}>
-                        Fetched {inspectCase.employee_id} canonical profile
-                      </div>
-                    </div>
-                    <div
-                      style={{
-                        background: "var(--bg-surface)",
-                        padding: "6px 8px",
-                        borderRadius: "4px",
-                        fontSize: "0.72rem",
-                      }}
-                    >
-                      <div style={{ color: "#10b981", fontWeight: 600 }}>
-                        Step 2: ✓ Handbook lookup
-                      </div>
-                      <div style={{ color: "var(--text-muted)" }}>
-                        Matched policy rule against handbook
-                      </div>
-                    </div>
-                    <div
-                      style={{
-                        background: "var(--bg-surface)",
-                        padding: "6px 8px",
-                        borderRadius: "4px",
-                        fontSize: "0.72rem",
-                      }}
-                    >
-                      <div style={{ color: "#10b981", fontWeight: 600 }}>
-                        Step 3: ✓ Deterministic resolution
-                      </div>
-                      <div style={{ color: "var(--text-muted)" }}>
-                        Calculated fixed entitlement value
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    fontSize: "0.75rem",
-                    color: "var(--text-muted)",
-                    borderTop: "1px solid var(--border)",
-                    paddingTop: "8px",
-                    marginTop: "auto",
-                  }}
-                >
-                  <div>
-                    Tokens: {inspectCase.workflow_tokens ?? "—"} (Cost: $
-                    {inspectCase.workflow_cost_usd?.toFixed(6) ?? "0.000000"})
-                  </div>
-                  <div>
-                    Latency:{" "}
-                    {inspectCase.workflow_latency_ms?.toFixed(2) ?? "—"}ms
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+                ),
+              },
+              { key: "agent", header: "Agent", render: (row) => row.agent },
+              {
+                key: "workflow",
+                header: "Workflow",
+                render: (row) => row.workflow,
+              },
+            ]}
+          />
         </div>
       )}
 
-      {/* ==================================================
-          9. EXPERIMENT HISTORY
-          ================================================== */}
-      {benchmarkHistory.length > 0 && (
-        <div
-          style={{
-            background: "var(--bg-surface)",
-            border: "1px solid var(--border)",
-            borderRadius: "12px",
-            padding: "20px",
-            overflowX: "auto",
+      {/* 8. Trajectory */}
+      {runState?.status === "COMPLETED" && runState.trajectory && (
+        <TrajectoryPanel
+          run={runState}
+          report={runState.trajectory}
+          baselineCandidates={baselineCandidates}
+        />
+      )}
+      {runState?.status === "COMPLETED" && !runState.trajectory && (
+        <Banner
+          tone="warning"
+          icon="🧭"
+          title="No trajectory report"
+          live="status"
+        >
+          This run finished without a trajectory report (scoring failed on the
+          server or the run predates it).
+        </Banner>
+      )}
+
+      {/* 9. Results table */}
+      {runState && runState.cases_status.length > 0 && (
+        <div className="panel">
+          <h3 className="panel-title">
+            <span aria-hidden="true">📋</span> {runState.total_cases}-case
+            benchmark results
+          </h3>
+          <DataTable
+            ariaLabel="Benchmark results per case"
+            rows={runState.cases_status}
+            rowKey={(cs) => cs.case_id}
+            columns={caseColumns}
+          />
+        </div>
+      )}
+
+      {/* 10. Case inspector */}
+      {inspectCase && (
+        <Modal
+          title={`${inspectCase.case_id.toUpperCase()} · ${inspectCase.employee_id}`}
+          onClose={() => setInspectCaseId(null)}
+          size="xl"
+        >
+          {renderCaseDetail(inspectCase)}
+        </Modal>
+      )}
+
+      {/* 11. History / load a run */}
+      <div className="panel">
+        <h3 className="panel-title">
+          <span aria-hidden="true">📜</span> Experiment history
+          <span className="chip">{history.length} this session</span>
+        </h3>
+        <form
+          className="u-row"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleLoadRun(loadRunId);
           }}
         >
-          <h3
-            style={{
-              margin: "0 0 16px 0",
-              fontSize: "1.05rem",
-              color: "#fff",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-            }}
+          <label className="field-label" htmlFor="policy-load-run">
+            Load a run by id
+          </label>
+          <input
+            id="policy-load-run"
+            className="field-input"
+            style={{ width: 260 }}
+            value={loadRunId}
+            placeholder="bench_…"
+            spellCheck={false}
+            autoComplete="off"
+            onChange={(event) => setLoadRunId(event.target.value)}
+          />
+          <button
+            type="submit"
+            className="btn-secondary btn-small"
+            disabled={!loadRunId.trim() || isLoadingRun || isRunning}
           >
-            <span>📜</span> Experiment History ({benchmarkHistory.length} Runs)
-          </h3>
-          <table
-            style={{
-              width: "100%",
-              borderCollapse: "collapse",
-              fontSize: "0.78rem",
-              textAlign: "left",
-            }}
-          >
-            <thead>
-              <tr
-                style={{
-                  borderBottom: "1px solid var(--border)",
-                  color: "var(--text-muted)",
-                }}
-              >
-                <th style={{ padding: "8px 10px" }}>Run ID</th>
-                <th style={{ padding: "8px 10px" }}>Top K</th>
-                <th style={{ padding: "8px 10px" }}>Temperature</th>
-                <th style={{ padding: "8px 10px" }}>Model</th>
-                <th style={{ padding: "8px 10px" }}>Agent Pass Rate</th>
-                <th style={{ padding: "8px 10px" }}>Workflow Pass Rate</th>
-                <th style={{ padding: "8px 10px" }}>Agent p50</th>
-                <th style={{ padding: "8px 10px" }}>Workflow p50</th>
-                <th style={{ padding: "8px 10px" }}>Agent Tokens</th>
-                <th style={{ padding: "8px 10px" }}>Workflow Tokens</th>
-                <th style={{ padding: "8px 10px", textAlign: "center" }}>
-                  Load
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {benchmarkHistory.map((h) => (
-                <tr
-                  key={h.run_id}
-                  style={{ borderBottom: "1px solid var(--border)" }}
-                >
-                  <td style={{ padding: "8px 10px", fontWeight: 600 }}>
-                    <code>{h.run_id}</code>
-                  </td>
-                  <td style={{ padding: "8px 10px" }}>K={h.top_k}</td>
-                  <td style={{ padding: "8px 10px" }}>T={h.temperature}</td>
-                  <td style={{ padding: "8px 10px" }}>
-                    {h.model || "llama3.1:8b"}
-                  </td>
-                  <td
-                    style={{
-                      padding: "8px 10px",
-                      color: "#10b981",
-                      fontWeight: 600,
-                    }}
+            {isLoadingRun ? "Loading…" : "Load run"}
+          </button>
+        </form>
+        {history.length > 0 && (
+          <DataTable
+            ariaLabel="Benchmark run history"
+            rows={history}
+            rowKey={(h) => h.run_id}
+            columns={[
+              {
+                key: "id",
+                header: "Run",
+                render: (h) => <code>{h.run_id}</code>,
+              },
+              { key: "k", header: "Top-K", render: (h) => `K=${h.top_k}` },
+              { key: "t", header: "Temp", render: (h) => `T=${h.temperature}` },
+              { key: "m", header: "Model", render: (h) => h.model || "—" },
+              {
+                key: "ap",
+                header: "Agent pass",
+                render: (h) => formatPct(h.summary?.agent.pass_rate_pct),
+              },
+              {
+                key: "wp",
+                header: "Workflow pass",
+                render: (h) => formatPct(h.summary?.workflow.pass_rate_pct),
+              },
+              {
+                key: "al",
+                header: "Agent p50 / max",
+                render: (h) =>
+                  pair(
+                    formatMs(h.summary?.agent.p50_latency_ms, 0),
+                    formatMs(h.summary?.agent.max_latency_ms, 0),
+                  ),
+              },
+              {
+                key: "wl",
+                header: "Workflow p50 / max",
+                render: (h) =>
+                  pair(
+                    formatMs(h.summary?.workflow.p50_latency_ms, 0),
+                    formatMs(h.summary?.workflow.max_latency_ms, 0),
+                  ),
+              },
+              {
+                key: "tp",
+                header: "Trajectory pass",
+                render: (h) =>
+                  formatPct(h.trajectory?.summary.trajectory_pass_rate_pct),
+              },
+              {
+                key: "load",
+                header: "Load",
+                align: "center",
+                render: (h) => (
+                  <button
+                    type="button"
+                    className="btn-secondary btn-small"
+                    disabled={isRunning}
+                    onClick={() => void handleLoadRun(h.run_id)}
                   >
-                    {h.summary?.agent.pass_rate_pct ?? "-"}%
-                  </td>
-                  <td
-                    style={{
-                      padding: "8px 10px",
-                      color: "#10b981",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {h.summary?.workflow.pass_rate_pct ?? "-"}%
-                  </td>
-                  <td style={{ padding: "8px 10px", color: "#60a5fa" }}>
-                    {h.summary?.agent.p50_latency_ms ?? "-"}ms
-                  </td>
-                  <td style={{ padding: "8px 10px", color: "#10b981" }}>
-                    {h.summary?.workflow.p50_latency_ms ?? "-"}ms
-                  </td>
-                  <td style={{ padding: "8px 10px", color: "#fbbf24" }}>
-                    {h.summary?.agent.total_tokens.toLocaleString() ?? "-"}
-                  </td>
-                  <td style={{ padding: "8px 10px", color: "#fbbf24" }}>
-                    {h.summary?.workflow.total_tokens.toLocaleString() ?? "-"}
-                  </td>
-                  <td style={{ padding: "8px 10px", textAlign: "center" }}>
-                    <button
-                      type="button"
-                      onClick={() => handleLoadHistoricRun(h)}
-                      className="btn-secondary"
-                      style={{ fontSize: "0.72rem", padding: "3px 8px" }}
-                    >
-                      Load
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+                    Load
+                  </button>
+                ),
+              },
+            ]}
+          />
+        )}
+      </div>
 
-      {/* ==================================================
-          10. METHODOLOGY / BENCHMARK NOTES
-          ================================================== */}
-      <div
-        style={{
-          background: "var(--bg-surface)",
-          border: "1px solid var(--border)",
-          borderRadius: "12px",
-          padding: "16px 20px",
-        }}
-      >
+      {/* 12. Methodology */}
+      <div className="panel">
         <button
           type="button"
-          onClick={() => setShowMethodology(!showMethodology)}
+          className="btn-secondary"
           style={{
-            background: "none",
-            border: "none",
-            color: "var(--text-main)",
-            fontSize: "0.92rem",
-            fontWeight: 600,
-            cursor: "pointer",
-            padding: 0,
             display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            width: "100%",
             justifyContent: "space-between",
+            width: "100%",
           }}
+          aria-expanded={showMethodology}
+          onClick={() => setShowMethodology((v) => !v)}
         >
-          <span>Benchmark Methodology</span>
-          <span>{showMethodology ? "▴" : "▾"}</span>
+          <span>Benchmark methodology</span>
+          <span aria-hidden="true">{showMethodology ? "▴" : "▾"}</span>
         </button>
-
         {showMethodology && (
           <div
-            style={{
-              marginTop: "14px",
-              fontSize: "0.8rem",
-              color: "var(--text-muted)",
-              lineHeight: "1.5",
-              borderTop: "1px solid var(--border)",
-              paddingTop: "12px",
-            }}
+            className="u-small u-stack"
+            style={{ color: "var(--text-secondary)", lineHeight: 1.5 }}
           >
             <p>
-              <strong>Agent:</strong> Live LLM-based ReAct execution using the
-              configured provider. The model selects tools dynamically and
-              receives tool results before producing the final answer.
+              <strong>Documents:</strong> every tool reads only the chunks you
+              uploaded in this session; nothing is answered from built-in data.
             </p>
             <p>
-              <strong>Workflow:</strong> Fixed employee and handbook lookups
-              followed by one model synthesis call. The selected model and
-              temperature are shared with the Agent.
+              <strong>Agent:</strong> live ReAct loop. The model picks tools
+              from the MCP registry, the host validates and runs each call (with
+              bounded retries), and the model writes the final structured
+              answer.
             </p>
             <p>
-              <strong>Latency:</strong> Agent latency includes real provider
-              execution for both Agent and Workflow synthesis.
+              <strong>Workflow:</strong> fixed employee lookup and policy search
+              (plus jurisdiction rules when the question names one), then one
+              model call.
             </p>
             <p>
-              <strong>Cost:</strong> Estimated token-cost proxy based on
-              recorded usage; provider billing is not represented.
+              <strong>Scoring:</strong> pass rate uses a normalised comparison
+              with explicit per-case aliases; strict pass rate is the older
+              literal-substring check, kept so historical numbers stay
+              comparable. Trajectory scoring compares the agent's tool path with
+              every allowed path for the case.
             </p>
             <p>
-              <strong>Reliability:</strong> Deterministic policy execution
-              ensures reproducible entitlement resolution against verified
-              organization handbooks.
+              <strong>Cost:</strong> an estimated token-cost proxy from recorded
+              usage, never provider billing.
             </p>
           </div>
         )}
       </div>
 
-      {/* ==================================================
-          11. SINGLE CASE PLAYGROUND (DEDICATED SEPARATE SECTION)
-          ================================================== */}
-      <div
-        style={{
-          background: "var(--bg-surface)",
-          border: "1px solid var(--border)",
-          borderRadius: "12px",
-          padding: "20px 24px",
-          marginTop: "8px",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "16px",
-          }}
-        >
+      {/* 13. Playground */}
+      <div className="panel">
+        <div className="u-row" style={{ justifyContent: "space-between" }}>
           <div>
-            <h3
-              style={{
-                margin: 0,
-                fontSize: "1.05rem",
-                color: "#fff",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-              }}
-            >
-              <span>🧪</span> Single Case Playground
+            <h3 className="panel-title">
+              <span aria-hidden="true">🧪</span> Single case playground
             </h3>
-            <p
-              style={{
-                margin: "4px 0 0 0",
-                fontSize: "0.78rem",
-                color: "var(--text-muted)",
-              }}
-            >
-              Interactive ad-hoc testing sandbox isolated from the 10-case
-              benchmark.
+            <p className="panel-subtitle">
+              Ad-hoc runs isolated from the benchmark. Uses the configuration
+              above.
             </p>
           </div>
-
           <button
             type="button"
-            onClick={() => setShowPlayground(!showPlayground)}
-            className="btn-secondary"
-            style={{ fontSize: "0.78rem", padding: "4px 12px" }}
+            className="btn-secondary btn-small"
+            aria-expanded={showPlayground}
+            onClick={() => setShowPlayground((v) => !v)}
           >
-            {showPlayground ? "Hide Playground ▴" : "Open Playground ▾"}
+            {showPlayground ? "Hide playground ▴" : "Open playground ▾"}
           </button>
         </div>
 
         {showPlayground && (
-          <div>
-            {isRunningBenchmark && (
-              <div
-                style={{
-                  background: "rgba(245, 158, 11, 0.15)",
-                  color: "#fbbf24",
-                  padding: "8px 12px",
-                  borderRadius: "6px",
-                  fontSize: "0.8rem",
-                  marginBottom: "14px",
-                  border: "1px solid rgba(245, 158, 11, 0.3)",
-                }}
-              >
-                🔒 Benchmark in progress — Single case manual execution is
-                disabled during benchmark runs.
-              </div>
+          <div className="u-stack">
+            {isRunning && (
+              <Banner tone="warning" icon="🔒" live="status">
+                A benchmark is running, so single-case runs are disabled until
+                it finishes.
+              </Banner>
             )}
-
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "minmax(280px, 340px) 1fr",
-                gap: "20px",
+                gap: 16,
+                gridTemplateColumns: "minmax(260px, 340px) minmax(0, 1fr)",
               }}
             >
-              {/* Left Column: Cases List & Selected Employee Record */}
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "14px",
-                }}
-              >
-                {/* Cases List */}
-                <div
-                  style={{
-                    background: "var(--bg-surface-elevated)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "8px",
-                    padding: "12px",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: "0.82rem",
-                      fontWeight: 600,
-                      color: "#fff",
-                      marginBottom: "8px",
-                    }}
-                  >
-                    Select Preset Case ({cases.length})
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "6px",
-                      maxHeight: "200px",
-                      overflowY: "auto",
-                    }}
-                  >
-                    {cases.map((c) => (
-                      <button
-                        key={c.case_id}
-                        type="button"
-                        onClick={() => handleSelectCase(c)}
-                        disabled={isRunningBenchmark || isRunningSingle}
-                        style={{
-                          textAlign: "left",
-                          padding: "6px 8px",
-                          borderRadius: "4px",
-                          border:
-                            selectedCaseId === c.case_id
-                              ? "1px solid var(--accent)"
-                              : "1px solid var(--border)",
-                          background:
-                            selectedCaseId === c.case_id
-                              ? "rgba(59, 130, 246, 0.15)"
-                              : "transparent",
-                          color:
-                            selectedCaseId === c.case_id
-                              ? "#60a5fa"
-                              : "var(--text-main)",
-                          cursor:
-                            isRunningBenchmark || isRunningSingle
-                              ? "not-allowed"
-                              : "pointer",
-                          fontSize: "0.74rem",
-                        }}
-                      >
-                        <div style={{ fontWeight: 600 }}>
-                          {c.case_id.toUpperCase()} ({c.employee_id})
-                        </div>
-                        <div
-                          style={{
-                            color: "var(--text-muted)",
-                            fontSize: "0.7rem",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {c.question}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
+              <div className="panel-inset u-stack" style={{ minWidth: 0 }}>
+                <div className="section-label">
+                  Preset cases ({cases.length})
                 </div>
-
-                {/* Selected Employee Record */}
-                {selectedEmp && (
-                  <div
-                    style={{
-                      background: "var(--bg-surface-elevated)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "8px",
-                      padding: "14px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: "0.82rem",
-                        fontWeight: 600,
-                        color: "#fff",
-                        marginBottom: "8px",
-                      }}
+                <div
+                  className="u-stack"
+                  style={{ gap: 6, maxHeight: 240, overflowY: "auto" }}
+                >
+                  {cases.map((c) => (
+                    <button
+                      key={c.case_id}
+                      type="button"
+                      className={`gen-preset${selectedCaseId === c.case_id ? " active" : ""}`}
+                      style={{ textAlign: "left" }}
+                      disabled={isRunning || isRunningSingle}
+                      aria-pressed={selectedCaseId === c.case_id}
+                      onClick={() => handleSelectCase(c)}
                     >
-                      Employee Record
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "0.76rem",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "4px",
-                        color: "var(--text-main)",
-                      }}
-                    >
-                      <div>
-                        <strong>Name:</strong> {selectedEmp.name}
-                      </div>
-                      <div>
-                        <strong>Role:</strong> {selectedEmp.job_title} (
-                        {selectedEmp.department})
-                      </div>
-                      <div>
-                        <strong>Jurisdiction:</strong>{" "}
-                        {selectedEmp.duty_station}, {selectedEmp.jurisdiction}
-                      </div>
-                      <div>
-                        <strong>Status:</strong>{" "}
-                        <span
-                          style={{
-                            color:
-                              selectedEmp.employment_status === "Confirmed"
-                                ? "#10b981"
-                                : "#fbbf24",
-                          }}
-                        >
-                          {selectedEmp.employment_status}
-                        </span>
-                      </div>
-                      <div>
-                        <strong>Tenure:</strong> {selectedEmp.tenure_months}{" "}
-                        months
-                      </div>
-                      <div>
-                        <strong>Salary:</strong> $
-                        {selectedEmp.basic_salary_monthly}/month
-                      </div>
-                      <div>
-                        <strong>Leave Balance:</strong>{" "}
-                        {selectedEmp.annual_leave_balance} days
-                      </div>
-                    </div>
-                  </div>
-                )}
+                      <strong>
+                        {c.case_id.toUpperCase()} ({c.employee_id})
+                      </strong>
+                      <div className="u-tiny u-muted u-clip">{c.question}</div>
+                    </button>
+                  ))}
+                  {cases.length === 0 && (
+                    <div className="u-small u-muted">No cases loaded.</div>
+                  )}
+                </div>
               </div>
 
-              {/* Right Column: Query Form & Execution Cards */}
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "14px",
-                }}
-              >
-                <div
-                  style={{
-                    background: "var(--bg-surface-elevated)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "8px",
-                    padding: "14px",
+              <div className="panel-inset u-stack" style={{ minWidth: 0 }}>
+                <EmployeePicker
+                  employees={employees}
+                  value={selectedEmpId}
+                  onChange={(id) => {
+                    setSelectedEmpId(id);
+                    setSelectedCaseId("");
                   }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "10px",
-                      marginBottom: "10px",
+                  disabled={isRunning || isRunningSingle || !hasDocuments}
+                  hasDocuments={hasDocuments}
+                  employeesError={readiness.employeesError}
+                />
+                <div className="field">
+                  <label className="field-label" htmlFor={queryId}>
+                    Policy question
+                  </label>
+                  <textarea
+                    id={queryId}
+                    className="field-textarea"
+                    rows={2}
+                    value={queryText}
+                    disabled={isRunning || isRunningSingle}
+                    placeholder="Ask a policy question about the selected employee…"
+                    onChange={(event) => {
+                      setQueryText(event.target.value);
+                      setSelectedCaseId("");
                     }}
-                  >
-                    <div style={{ flex: "0 0 110px" }}>
-                      <label
-                        style={{
-                          fontSize: "0.72rem",
-                          color: "var(--text-muted)",
-                          display: "block",
-                          marginBottom: "4px",
-                        }}
-                      >
-                        Employee
-                      </label>
-                      <select
-                        value={selectedEmpId}
-                        onChange={(e) => setSelectedEmpId(e.target.value)}
-                        disabled={isRunningBenchmark || isRunningSingle}
-                        style={{
-                          width: "100%",
-                          padding: "6px 8px",
-                          borderRadius: "6px",
-                          background: "var(--bg-surface)",
-                          border: "1px solid var(--border)",
-                          color: "#fff",
-                          fontSize: "0.8rem",
-                        }}
-                      >
-                        {employees.map((e) => (
-                          <option key={e.employee_id} value={e.employee_id}>
-                            {e.employee_id}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div style={{ flex: 1 }}>
-                      <label
-                        style={{
-                          fontSize: "0.72rem",
-                          color: "var(--text-muted)",
-                          display: "block",
-                          marginBottom: "4px",
-                        }}
-                      >
-                        Policy Question
-                      </label>
-                      <input
-                        type="text"
-                        value={queryText}
-                        onChange={(e) => setQueryText(e.target.value)}
-                        disabled={isRunningBenchmark || isRunningSingle}
-                        style={{
-                          width: "100%",
-                          padding: "6px 10px",
-                          borderRadius: "6px",
-                          background: "var(--bg-surface)",
-                          border: "1px solid var(--border)",
-                          color: "#fff",
-                          fontSize: "0.8rem",
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "8px",
-                      justifyContent: "flex-end",
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => handleRunSingle("agent")}
-                      disabled={
-                        isRunningBenchmark ||
-                        isRunningSingle ||
-                        isLoadingModels ||
-                        !canRunAgent
-                      }
-                      className="btn-secondary"
-                      style={{ fontSize: "0.78rem", padding: "5px 12px" }}
-                    >
-                      Run Agent
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleRunSingle("workflow")}
-                      disabled={isRunningBenchmark || isRunningSingle}
-                      className="btn-secondary"
-                      style={{ fontSize: "0.78rem", padding: "5px 12px" }}
-                    >
-                      Run Workflow
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleRunSingle("both")}
-                      disabled={
-                        isRunningBenchmark ||
-                        isRunningSingle ||
-                        isLoadingModels ||
-                        !canRunAgent
-                      }
-                      style={{
-                        padding: "5px 14px",
-                        background: "var(--accent)",
-                        color: "#fff",
-                        border: "none",
-                        borderRadius: "6px",
-                        fontWeight: 600,
-                        fontSize: "0.78rem",
-                        cursor:
-                          isRunningBenchmark || isRunningSingle
-                            ? "not-allowed"
-                            : "pointer",
-                      }}
-                    >
-                      {isRunningSingle
-                        ? "⚡ Running..."
-                        : "Compare Agent vs Workflow"}
-                    </button>
-                  </div>
+                  />
                 </div>
-
-                {/* Single Case Results */}
-                {(agentSingleResult || workflowSingleResult) && (
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: "14px",
-                    }}
+                <div className="u-row" style={{ justifyContent: "flex-end" }}>
+                  <button
+                    type="button"
+                    className="btn-secondary btn-small"
+                    disabled={agentBlockers.length > 0 || isRunningSingle}
+                    title={
+                      agentBlockers.length
+                        ? `To run: ${agentBlockers.join(", ")}`
+                        : undefined
+                    }
+                    onClick={() => void handleRunSingle("agent")}
                   >
-                    {/* Agent Result */}
-                    <div
-                      style={{
-                        background: "var(--bg-surface-elevated)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "8px",
-                        padding: "12px",
-                        fontSize: "0.78rem",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          color: "#60a5fa",
-                          fontWeight: 700,
-                          marginBottom: "6px",
-                        }}
-                      >
-                        <span>🤖 Agent</span>
-                        {agentSingleResult && (
-                          <span>
-                            {agentSingleResult.passed ? "✓ PASS" : "✗ FAIL"}
-                          </span>
-                        )}
-                      </div>
-                      {agentSingleResult ? (
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "4px",
-                          }}
-                        >
-                          <div>
-                            <strong>Entitlement:</strong>{" "}
-                            {agentSingleResult.entitlement_value}
-                          </div>
-                          <div>
-                            <strong>Rule:</strong>{" "}
-                            <code>{agentSingleResult.rule_cited}</code>
-                          </div>
-                          <div
-                            style={{
-                              color: "var(--text-muted)",
-                              fontSize: "0.72rem",
-                            }}
-                          >
-                            {agentSingleResult.explanation}
-                          </div>
-                          <div
-                            style={{
-                              borderTop: "1px solid var(--border)",
-                              paddingTop: "4px",
-                              marginTop: "4px",
-                              fontSize: "0.7rem",
-                              color: "var(--text-muted)",
-                            }}
-                          >
-                            Latency: {agentSingleResult.latency_ms.toFixed(1)}ms
-                            | Tokens: {agentSingleResult.total_tokens}
-                          </div>
-                        </div>
-                      ) : (
-                        <div style={{ color: "var(--text-muted)" }}>
-                          Not executed.
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Workflow Result */}
-                    <div
-                      style={{
-                        background: "var(--bg-surface-elevated)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "8px",
-                        padding: "12px",
-                        fontSize: "0.78rem",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          color: "#10b981",
-                          fontWeight: 700,
-                          marginBottom: "6px",
-                        }}
-                      >
-                        <span>⚡ Workflow</span>
-                        {workflowSingleResult && (
-                          <span>
-                            {workflowSingleResult.passed ? "✓ PASS" : "✗ FAIL"}
-                          </span>
-                        )}
-                      </div>
-                      {workflowSingleResult ? (
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "4px",
-                          }}
-                        >
-                          <div>
-                            <strong>Entitlement:</strong>{" "}
-                            {workflowSingleResult.entitlement_value}
-                          </div>
-                          <div>
-                            <strong>Rule:</strong>{" "}
-                            <code>{workflowSingleResult.rule_cited}</code>
-                          </div>
-                          <div
-                            style={{
-                              color: "var(--text-muted)",
-                              fontSize: "0.72rem",
-                            }}
-                          >
-                            {workflowSingleResult.explanation}
-                          </div>
-                          <div
-                            style={{
-                              borderTop: "1px solid var(--border)",
-                              paddingTop: "4px",
-                              marginTop: "4px",
-                              fontSize: "0.7rem",
-                              color: "var(--text-muted)",
-                            }}
-                          >
-                            Latency:{" "}
-                            {workflowSingleResult.latency_ms.toFixed(2)}ms |
-                            Tokens: {workflowSingleResult.total_tokens}
-                          </div>
-                        </div>
-                      ) : (
-                        <div style={{ color: "var(--text-muted)" }}>
-                          Not executed.
-                        </div>
-                      )}
-                    </div>
+                    Run agent
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary btn-small"
+                    disabled={singleBlockers.length > 0 || isRunningSingle}
+                    title={
+                      singleBlockers.length
+                        ? `To run: ${singleBlockers.join(", ")}`
+                        : undefined
+                    }
+                    onClick={() => void handleRunSingle("workflow")}
+                  >
+                    Run workflow
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-primary btn-inline"
+                    disabled={agentBlockers.length > 0 || isRunningSingle}
+                    title={
+                      agentBlockers.length
+                        ? `To run: ${agentBlockers.join(", ")}`
+                        : undefined
+                    }
+                    onClick={() => void handleRunSingle("both")}
+                  >
+                    {isRunningSingle ? "Running…" : "Compare agent vs workflow"}
+                  </button>
+                </div>
+                {agentBlockers.length > 0 && !isRunningSingle && (
+                  <div className="field-hint">
+                    To run: {agentBlockers.join(", ")}.
                   </div>
                 )}
               </div>
             </div>
+
+            {singleError && (
+              <Banner
+                tone="danger"
+                icon="⚠"
+                title="The run failed"
+                live="alert"
+              >
+                {singleError}
+              </Banner>
+            )}
+
+            {(agentSingle || workflowSingle) && (
+              <div
+                style={{
+                  display: "grid",
+                  gap: 16,
+                  gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))",
+                }}
+              >
+                {agentSingle && (
+                  <div className="panel-inset u-stack" style={{ minWidth: 0 }}>
+                    <h4 className="panel-title" style={{ fontSize: "0.92rem" }}>
+                      🤖 Agent
+                    </h4>
+                    <ToolTrace result={agentSingle} showRouting={false} />
+                  </div>
+                )}
+                {workflowSingle && (
+                  <div className="panel-inset u-stack" style={{ minWidth: 0 }}>
+                    <h4 className="panel-title" style={{ fontSize: "0.92rem" }}>
+                      ⚡ Workflow
+                    </h4>
+                    <ToolTrace result={workflowSingle} showRouting={false} />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

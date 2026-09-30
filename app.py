@@ -322,8 +322,8 @@ if __name__ == "__main__":
     host = os.environ.get("HOST", HOST)
     debug = os.environ.get("APP_DEBUG", "").lower() in ("1", "true", "yes") or APP_DEBUG
 
-    embed_label = "Ollama (local)" if EMBED_BACKEND == "ollama" else "Gemini"
-    chat_label = "Ollama (local)" if CHAT_BACKEND == "ollama" else "xAI Grok"
+    embed_label = {"ollama": "Ollama (local)", "none": "lexical only"}.get(EMBED_BACKEND, "Gemini")
+    chat_label = {"ollama": "Ollama (local)", "groq": f"Groq ({LLM_MODEL})"}.get(CHAT_BACKEND, "xAI Grok")
     mode_label = (
         f"embeddings ({embed_label}) + LLM ({chat_label})"
         if (embeddings_configured() and chat_configured())

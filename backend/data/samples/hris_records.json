@@ -1,0 +1,45 @@
+{
+  "_note": "Sample HRIS extract for the Week 9 stand-in MCP server. Replace via HRIS_DATA_PATH with the real system of record.",
+  "employees": {
+    "EMP001": {
+      "grade_band": "G7",
+      "accrued_leave_days": 12
+    },
+    "EMP002": {
+      "grade_band": "G7",
+      "accrued_leave_days": 18
+    },
+    "EMP003": {
+      "grade_band": "G4",
+      "accrued_leave_days": 4
+    },
+    "EMP004": {
+      "grade_band": "G9",
+      "accrued_leave_days": 20
+    },
+    "EMP005": {
+      "grade_band": "G5",
+      "accrued_leave_days": 2
+    },
+    "EMP006": {
+      "grade_band": "G6",
+      "accrued_leave_days": 10
+    },
+    "EMP007": {
+      "grade_band": "G8",
+      "accrued_leave_days": 15
+    },
+    "EMP008": {
+      "grade_band": "G6",
+      "accrued_leave_days": 6
+    },
+    "EMP009": {
+      "grade_band": "G5",
+      "accrued_leave_days": 3
+    },
+    "EMP010": {
+      "grade_band": "G8",
+      "accrued_leave_days": 15
+    }
+  }
+}

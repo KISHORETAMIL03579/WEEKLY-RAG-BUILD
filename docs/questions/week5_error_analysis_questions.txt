@@ -1,0 +1,126 @@
+# ==============================================================================
+# WEEK 5 - ERROR ANALYSIS: 20 QUESTIONS TO GENERATE TRACES (Chat page)
+# Corpus: HRPolicy.pdf (GESCI HRPPM, revised 2018). Upload it first.
+# Five questions per failure mode in taxonomy.md (the last group has four + the
+# retirement question, which IS answerable - an "unstated" refusal there is a miss).
+# How to use: ask each question in Chat with Top-K 4, then read the traces
+# (/traces) and open-code what you SAW before naming modes.
+# Import format: Case / Question / Expected Answer / Section (Q: and A: also work).
+# ==============================================================================
+
+### Case 01 [Low-K Multi-Clause Truncation]
+Case ID: w5_01
+Question: Under what circumstances is an employee entitled to paid sick leave?
+Expected Answer: After at least two consecutive months of service, sick leave accrues at two working days per month (one day at full pay, one at half pay), with a minimum of 7 days at full pay and 7 at half pay and a maximum of three months full pay and three months half pay.
+Section: 5.3.2
+
+### Case 02 [Low-K Multi-Clause Truncation]
+Case ID: w5_02
+Question: Under what conditions can a staff member apply for a salary advance?
+Expected Answer: When regular pay was not received through no fault of the staff member; on separation (advance up to 80 per cent of estimated final net payments); on change of duty station (up to 50 per cent of one month's salary); and in cases of serious illness or legitimate emergencies.
+Section: 4.3.1
+
+### Case 03 [Low-K Multi-Clause Truncation]
+Case ID: w5_03
+Question: What is the maternity leave entitlement for female staff members?
+Expected Answer: Sixteen weeks in total with full pay: pre-delivery leave starts six weeks before the expected birth (may be shortened to two weeks on a medical certificate) and post-delivery leave is the remainder of the sixteen weeks, with a minimum of ten weeks.
+Section: 5.3.3
+
+### Case 04 [Low-K Multi-Clause Truncation]
+Case ID: w5_04
+Question: How much uncertified sick leave can a staff member take and what are the limits?
+Expected Answer: Up to seven working days in an annual cycle starting 1 January, with no more than three consecutive days uncertified; longer absences need a certificate of incapacity.
+Section: 5.3.2
+
+### Case 05 [Low-K Multi-Clause Truncation]
+Case ID: w5_05
+Question: When can compassionate leave be granted and for how long?
+Expected Answer: The CEO may grant up to 5 days of compassionate leave annually for the death or serious illness of a close family member (spouse or domestic partner, children, parents, siblings, grandparents, parents-in-law).
+Section: 5.3.1
+
+### Case 06 [Sub-Clause Dispersal Across Disparate Policy Chapters]
+Case ID: w5_06
+Question: What is the formal procedure for reporting workplace bullying or harassment?
+Expected Answer: Sexual harassment is strictly prohibited; staff who believe it occurred are urged to report the facts immediately to their Manager, senior management, the CEO or the Board, and supervisors who observe it must report it so an investigation can start.
+Section: 2.2.3
+
+### Case 07 [Sub-Clause Dispersal Across Disparate Policy Chapters]
+Case ID: w5_07
+Question: What is the policy regarding acceptance of gifts, hospitality, or entertainment from clients?
+Expected Answer: Staff must not accept gifts, benefits or favours (including non-work-related hospitality) from external parties such as partners or clients; they should discourage offers and decline wherever possible.
+Section: 2.2.2
+
+### Case 08 [Sub-Clause Dispersal Across Disparate Policy Chapters]
+Case ID: w5_08
+Question: How much notice is required when a staff member resigns from their position?
+Expected Answer: Four weeks written notice, or one week for staff on probation; the CEO may accept shorter notice.
+Section: 10.1
+
+### Case 09 [Sub-Clause Dispersal Across Disparate Policy Chapters]
+Case ID: w5_09
+Question: What notice and severance does a staff member receive when their post is made redundant?
+Expected Answer: One month's written notice (or a payment of one month's salary in lieu) plus outstanding salary, pay for accrued untaken leave and severance of fifteen days' pay for each completed year of service.
+Section: 10.5.1
+
+### Case 10 [Citation Drifting & In-Prose Structural Inversion]
+Case ID: w5_10
+Question: Does the policy grant paternity leave to male employees and for how long?
+Expected Answer: Yes: two weeks with full pay, taken continuously or in separate periods during the year following the birth of the child.
+Section: 5.3.3
+
+### Case 11 [Citation Drifting & In-Prose Structural Inversion]
+Case ID: w5_11
+Question: What acts are classified as misdemeanors under the disciplinary policy?
+Expected Answer: Examples include late arrival or early departure without approval, idling or wandering during working hours, avoiding work by malingering or feigning illness, failure to account for cash advances on time, and failure to comply with the code of conduct; consequences range from verbal to written warning.
+Section: 9.2
+
+### Case 12 [Citation Drifting & In-Prose Structural Inversion]
+Case ID: w5_12
+Question: What pension benefit does GESCI provide and when does it start?
+Expected Answer: GESCI runs no pension scheme; it pays a pension contribution allowance of 10% of basic salary once probation is successfully completed, monthly in arrears, provided the staff member shows proof of contribution to a registered pension scheme or SACCO.
+Section: 4.4.1
+
+### Case 13 [Citation Drifting & In-Prose Structural Inversion]
+Case ID: w5_13
+Question: How many days of accrued annual leave can be paid out in cash when a staff member leaves?
+Expected Answer: Accrued annual leave is commuted to a payment of up to a maximum of 10 working days on the basis of gross salary alone.
+Section: 10.7
+
+### Case 14 [Unstated Policy Invariant Refusal]
+Case ID: w5_14
+Question: What is the mandatory retirement age for permanent staff?
+Expected Answer: Employment ends at the end of the month in which the staff member's 65th birthday falls (this IS stated in the handbook, so a refusal is a retrieval failure, not a correct refusal).
+Section: 10.3
+
+### Case 15 [Unstated Policy Invariant Refusal]
+Case ID: w5_15
+Question: Who is eligible for overtime compensation and how is the rate determined?
+Expected Answer: Not stated in the handbook: the assistant should say the uploaded documents do not cover this and must not invent a rule.
+
+### Case 16 [Unstated Policy Invariant Refusal]
+Case ID: w5_16
+Question: What standards are expected regarding office dress code and grooming?
+Expected Answer: Not stated in the handbook: the assistant should say the uploaded documents do not cover this and must not invent a rule.
+
+### Case 17 [Unstated Policy Invariant Refusal]
+Case ID: w5_17
+Question: What are the standard daily working hours and lunch break provisions?
+Expected Answer: Not stated in the handbook: the assistant should say the uploaded documents do not cover this and must not invent a rule.
+
+### Case 18 [Embedding Similarity Threshold Starvation]
+Case ID: w5_18
+Question: What is the probation period length for new recruits?
+Expected Answer: Six months for staff whose contracts exceed 12 months; it may be extended by up to six months with the staff member's agreement.
+Section: 3.6.1
+
+### Case 19 [Embedding Similarity Threshold Starvation]
+Case ID: w5_19
+Question: What are the rules for working from home?
+Expected Answer: A staff member's home counts as a location of work under the Occupational Safety and Health Act, so the safety policies apply to home-workers and authorised OSH officers may visit.
+Section: 8.6
+
+### Case 20 [Embedding Similarity Threshold Starvation]
+Case ID: w5_20
+Question: How many days of annual leave can an employee carry over to the following year?
+Expected Answer: No more than 5 days beyond 31 December without the CEO's consent; approved carried-forward days must be taken by 30 June.
+Section: 5.2.7

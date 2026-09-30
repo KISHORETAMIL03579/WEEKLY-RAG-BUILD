@@ -1,18 +1,13 @@
 import React, { useState, useRef } from "react";
 import { DocumentInfo, StagedFile } from "../../types/document";
-import {
-  TemperatureSlider,
-  TopKSlider,
-} from "../common/ModelParameterControls";
+import { GenerationControls } from "../common/GenerationControls";
+import { GenerationConfig } from "../../hooks/useGenerationConfig";
 
 interface SidebarProps {
   strategy: string;
   setStrategy: (strategy: string) => void;
   setStrategySelected: (selected: boolean) => void;
-  topK: number;
-  setTopK: React.Dispatch<React.SetStateAction<number>>;
-  temperature: number;
-  setTemperature: React.Dispatch<React.SetStateAction<number>>;
+  generation: GenerationConfig;
   files: DocumentInfo[];
   onUpload: (files: StagedFile[]) => void;
   onLoadUrl: (url: string) => Promise<void>;
@@ -30,10 +25,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   strategy,
   setStrategy,
   setStrategySelected,
-  topK,
-  setTopK,
-  temperature,
-  setTemperature,
+  generation,
   files,
   onUpload,
   onLoadUrl,
@@ -252,38 +244,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="sidebar-section">
         <div className="sidebar-label">RAG PARAMETERS & CONTROLS</div>
 
-        {/* Retrieval controls */}
-        <div className="param-control-group">
-          <TopKSlider value={topK} onChange={setTopK} disabled={isBusy} />
-          <div className="quick-pills">
-            {[3, 5, 8, 12, 16].map((p) => (
-              <button
-                key={p}
-                type="button"
-                disabled={isBusy}
-                className={`quick-pill ${topK === p ? "active" : ""}`}
-                onClick={() => setTopK(p)}
-                aria-label={`Set Top-K to ${p}`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-          <div className="param-hint">
-            Number of context candidates retrieved (Default: 8)
-          </div>
-        </div>
-
-        <div className="param-control-group param-group-spaced">
-          <TemperatureSlider
-            value={temperature}
-            onChange={setTemperature}
-            disabled={isBusy}
-          />
-          <div className="param-hint">
-            Use low temperature for grounded answers, or the hallucination-risk
-            preset to stress-test answer variability.
-          </div>
+        <GenerationControls
+          config={generation}
+          disabled={isBusy}
+          stacked
+          topKPicks={[3, 5, 8, 12, 16]}
+        />
+        <div className="param-hint">
+          Top-K is the number of context candidates retrieved (chat default: 8).
+          Use a low temperature for grounded answers, or the hallucination-risk
+          preset to stress-test answer variability.
         </div>
       </div>
 

@@ -5,46 +5,73 @@ import { ResultsView } from "../components/Evaluation/ResultsView";
 import { JudgeEvaluatorView } from "../components/Evaluation/JudgeEvaluatorView";
 import { PolicyAssistantView } from "../components/Evaluation/PolicyAssistantView";
 import { PolicySearchView } from "../components/Evaluation/PolicySearchView";
+import { McpView } from "../components/Evaluation/McpView";
 import { ToastContainer, ToastItem } from "../components/common/ToastContainer";
+import { TabItem, TabPanel, Tabs } from "../components/common/Tabs";
+import { useGenerationConfig } from "../hooks/useGenerationConfig";
 import { PRESETS } from "../components/Evaluation/KeyTakeaways";
 import { CANONICAL_RETRIEVAL_QUESTIONS } from "../data/canonicalRetrievalQuestions";
 import { api } from "../services/api";
 import { generateId } from "../utils/helpers";
 
-export const EvaluationPage: React.FC = () => {
-  const getInitialTab = (): "policy" | "judge" | "retrieval" => {
-    if (typeof window !== "undefined") {
-      const pathname = window.location.pathname.toLowerCase();
-      if (pathname.includes("/eval/judge")) return "judge";
-      if (pathname.includes("/eval/retrieval")) return "retrieval";
-      if (pathname.includes("/eval/policy")) return "policy";
+type EvalTab = "policy" | "judge" | "retrieval" | "mcp";
+type PolicySubTab = "search" | "benchmark";
 
-      const p = new URLSearchParams(window.location.search);
-      const tab = p.get("tab");
-      if (tab === "judge" || tab === "retrieval" || tab === "policy")
-        return tab;
-    }
-    return "policy";
+const EVAL_TABS: readonly EvalTab[] = ["policy", "judge", "retrieval", "mcp"];
+
+// URL scheme: /eval/<tab> picks the top-level tab; /eval/policy?view=benchmark picks the
+// Policy sub-tab. The legacy ?tab=<tab> query is still understood.
+function readLocation(): { tab: EvalTab; sub: PolicySubTab } {
+  if (typeof window === "undefined") return { tab: "policy", sub: "search" };
+  const pathname = window.location.pathname.toLowerCase();
+  const params = new URLSearchParams(window.location.search);
+  const fromPath = EVAL_TABS.find((tab) => pathname.includes(`/eval/${tab}`));
+  const queryTab = params.get("tab");
+  const fromQuery = EVAL_TABS.find((tab) => tab === queryTab);
+  return {
+    tab: fromPath ?? fromQuery ?? "policy",
+    sub: params.get("view") === "benchmark" ? "benchmark" : "search",
   };
+}
 
-  const [activeTab, setActiveTabState] = useState<
-    "policy" | "judge" | "retrieval"
-  >(getInitialTab);
-  const [isJudgeEvaluating, setIsJudgeEvaluating] = useState<boolean>(false);
-  const [policySubTab, setPolicySubTab] = useState<"search" | "benchmark">(
-    "search",
+export const EvaluationPage: React.FC = () => {
+  const [activeTab, setActiveTabState] = useState<EvalTab>(
+    () => readLocation().tab,
   );
+  const [policySubTab, setPolicySubTabState] = useState<PolicySubTab>(
+    () => readLocation().sub,
+  );
+  const [isJudgeEvaluating, setIsJudgeEvaluating] = useState<boolean>(false);
 
-  const setActiveTab = (tab: "policy" | "judge" | "retrieval") => {
+  const setActiveTab = (tab: EvalTab) => {
     setActiveTabState(tab);
     if (typeof window !== "undefined" && window.history) {
-      window.history.pushState(null, "", `/eval/${tab}`);
+      const target =
+        tab === "policy" && policySubTab === "benchmark"
+          ? "/eval/policy?view=benchmark"
+          : `/eval/${tab}`;
+      if (window.location.pathname + window.location.search !== target) {
+        window.history.pushState(null, "", target);
+      }
+    }
+  };
+
+  const setPolicySubTab = (sub: PolicySubTab) => {
+    setPolicySubTabState(sub);
+    if (typeof window !== "undefined" && window.history) {
+      const target =
+        sub === "benchmark" ? "/eval/policy?view=benchmark" : "/eval/policy";
+      if (window.location.pathname + window.location.search !== target) {
+        window.history.pushState(null, "", target);
+      }
     }
   };
 
   useEffect(() => {
     const handlePopState = () => {
-      setActiveTabState(getInitialTab());
+      const next = readLocation();
+      setActiveTabState(next.tab);
+      setPolicySubTabState(next.sub);
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
@@ -54,7 +81,10 @@ export const EvaluationPage: React.FC = () => {
   const [questions, setQuestions] = useState<EvalQuestionInput[]>(() => [
     ...CANONICAL_RETRIEVAL_QUESTIONS,
   ]);
-  const [topK, setTopK] = useState<number | string>(5);
+  const retrievalGen = useGenerationConfig({
+    capability: null,
+    defaults: { topK: 5, temperature: 0 },
+  });
   const [strategyFilter, setStrategyFilter] = useState<string>("");
   const [presets, setPresets] = useState<Record<string, boolean>>({
     tfidf: true,
@@ -156,12 +186,7 @@ export const EvaluationPage: React.FC = () => {
       return;
     }
 
-    const rawTopK = String(topK).trim();
-    if (!/^\d+$/.test(rawTopK)) {
-      showToast("Top-K must be a whole number between 1 and 20.", "error");
-      return;
-    }
-    const kVal = Math.max(1, Math.min(20, Number(rawTopK)));
+    const kVal = Math.max(1, Math.min(20, Math.round(retrievalGen.topK)));
 
     setIsRunning(true);
 
@@ -320,144 +345,50 @@ export const EvaluationPage: React.FC = () => {
     showToast("Evaluation results cleared.", "info");
   };
 
+  const topTabs: TabItem[] = [
+    { id: "policy", label: "👔 Policy Assistant" },
+    {
+      id: "judge",
+      label: "⚖️ Judge Evaluator",
+      badge: isJudgeEvaluating ? "⚡ Running..." : undefined,
+      badgeLive: true,
+    },
+    {
+      id: "retrieval",
+      label: "📊 Retrieval Benchmark",
+      badge: isRunning ? "⚡ Running..." : undefined,
+      badgeLive: true,
+    },
+    { id: "mcp", label: "🔌 MCP Tools" },
+  ];
+
+  const policyTabs: TabItem[] = [
+    { id: "search", label: "🔍 Policy Search (Auto-Routed)" },
+    { id: "benchmark", label: "📊 Agent vs Workflow Benchmark" },
+  ];
+
   return (
     <div className="eval-root">
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       {/* TOPBAR */}
-      <header
-        className="evaluation-page-header"
-        style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 50,
-          background: "var(--bg-surface)",
-          borderBottom: "1px solid var(--border)",
-        }}
-      >
+      <header className="evaluation-page-header">
         <div className="evaluation-page-heading">
-          <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "#fff" }}>
-            Evaluation Hub
-          </div>
-          <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
+          <div className="evaluation-page-title">Evaluation Hub</div>
+          <div className="evaluation-page-subtitle">
             LLM Judges (V1 vs V2), Deterministic Assertions &amp; Retrieval
-            Benchmarks
+            Benchmarks, HR Policy Agent and MCP Tools
           </div>
         </div>
 
-        <div className="evaluation-page-tabs">
-          <button
-            type="button"
-            onClick={() => setActiveTab("policy")}
-            style={{
-              padding: "6px 14px",
-              borderRadius: "6px",
-              fontSize: "0.85rem",
-              fontWeight: 600,
-              cursor: "pointer",
-              border:
-                activeTab === "policy"
-                  ? "1px solid var(--accent)"
-                  : "1px solid var(--border)",
-              background:
-                activeTab === "policy"
-                  ? "rgba(59, 130, 246, 0.15)"
-                  : "transparent",
-              color: activeTab === "policy" ? "#60a5fa" : "var(--text-muted)",
-              transition: "all 0.15s ease",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-            }}
-          >
-            <span>👔 Policy Assistant (Agent vs Workflow)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("judge")}
-            style={{
-              padding: "6px 14px",
-              borderRadius: "6px",
-              fontSize: "0.85rem",
-              fontWeight: 600,
-              cursor: "pointer",
-              border:
-                activeTab === "judge"
-                  ? "1px solid var(--accent)"
-                  : "1px solid var(--border)",
-              background:
-                activeTab === "judge"
-                  ? "rgba(59, 130, 246, 0.15)"
-                  : "transparent",
-              color: activeTab === "judge" ? "#60a5fa" : "var(--text-muted)",
-              transition: "all 0.15s ease",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-            }}
-          >
-            <span>⚖️ Judge Evaluator</span>
-            {isJudgeEvaluating && (
-              <span
-                style={{
-                  background: "rgba(245, 158, 11, 0.2)",
-                  color: "#fbbf24",
-                  fontSize: "0.7rem",
-                  padding: "1px 6px",
-                  borderRadius: "4px",
-                  fontWeight: 700,
-                  animation: "pulse 1.5s infinite",
-                }}
-              >
-                ⚡ Running...
-              </span>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("retrieval")}
-            style={{
-              padding: "6px 14px",
-              borderRadius: "6px",
-              fontSize: "0.85rem",
-              fontWeight: 600,
-              cursor: "pointer",
-              border:
-                activeTab === "retrieval"
-                  ? "1px solid var(--accent)"
-                  : "1px solid var(--border)",
-              background:
-                activeTab === "retrieval"
-                  ? "rgba(59, 130, 246, 0.15)"
-                  : "transparent",
-              color:
-                activeTab === "retrieval" ? "#60a5fa" : "var(--text-muted)",
-              transition: "all 0.15s ease",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-            }}
-          >
-            <span>📊 Retrieval Benchmark (Recall@K)</span>
-            {isRunning && (
-              <span
-                style={{
-                  background: "rgba(245, 158, 11, 0.2)",
-                  color: "#fbbf24",
-                  fontSize: "0.7rem",
-                  padding: "1px 6px",
-                  borderRadius: "4px",
-                  fontWeight: 700,
-                  animation: "pulse 1.5s infinite",
-                }}
-              >
-                ⚡ Running...
-              </span>
-            )}
-          </button>
-        </div>
+        <Tabs
+          className="evaluation-page-tabs"
+          tabs={topTabs}
+          active={activeTab}
+          onChange={(id) => setActiveTab(id as EvalTab)}
+          ariaLabel="Evaluation sections"
+          idPrefix="eval"
+        />
 
         <div className="evaluation-page-actions">
           {activeTab === "retrieval" && view === "form" && results && (
@@ -477,107 +408,45 @@ export const EvaluationPage: React.FC = () => {
         </div>
       </header>
 
-      {/* MAIN CONTENT — ONLY ACTIVE TAB IS MOUNTED */}
-      <main
-        style={{
-          maxWidth: "1200px",
-          width: "100%",
-          margin: "0 auto",
-          padding: "28px 20px 50px 20px",
-          flex: 1,
-        }}
-      >
-        {/* TAB 1: POLICY ASSISTANT — Week 7 */}
-        {activeTab === "policy" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {/* Sub-tabs: Search vs Benchmark */}
-            <div
-              style={{
-                display: "flex",
-                gap: 6,
-                borderBottom: "1px solid var(--border)",
-                paddingBottom: 12,
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => setPolicySubTab("search")}
-                style={{
-                  padding: "6px 14px",
-                  borderRadius: "6px",
-                  fontSize: "0.83rem",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  border:
-                    policySubTab === "search"
-                      ? "1px solid #22c55e"
-                      : "1px solid var(--border)",
-                  background:
-                    policySubTab === "search"
-                      ? "rgba(34,197,94,0.12)"
-                      : "transparent",
-                  color:
-                    policySubTab === "search" ? "#22c55e" : "var(--text-muted)",
-                }}
-              >
-                🔍 Policy Search{" "}
-                <span style={{ fontSize: "0.7rem", opacity: 0.8 }}>
-                  (Auto-Routed)
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setPolicySubTab("benchmark")}
-                style={{
-                  padding: "6px 14px",
-                  borderRadius: "6px",
-                  fontSize: "0.83rem",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  border:
-                    policySubTab === "benchmark"
-                      ? "1px solid #f59e0b"
-                      : "1px solid var(--border)",
-                  background:
-                    policySubTab === "benchmark"
-                      ? "rgba(245,158,11,0.12)"
-                      : "transparent",
-                  color:
-                    policySubTab === "benchmark"
-                      ? "#f59e0b"
-                      : "var(--text-muted)",
-                }}
-              >
-                📊 Agent vs Workflow Benchmark
-              </button>
-            </div>
-
-            {/* Sub-tab content */}
-            {policySubTab === "search" ? (
+      {/* MAIN CONTENT — ONLY THE ACTIVE TAB IS MOUNTED */}
+      <main className="evaluation-page-main">
+        {/* TAB 1: POLICY ASSISTANT */}
+        <TabPanel idPrefix="eval" id="policy" active={activeTab}>
+          <div className="u-stack" style={{ gap: 16 }}>
+            <Tabs
+              tabs={policyTabs}
+              active={policySubTab}
+              onChange={(id) => setPolicySubTab(id as PolicySubTab)}
+              ariaLabel="Policy assistant views"
+              idPrefix="policy"
+              variant="underline"
+              tone={policySubTab === "search" ? "green" : "amber"}
+            />
+            <TabPanel idPrefix="policy" id="search" active={policySubTab}>
               <PolicySearchView onNotify={showToast} />
-            ) : (
+            </TabPanel>
+            <TabPanel idPrefix="policy" id="benchmark" active={policySubTab}>
               <PolicyAssistantView onNotify={showToast} />
-            )}
+            </TabPanel>
           </div>
-        )}
+        </TabPanel>
 
         {/* TAB 2: JUDGE EVALUATOR */}
-        {activeTab === "judge" && (
+        <TabPanel idPrefix="eval" id="judge" active={activeTab}>
           <JudgeEvaluatorView
             onNotify={showToast}
             onEvaluatingChange={setIsJudgeEvaluating}
           />
-        )}
+        </TabPanel>
 
         {/* TAB 3: RETRIEVAL BENCHMARK */}
-        {activeTab === "retrieval" && (
+        <TabPanel idPrefix="eval" id="retrieval" active={activeTab}>
           <div style={{ maxWidth: "1000px", margin: "0 auto" }}>
             {view === "form" ? (
               <FormView
                 questions={questions}
                 setQuestions={setQuestions}
-                topK={topK}
-                setTopK={setTopK}
+                generation={retrievalGen}
                 strategyFilter={strategyFilter}
                 setStrategyFilter={setStrategyFilter}
                 presets={presets}
@@ -595,7 +464,12 @@ export const EvaluationPage: React.FC = () => {
               />
             )}
           </div>
-        )}
+        </TabPanel>
+
+        {/* TAB 4: MCP */}
+        <TabPanel idPrefix="eval" id="mcp" active={activeTab}>
+          <McpView onNotify={showToast} />
+        </TabPanel>
       </main>
     </div>
   );

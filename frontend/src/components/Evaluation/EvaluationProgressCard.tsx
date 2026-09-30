@@ -230,26 +230,7 @@ export const EvaluationProgressCard: React.FC<EvaluationProgressCardProps> = ({
       <ProgressBar
         ariaLabel="Evaluation progress"
         percentage={pct}
-        trackStyle={{
-          width: "100%",
-          height: "12px",
-          background: "rgba(255, 255, 255, 0.07)",
-          borderRadius: "8px",
-          overflow: "hidden",
-          position: "relative",
-          boxShadow: "inset 0 1px 3px rgba(0, 0, 0, 0.4)",
-        }}
-        fillStyle={{
-          height: "100%",
-          background: isComplete
-            ? "linear-gradient(90deg, #10b981, #34d399)"
-            : error
-              ? "linear-gradient(90deg, #ef4444, #f87171)"
-              : "linear-gradient(90deg, #2563eb, #3b82f6, #60a5fa, #34d399)",
-          borderRadius: "8px",
-          transition: "width 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
-          boxShadow: "0 0 14px rgba(59, 130, 246, 0.65)",
-        }}
+        tone={isComplete ? "success" : error ? "danger" : "rainbow"}
       />
 
       {/* Signals Status Bar */}

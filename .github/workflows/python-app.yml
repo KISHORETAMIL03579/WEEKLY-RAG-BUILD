@@ -2,24 +2,31 @@ name: Ask My Docs CI
 
 on:
   push:
-    branches: ["main", "week-7"]
+    branches: ["main", "week-*"]
   pull_request:
-    branches: ["main", "week-7"]
+    branches: ["main", "week-*"]
+  workflow_dispatch:
 
+# Least privilege by default; the image-push job below adds what it needs.
 permissions:
   contents: read
-  packages: write
+
+# A newer push to the same branch supersedes a run that is still going.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   # ============================================================
-  # TEST
+  # TEST: backend + frontend (no live provider needed)
   # ============================================================
   test:
     name: Test Backend + Frontend
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
@@ -33,43 +40,53 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
 
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install flake8 pytest black
+          pip install -r requirements-dev.txt
 
       - name: Check code format with black
         run: |
-          black --check .
+          black --check . --extend-exclude "node_modules|frontend/dist|scratch"
 
       - name: Lint with flake8
         run: |
+          # Hard failures: syntax errors, undefined names
           flake8 . \
+            --exclude=.git,.venv,node_modules,frontend,scratch \
             --count \
             --select=E9,F63,F7,F82 \
             --show-source \
             --statistics
 
+          # Advisory report (does not fail the build)
           flake8 . \
+            --exclude=.git,.venv,node_modules,frontend,scratch \
             --count \
             --exit-zero \
             --max-complexity=10 \
             --max-line-length=127 \
             --statistics
 
+      # The tests need no Groq, Qdrant or Ollama: they run against a fake indexed
+      # session, scripted model steps, an in-process MCP transport (plus a real stdio
+      # subprocess for the HRIS/probe servers), a temporary state DB and a temporary
+      # evidence directory. They never read the developer's .env.
       - name: Run backend tests
         run: |
           pytest -v
 
       # ----------------------------------------------------------
-      # Node / React / TypeScript
+      # Node / React / TypeScript (same major version as the Dockerfile)
       # ----------------------------------------------------------
-      - name: Set up Node.js 20
+      - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
@@ -90,12 +107,16 @@ jobs:
         run: npm run build
 
   # ============================================================
-  # DOCKER BUILD
+  # DOCKER: build the image, boot it, check MCP discovery inside it
   # ============================================================
   docker:
-    name: Build Docker Image
+    name: Build and Smoke-Test Docker Image
     runs-on: ubuntu-latest
     needs: test
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Checkout repository
@@ -115,8 +136,43 @@ jobs:
             -t "${{ steps.image.outputs.name }}:${{ github.sha }}" \
             .
 
+      # Boots the real image with in-memory vectors (no Qdrant, no provider keys) and
+      # proves the pieces a unit test cannot: config/, backend/data and benchmarks/ were
+      # copied, the non-root user can write evidence, and the HRIS stdio server starts.
+      - name: Smoke-test the container
+        shell: bash
+        run: |
+          docker run -d --name smoke -p 5000:5000 \
+            -e SECRET_KEY=ci-smoke-test-key \
+            -e VECTOR_BACKEND=memory \
+            -e EMBED_BACKEND=none \
+            -e CHAT_BACKEND=groq \
+            "${{ steps.image.outputs.name }}:${{ github.sha }}"
+
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:5000/healthz > health.json 2>/dev/null; then break; fi
+            sleep 2
+          done
+          cat health.json
+          python3 -c "import json; d = json.load(open('health.json')); assert d['status'] == 'ok' and d['retrieval_mode'] == 'lexical', d"
+
+          curl -fsS http://localhost:5000/api/mcp/status > mcp.json
+          python3 - <<'EOF'
+          import json
+          d = json.load(open("mcp.json"))
+          print(d["server_count"], "servers,", d["tool_count"], "tools:", d["tool_names"])
+          assert d["server_count"] == 2 and d["tool_count"] == 5, d
+          assert all(s["status"] == "connected" for s in d["servers"]), d["servers"]
+          EOF
+
+          curl -fsS "http://localhost:5000/api/policy/cases?suite=all" | python3 -c "import json,sys; assert len(json.load(sys.stdin)) == 16"
+
+      - name: Container logs (on failure)
+        if: failure()
+        run: docker logs smoke || true
+
       # ----------------------------------------------------------
-      # GHCR
+      # GHCR (main only)
       # ----------------------------------------------------------
       - name: Log in to GHCR
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

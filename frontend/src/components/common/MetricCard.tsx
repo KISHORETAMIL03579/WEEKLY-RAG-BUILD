@@ -1,47 +1,24 @@
 import React from "react";
 
+export type MetricTone =
+  "neutral" | "success" | "info" | "warning" | "danger" | "purple";
+
 interface MetricCardProps {
   label: string;
   value: React.ReactNode;
-  description: React.ReactNode;
-  valueColor: string;
+  hint?: React.ReactNode;
+  tone?: MetricTone;
 }
 
 export const MetricCard: React.FC<MetricCardProps> = ({
   label,
   value,
-  description,
-  valueColor,
+  hint,
+  tone = "neutral",
 }) => (
-  <div
-    style={{
-      background: "var(--bg-surface-elevated)",
-      padding: "14px 16px",
-      borderRadius: "8px",
-      border: "1px solid var(--border)",
-    }}
-  >
-    <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-      {label}
-    </div>
-    <div
-      style={{
-        fontSize: "1.2rem",
-        fontWeight: 800,
-        color: valueColor,
-        marginTop: "4px",
-      }}
-    >
-      {value}
-    </div>
-    <div
-      style={{
-        fontSize: "0.72rem",
-        color: "var(--text-muted)",
-        marginTop: "2px",
-      }}
-    >
-      {description}
-    </div>
+  <div className={`metric-card tone-${tone}`}>
+    <div className="metric-card-label">{label}</div>
+    <div className="metric-card-value">{value}</div>
+    {hint ? <div className="metric-card-hint">{hint}</div> : null}
   </div>
 );

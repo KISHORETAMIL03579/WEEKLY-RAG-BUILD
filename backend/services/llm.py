@@ -26,10 +26,28 @@ from backend.config import (
 
 
 class ChatProviderError(RuntimeError):
-    def __init__(self, provider: str, message: str, status_code: Optional[int] = None):
+    def __init__(
+        self,
+        provider: str,
+        message: str,
+        status_code: Optional[int] = None,
+        code: Optional[str] = None,
+        detail: Optional[str] = None,
+    ):
         super().__init__(message)
         self.provider = provider
         self.status_code = status_code
+        self.code = code  # provider error code, e.g. Groq's "tool_use_failed"
+        self.detail = detail  # provider's own (truncated) explanation
+
+
+def _provider_error_detail(response: httpx.Response) -> tuple[Optional[str], Optional[str]]:
+    """(code, message) from an OpenAI-style error body; never raises."""
+    try:
+        error = response.json().get("error") or {}
+        return error.get("code"), str(error.get("message") or "")[:300] or None
+    except Exception:
+        return None, None
 
 
 def _retry_after_seconds(response: httpx.Response) -> Optional[float]:
@@ -210,8 +228,22 @@ def groq_chat_completion(
     timeout: float = 90,
     tools: Optional[list[dict]] = None,
     max_retries: int = 3,
+    attempt_log: Optional[list] = None,
+    include_reasoning: bool = False,
 ) -> dict:
-    """Call Groq's OpenAI-compatible API for text generation or tool calling."""
+    """Call Groq's OpenAI-compatible API for text generation or tool calling.
+
+    ``attempt_log``, when given, receives one entry per HTTP attempt
+    (``ok`` / ``retry`` / ``failed`` with status code and back-off delay) so callers
+    can report exactly how many times the provider call was retried, including when
+    every attempt failed. ``include_reasoning`` asks gpt-oss models to return the
+    reasoning behind a tool choice for the run trace.
+    """
+
+    def note(**entry) -> None:
+        if attempt_log is not None:
+            attempt_log.append(entry)
+
     if not GROQ_API_KEY:
         raise ChatProviderError("Groq", "GROQ_API_KEY is not configured")
 
@@ -223,7 +255,7 @@ def groq_chat_completion(
     }
     if target_model.startswith("openai/gpt-oss-"):
         payload["reasoning_effort"] = "low"
-        payload["include_reasoning"] = False
+        payload["include_reasoning"] = bool(include_reasoning)
     if max_tokens is not None:
         payload["max_tokens"] = max_tokens
     if tools:
@@ -296,6 +328,7 @@ def groq_chat_completion(
             ):
                 raise ChatProviderError("Groq", "Groq returned an invalid response")
             data["_provider_attempts"] = attempt
+            note(attempt=attempt, outcome="ok")
             logger.info(
                 "Groq chat call succeeded in %.2fs (model: %s)",
                 time.perf_counter() - started,
@@ -320,6 +353,7 @@ def groq_chat_completion(
                         "Groq retry delay exceeds the remaining request budget",
                         status_code,
                     ) from exc
+                note(attempt=attempt, outcome="retry", status_code=status_code, delay_s=round(delay, 3))
                 logger.warning(
                     "Groq request returned HTTP %d; retrying in %.2fs (%d/%d)",
                     status_code,
@@ -335,15 +369,33 @@ def groq_chat_completion(
                 elif delay > 0:
                     time.sleep(delay)
                 continue
-            logger.error("Groq request failed with HTTP %d", status_code)
+            code, detail = _provider_error_detail(exc.response)
+            note(
+                attempt=attempt,
+                outcome="failed",
+                status_code=status_code,
+                code=code,
+                detail=detail,
+            )
+            logger.error(
+                "Groq request failed with HTTP %d (code=%s): %s",
+                status_code,
+                code,
+                detail,
+            )
             raise ChatProviderError(
-                "Groq", f"Groq request failed with HTTP {status_code}", status_code
+                "Groq",
+                f"Groq request failed with HTTP {status_code}",
+                status_code,
+                code=code,
+                detail=detail,
             ) from exc
         except httpx.TimeoutException as exc:
             if cancellation and cancellation.cancelled.is_set():
                 raise ChatRunCancelled() from None
             if attempt < max_retries:
                 delay = min(2 ** (attempt - 1), 8)
+                note(attempt=attempt, outcome="retry", error="timeout", delay_s=delay)
                 logger.warning(
                     "Groq request timed out; retrying in %ds (%d/%d)",
                     delay,
@@ -356,12 +408,14 @@ def groq_chat_completion(
                 else:
                     time.sleep(delay)
                 continue
+            note(attempt=attempt, outcome="failed", error="timeout")
             raise TimeoutError("Groq request timed out") from exc
         except httpx.RequestError as exc:
             if cancellation and cancellation.cancelled.is_set():
                 raise ChatRunCancelled() from None
             if attempt < max_retries:
                 delay = min(2 ** (attempt - 1), 8)
+                note(attempt=attempt, outcome="retry", error=type(exc).__name__, delay_s=delay)
                 logger.warning(
                     "Groq network request failed (%s); retrying in %ds (%d/%d)",
                     type(exc).__name__,
@@ -375,6 +429,7 @@ def groq_chat_completion(
                 else:
                     time.sleep(delay)
                 continue
+            note(attempt=attempt, outcome="failed", error=type(exc).__name__)
             raise ChatProviderError("Groq", "Groq network request failed") from exc
         except Exception as exc:
             if cancellation and cancellation.cancelled.is_set():

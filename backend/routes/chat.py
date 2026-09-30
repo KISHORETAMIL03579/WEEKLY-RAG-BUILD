@@ -35,7 +35,7 @@ from backend.schemas.chat import (
     ReadyzResponse,
     StatusResponse,
 )
-from backend.services.embeddings import embed_text, embeddings_configured
+from backend.services.embeddings import LEXICAL_ONLY, embed_text, embeddings_configured
 from backend.services.llm import chat_configured, RAGTracer
 from backend.services.chat_runs import (
     ChatRunCancelled,
@@ -135,7 +135,7 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
     embed_min_score_val = get_app_symbol("EMBED_MIN_SCORE", EMBED_MIN_SCORE)
     safety_min_score_val = get_app_symbol("SAFETY_MIN_SCORE", SAFETY_MIN_SCORE)
     tfidf_min_score_val = get_app_symbol("TFIDF_MIN_SCORE", TFIDF_MIN_SCORE)
-    retrieval_mode_val = get_app_symbol("RETRIEVAL_MODE", RETRIEVAL_MODE)
+    retrieval_mode_val = "lexical" if LEXICAL_ONLY else get_app_symbol("RETRIEVAL_MODE", RETRIEVAL_MODE)
     rerank_enabled_val = get_app_symbol("RERANK_ENABLED", RERANK_ENABLED)
     query_rewrite_val = get_app_symbol("QUERY_REWRITE_ENABLED", QUERY_REWRITE_ENABLED)
     llm_model_val = get_app_symbol("LLM_MODEL", LLM_MODEL)
@@ -262,17 +262,25 @@ def ask(sid: OptionalSessionId, payload: Optional[AskPayload] = Body(default=Non
                 "run_id": run_id,
             }
 
-    # Path 1: embeddings + LLM (if configured and vectors exist)
-    if (
+    # Path 1: retrieval + LLM. Semantic retrieval needs embeddings and aligned vectors;
+    # lexical mode (EMBED_BACKEND=none) searches chunk text with BM25 and still uses the LLM.
+    semantic_ready = (
         fn_embeddings_configured()
-        and fn_chat_configured()
         and active_store.vectors
         and len(active_store.vectors) == len(active_store.chunks)
-    ):
+    )
+    if fn_chat_configured() and active_store.chunks and (semantic_ready or LEXICAL_ONLY):
         try:
             if run:
                 run.check()
-            if retrieval_mode_val == "hybrid-legacy":
+            if LEXICAL_ONLY:
+                raw_results = search_chunks(
+                    search_query,
+                    active_store.chunks,
+                    active_store.get_tfidf_index(),
+                    top_k=top_k,
+                )
+            elif retrieval_mode_val == "hybrid-legacy":
                 raw_results = fn_hybrid(active_store, search_query, top_k=top_k)
             elif retrieval_mode_val == "embed":
                 q_vec = embed_text(search_query)
@@ -549,7 +557,11 @@ def status(sid: OptionalSessionId):
         total_chunks=len(chunks),
         documents=list(docs_seen.values()),
         methods=sorted({c["method"] for c in chunks}),
-        mode=(retrieval_mode_val if fn_embeddings_configured() else "tfidf-only"),
+        mode=(
+            "lexical"
+            if LEXICAL_ONLY
+            else (retrieval_mode_val if fn_embeddings_configured() else "tfidf-only")
+        ),
         vector_backend=vec_backend_val,
     )
 
@@ -607,7 +619,9 @@ def healthz():
         chat_backend=CHAT_BACKEND,
         embeddings_backend=EMBED_BACKEND,
         retrieval_mode=(
-            retrieval_mode_val if fn_embeddings_configured() else "tfidf-only"
+            "lexical"
+            if LEXICAL_ONLY
+            else (retrieval_mode_val if fn_embeddings_configured() else "tfidf-only")
         ),
         vector_backend=vec_backend_val,
         active_sessions=active_session_count(),

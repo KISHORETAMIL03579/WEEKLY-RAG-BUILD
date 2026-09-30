@@ -35,6 +35,7 @@ from backend.routes.chat import router as chat_router
 from backend.routes.documents import router as documents_router
 from backend.routes.evaluation import router as evaluation_router
 from backend.routes.ingestion import router as ingestion_router
+from backend.routes.mcp import router as mcp_router
 from backend.routes.policy import router as policy_router
 from backend.routes.traces import router as traces_router
 from backend.services.embeddings import embeddings_configured
@@ -117,6 +118,7 @@ def create_app() -> FastAPI:
         traces_router,
         evaluation_router,
         policy_router,
+        mcp_router,
     ):
         app.include_router(r)
 
@@ -190,7 +192,9 @@ if __name__ == "__main__":
     host = os.environ.get("HOST", HOST)
     debug = os.environ.get("APP_DEBUG", "").lower() in ("1", "true", "yes") or APP_DEBUG
 
-    embed_label = "Ollama (local)" if EMBED_BACKEND == "ollama" else "Gemini"
+    embed_label = {"ollama": "Ollama (local)", "none": "lexical only"}.get(
+        EMBED_BACKEND, "Gemini"
+    )
     chat_label = {
         "ollama": "Ollama (local)",
         "groq": f"Groq ({LLM_MODEL})",

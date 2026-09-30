@@ -1,0 +1,99 @@
+{
+  "before": {
+    "config": "config\\mcp_servers.server1.json",
+    "servers": [
+      "policy-search"
+    ],
+    "tool_count": 3,
+    "tools": [
+      {
+        "name": "get_employee_record",
+        "server": "policy-search",
+        "roles": [
+          "employee_lookup"
+        ]
+      },
+      {
+        "name": "search_handbook",
+        "server": "policy-search",
+        "roles": [
+          "evidence"
+        ]
+      },
+      {
+        "name": "get_jurisdiction_rules",
+        "server": "policy-search",
+        "roles": [
+          "evidence"
+        ]
+      }
+    ],
+    "taken_from": "1 tools/list response(s) on the wire"
+  },
+  "after": {
+    "config": "config\\mcp_servers.json",
+    "servers": [
+      "policy-search",
+      "hris"
+    ],
+    "tool_count": 5,
+    "tools": [
+      {
+        "name": "get_employee_record",
+        "server": "policy-search",
+        "roles": [
+          "employee_lookup"
+        ]
+      },
+      {
+        "name": "search_handbook",
+        "server": "policy-search",
+        "roles": [
+          "evidence"
+        ]
+      },
+      {
+        "name": "get_jurisdiction_rules",
+        "server": "policy-search",
+        "roles": [
+          "evidence"
+        ]
+      },
+      {
+        "name": "get_grade_band",
+        "server": "hris",
+        "roles": [
+          "employee_lookup",
+          "evidence"
+        ]
+      },
+      {
+        "name": "get_leave_balance",
+        "server": "hris",
+        "roles": [
+          "employee_lookup",
+          "evidence"
+        ]
+      }
+    ],
+    "taken_from": "2 tools/list response(s) on the wire"
+  },
+  "added_by_config_only": [
+    {
+      "name": "get_grade_band",
+      "server": "hris",
+      "roles": [
+        "employee_lookup",
+        "evidence"
+      ]
+    },
+    {
+      "name": "get_leave_balance",
+      "server": "hris",
+      "roles": [
+        "employee_lookup",
+        "evidence"
+      ]
+    }
+  ]
+}
